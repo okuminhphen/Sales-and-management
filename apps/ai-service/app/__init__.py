@@ -1,0 +1,1 @@
+"""HappyShop AI service."""

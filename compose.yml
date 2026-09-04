@@ -1,0 +1,71 @@
+name: sales-applications
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      API_HOST: 0.0.0.0
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      REDIS_URL: redis://redis:6379
+      AI_SERVICE_URL: http://ai-service:8000
+      VNP_RETURN_URL: http://localhost:${API_PORT:-8080}/api/v1/payment-return
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - api_uploads:/app/apps/api/uploads
+    networks: [infrastructure]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health/live').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ai-service:
+    build:
+      context: apps/ai-service
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+    networks: [infrastructure]
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_ORIGIN: ""
+        VITE_SOCKET_URL: ""
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_RECAPTCHA_SITE_KEY: ${VITE_RECAPTCHA_SITE_KEY:-}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [infrastructure]
+
+volumes:
+  api_uploads:
+
+networks:
+  infrastructure:
+    external: true
+    name: sales-infrastructure

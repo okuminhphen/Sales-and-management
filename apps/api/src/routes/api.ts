@@ -1,0 +1,60 @@
+import { Router, type Express } from "express";
+import { verifyToken } from "../middlewares/authMiddleware.js";
+import { checkRole } from "../middlewares/roleMiddleware.js";
+import { createAdminRouter } from "../modules/admin/admin.routes.js";
+import { createAddressRouter } from "../modules/address/address.routes.js";
+import { createBannerRouter } from "../modules/banner/banner.routes.js";
+import { createAuthRouter } from "../modules/auth/auth.routes.js";
+import { createBehaviorRouter } from "../modules/behavior/behavior.routes.js";
+import { createBranchRouter } from "../modules/branch/branch.routes.js";
+import { createCartRouter } from "../modules/cart/cart.routes.js";
+import { createChatbotRouter } from "../modules/chatbot/chatbot.routes.js";
+import { createCategoryRouter } from "../modules/category/category.routes.js";
+import { createEmployeeRouter } from "../modules/employee/employee.routes.js";
+import { createConversationRouter } from "../modules/conversation/conversation.routes.js";
+import { createInventoryRouter } from "../modules/inventory/inventory.routes.js";
+import { createMessageRouter } from "../modules/message/message.routes.js";
+import { createNotificationRouter } from "../modules/notification/notification.routes.js";
+import { createOrderRouter } from "../modules/order/order.routes.js";
+import { createPaymentRouter } from "../modules/payment/payment.routes.js";
+import { createProductRouter } from "../modules/product/product.routes.js";
+import { createReviewRouter } from "../modules/review/review.routes.js";
+import { createRoleRouter } from "../modules/role/role.routes.js";
+import { createSizeRouter } from "../modules/size/size.routes.js";
+import { createStockRequestRouter } from "../modules/stock-request/stock-request.routes.js";
+import { createTransferReceiptRouter } from "../modules/transfer-receipt/transfer-receipt.routes.js";
+import { createUserRouter } from "../modules/user/user.routes.js";
+import { createVoucherRouter } from "../modules/voucher/voucher.routes.js";
+
+const initApiRouter = (app: Express): void => {
+    const api = Router();
+    api.use(createAuthRouter());
+    api.use(createUserRouter());
+    api.use(createProductRouter());
+    api.use(createReviewRouter());
+    api.use("/size", createSizeRouter({
+        writeGuards: [verifyToken, checkRole("SUPER_ADMIN", "BRANCH_MANAGER")],
+    }));
+    api.use(createCategoryRouter());
+    api.use(createVoucherRouter());
+    api.use(createBannerRouter());
+    api.use(createCartRouter());
+    api.use(createOrderRouter());
+    api.use(createPaymentRouter());
+    api.use(createBehaviorRouter());
+    api.use(createRoleRouter());
+    api.use(createAdminRouter());
+    api.use(createBranchRouter());
+    api.use(createEmployeeRouter());
+    api.use(createInventoryRouter());
+    api.use(createStockRequestRouter());
+    api.use(createTransferReceiptRouter());
+    api.use(createNotificationRouter());
+    api.use(createChatbotRouter());
+    api.use(createConversationRouter());
+    api.use(createMessageRouter());
+    api.use(createAddressRouter());
+    app.use("/api/v1", api);
+};
+
+export default initApiRouter;

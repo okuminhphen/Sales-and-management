@@ -1,0 +1,30 @@
+{
+  "name": "sales-and-management",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Sales and inventory management monorepo",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace @sales/api",
+    "dev:web": "npm run dev --workspace @sales/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "infra:up": "docker compose -f infra/compose.infrastructure.yml up -d",
+    "infra:down": "docker compose -f infra/compose.infrastructure.yml down",
+    "rehearsal:up": "docker compose -f compose.yml up --build",
+    "rehearsal:down": "docker compose -f compose.yml down",
+    "prod:config": "docker compose --env-file .env.production -f compose.production.yml config --quiet",
+    "prod:up": "docker compose --env-file .env.production -f compose.production.yml up -d",
+    "prod:down": "docker compose --env-file .env.production -f compose.production.yml down"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "editorconfig": "1.0.4"
+  }
+}

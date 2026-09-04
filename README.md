@@ -1,19 +1,143 @@
-# Sales and management system for clothing stores
-Description:
-- Developed a full-featured e-commerce platform for browsing products, advanced search, shopping cart, seamless order placement, and comprehensive order management for both customers and admins.
-- Implemented secure Google OAuth 2.0 authentication for easy login/registration, combined with JWT-based session management and role-based authorization (admin/user).
-- Built a responsive, mobile-first frontend with client-side cart logic, checkout flow, and dynamic UI updates.
-- Created a secure admin dashboard for managing products, orders, users, branches, and inventory.
-- Integrated multiple payment methods: VietQR (bank transfer QR codes) and COD (cash on delivery).
-- Connected to GHN API for automated order creation, shipping label generation, and real-time tracking updates.
-- Enabled real-time customer-support chat using WebSocket, with Redis for efficient session caching and pub/sub messaging.
-- Built an AI-powered customer support chatbot that queries product data from the database and provides personalized JSON responses with product recommendations.
-- Added intelligent product recommendation engine (related/similar items) displayed on product detail pages to improve user experience and potential sales.
-Tech Stack: 
-- Frontend: React.js, TailwindCSS
-- Backend: Node.js + Express.js (RESTful APIs), Flask (for AI chatbot)
-- Database: MySQL, Sequelize ORM
-- Authentication & Security: Google OAuth 2.0, JWT, role-based authorization
-- Integrations: Cloudinary , GHN API, VietQR payments, GeminiAI
-- Real-time & Caching: Socket.io , Redis
-- Tools: Git, Github
+# HappyShop — Hệ thống bán hàng và quản lý kho
+
+HappyShop là monorepo gồm website React, API Express/Socket.IO và dịch vụ AI FastAPI.
+Các ứng dụng dùng chung một repository để quản lý contract và quy trình phát hành, nhưng
+được build, scale và deploy độc lập.
+
+## Thành phần hệ thống
+
+| Thành phần | Công nghệ | Trách nhiệm |
+| --- | --- | --- |
+| `apps/web` | React 19, Vite, Redux Toolkit, TypeScript | Storefront và trang quản trị |
+| `apps/api` | Express, Sequelize, Socket.IO, TypeScript | REST API, xác thực, nghiệp vụ, realtime |
+| `apps/ai-service` | FastAPI, SQLAlchemy async, scikit-learn, Gemini | Chat và gợi ý sản phẩm |
+| `infra` | MySQL 8.4, Redis 7.4, Docker Compose | Hạ tầng local/staging |
+
+## Kiến trúc
+
+```text
+Trình duyệt
+  └─ Web React/Nginx
+      ├─ REST + Socket.IO ──> API Express ──> MySQL
+      │                              └──────> Redis
+      └─ /api proxy ─────────> API ─────────> AI FastAPI ──> MySQL/Gemini
+```
+
+Backend được tổ chức theo feature module. Mỗi nghiệp vụ tự sở hữu route, DTO,
+controller và service:
+
+```text
+apps/api/src/modules/order/
+  order.routes.ts
+  order.dto.ts
+  order.controller.ts
+  order.service.ts
+```
+
+Các provider bên ngoài nằm trong `infrastructure`; middleware, security, config và
+database là các boundary dùng chung. FastAPI dùng ports-and-adapters để application
+không phụ thuộc trực tiếp vào MySQL hoặc Gemini.
+
+Xem chi tiết tại [Kiến trúc](docs/architecture.md), [Database](docs/database.md) và
+[Triển khai](docs/deployment.md).
+
+## Yêu cầu môi trường
+
+- Node.js 22 trở lên và npm
+- Python 3.12 trở lên
+- Docker Desktop/Engine có Docker Compose
+- Git
+
+## Chạy local
+
+```powershell
+Copy-Item .env.example .env
+npm ci
+npm run infra:up
+
+cd apps/ai-service
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+cd ../..
+```
+
+Chạy từng ứng dụng ở ba terminal:
+
+```powershell
+npm run dev:web
+npm run dev:api
+cd apps/ai-service; .venv\Scripts\Activate.ps1; uvicorn app.main:app --reload --port 8000
+```
+
+- Web: `http://localhost:3000`
+- API health: `http://localhost:8080/health/live`
+- FastAPI/OpenAPI: `http://localhost:8000/docs`
+
+Có thể rehearsal toàn bộ container bằng `npm run rehearsal:up` sau khi network hạ tầng
+được tạo bởi `npm run infra:up`. Một lệnh Compose chỉ là tiện ích local, không có nghĩa
+ba ứng dụng bị gộp thành một tiến trình khi deploy.
+
+## Database
+
+```powershell
+npm run db:migrate:status --workspace @sales/api
+npm run db:migrate --workspace @sales/api
+npm run db:seed --workspace @sales/api
+```
+
+> Cảnh báo: chuỗi migration legacy chưa replay an toàn trên database rỗng. Không chạy
+> migration production trước khi tạo baseline v2 từ schema thật và hoàn thành checklist
+> trong [docs/database.md](docs/database.md).
+
+## Kiểm tra chất lượng
+
+```powershell
+npm run typecheck
+npm test
+npm run build
+
+cd apps/ai-service
+ruff check .
+mypy app
+pytest
+```
+
+CI chạy Node typecheck/test/build, Python Ruff/Mypy/Pytest và integration test với MySQL,
+Redis bằng container tạm. Hai integration test infrastructure tự bỏ qua ở local nếu chưa
+bật `RUN_INFRASTRUCTURE_TESTS=true`.
+
+## Docker và triển khai
+
+- `infra/compose.infrastructure.yml`: MySQL + Redis cho local/staging.
+- `compose.yml`: build ba ứng dụng để rehearsal.
+- `compose.production.yml`: chạy ba image immutable; không đóng gói MySQL/Redis.
+- `.github/workflows/release-images.yml`: publish image API, web và AI lên GHCR.
+
+Production nên public web/reverse proxy, chỉ expose API qua proxy và giữ AI/MySQL/Redis
+trong private network. Xem [hướng dẫn triển khai](docs/deployment.md).
+
+## Trạng thái kỹ thuật
+
+- Source ứng dụng đã chuyển sang TypeScript/TSX hoặc Python; không còn source JS.
+- API đã chia theo feature module và có Zod DTO tại HTTP boundary.
+- FastAPI strict với Mypy và có test bằng dependency injection.
+- Frontend còn 34 file `@ts-nocheck` và một số component quá lớn; đây là technical debt.
+- Database legacy cần baseline và chuẩn hóa khóa ngoại, index, kiểu tiền trước production.
+
+## Quy trình Git đề xuất
+
+- `main`: phiên bản ổn định/production.
+- `develop`: nhánh tích hợp.
+- Feature branch tạo từ `develop`, mở pull request và chỉ merge khi CI xanh.
+- Release dùng tag `v*`; image phải pin bằng tag hoặc Git SHA, không dùng `latest`.
+
+## Bảo mật
+
+Không commit `.env`, token, mật khẩu hoặc key provider. Production phải dùng secret manager,
+HTTPS, JWT secret mạnh, webhook signature, backup database và giới hạn truy cập Redis/MySQL.
+
+## Giấy phép
+
+Repository hiện chưa khai báo giấy phép mã nguồn mở. Hãy bổ sung `LICENSE` trước khi cho
+phép bên thứ ba sử dụng hoặc phân phối mã nguồn.

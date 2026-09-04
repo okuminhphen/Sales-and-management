@@ -1,0 +1,102 @@
+name: sales-production
+
+# This manifest deploys three independent application images. MySQL and Redis are
+# deliberately external/managed services and are not bundled into the application stack.
+services:
+  ai-service:
+    image: "${AI_IMAGE:?Set AI_IMAGE to an immutable image tag}"
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: "${MYSQL_HOST:?Set MYSQL_HOST}"
+      MYSQL_PORT: "${MYSQL_PORT:-3306}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:?Set MYSQL_DATABASE}"
+      MYSQL_USER: "${MYSQL_USER:?Set MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:?Set GEMINI_API_KEY}"
+    expose:
+      - "8000"
+    networks: [application]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  api:
+    image: "${API_IMAGE:?Set API_IMAGE to an immutable image tag}"
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 8080
+      FRONTEND_URL: "${FRONTEND_URL:?Set FRONTEND_URL}"
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET}"
+      MYSQL_HOST: "${MYSQL_HOST:?Set MYSQL_HOST}"
+      MYSQL_PORT: "${MYSQL_PORT:-3306}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:?Set MYSQL_DATABASE}"
+      MYSQL_USER: "${MYSQL_USER:?Set MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}"
+      DEFAULT_FULFILLMENT_BRANCH_ID: "${DEFAULT_FULFILLMENT_BRANCH_ID:?Set DEFAULT_FULFILLMENT_BRANCH_ID}"
+      REDIS_URL: "${REDIS_URL:?Set REDIS_URL}"
+      AI_SERVICE_URL: http://ai-service:8000
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-}"
+      RECAPTCHA_SECRET_KEY: "${RECAPTCHA_SECRET_KEY:-}"
+      CLOUDINARY_CLOUD_NAME: "${CLOUDINARY_CLOUD_NAME:-}"
+      CLOUDINARY_API_KEY: "${CLOUDINARY_API_KEY:-}"
+      CLOUDINARY_API_SECRET: "${CLOUDINARY_API_SECRET:-}"
+      EMAIL_USER: "${EMAIL_USER:-}"
+      EMAIL_PASS: "${EMAIL_PASS:-}"
+      GHN_BASE_URL: "${GHN_BASE_URL:-https://online-gateway.ghn.vn/shiip/public-api}"
+      GHN_TOKEN: "${GHN_TOKEN:-}"
+      GHN_SHOP_ID: "${GHN_SHOP_ID:-}"
+      GHN_BRANCH_ID: "${GHN_BRANCH_ID:-}"
+      GHN_BRANCH_DISTRICT_ID: "${GHN_BRANCH_DISTRICT_ID:-}"
+      VNP_TMN_CODE: "${VNP_TMN_CODE:?Set VNP_TMN_CODE}"
+      VNP_HASH_SECRET: "${VNP_HASH_SECRET:?Set VNP_HASH_SECRET}"
+      VNP_URL: "${VNP_URL:?Set VNP_URL}"
+      VNP_RETURN_URL: "${VNP_RETURN_URL:?Set VNP_RETURN_URL}"
+      PAYMENT_WEBHOOK_SECRET: "${PAYMENT_WEBHOOK_SECRET:?Set PAYMENT_WEBHOOK_SECRET}"
+    expose:
+      - "8080"
+    volumes:
+      - api_uploads:/app/apps/api/uploads
+    depends_on:
+      ai-service:
+        condition: service_healthy
+    networks: [application]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/health/live').then(r=>{if(!r.ok)process.exit(1)})",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  web:
+    image: "${WEB_IMAGE:?Set WEB_IMAGE to an immutable image tag}"
+    restart: unless-stopped
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [application]
+
+volumes:
+  api_uploads:
+
+networks:
+  application:
+    name: sales-production
