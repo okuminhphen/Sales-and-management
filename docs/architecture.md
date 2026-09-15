@@ -4,8 +4,9 @@ Ngày audit gần nhất: 2026-09-15.
 
 ## Quyết định kiến trúc
 
-Hệ thống là modular monorepo gồm ba deployable độc lập: web, API và AI. MySQL/Redis là
-hạ tầng riêng. Socket.IO là transport của API, không phải service nghiệp vụ độc lập.
+Hệ thống là modular monorepo gồm ba deployable độc lập: web, API và AI. MySQL, Redis,
+Qdrant và RabbitMQ là hạ tầng riêng. Socket.IO là transport của API, không phải service
+nghiệp vụ độc lập.
 
 ```text
 Web React
@@ -14,6 +15,8 @@ Web React
   └─ POST /api/v1/bot/chat -> API -> FastAPI -> application use cases -> repository/chat ports
                                              ├-> MySQL adapter
                                              └-> Gemini adapter
+
+Qdrant <- worker (chưa triển khai) <- RabbitMQ <- product/catalog events
 ```
 
 FastAPI không public trực tiếp cho browser. API là BFF/gateway của chat: xác thực boundary
@@ -46,7 +49,7 @@ apps/
     application/       use case và ports
     domain/            domain models
     infrastructure/    MySQL/Gemini adapters
-infra/                 hạ tầng local/staging
+infra/                 MySQL, Redis, Qdrant, RabbitMQ cho local/staging
 docs/                  tài liệu vận hành và kiến trúc
 ```
 
@@ -99,6 +102,9 @@ JWT thay vì tin dữ liệu từ browser.
 5. Migration/database còn rủi ro ghi tại `database.md`; chưa đủ điều kiện khởi tạo DB production mới.
 6. Đã có structured log, request ID, timeout AI và rate limit chat qua Redis; vẫn thiếu
    distributed tracing, metrics, dashboard, alert và centralized log storage.
+7. Qdrant/RabbitMQ đã được provision trong local infrastructure nhưng chưa được application
+   sử dụng. Chỉ nối chúng vào AI service sau khi có use case `search_products`,
+   `find_similar_products` và worker idempotent để đồng bộ embedding.
 
 ## Roadmap ưu tiên
 

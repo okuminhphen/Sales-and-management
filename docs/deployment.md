@@ -11,14 +11,17 @@ gồm ba image độc lập:
 | `sales-api` | Node.js REST + Socket.IO | qua reverse proxy |
 | `sales-ai` | FastAPI chat/recommendation | private, chỉ API gọi |
 
-MySQL và Redis là hạ tầng riêng. `compose.yml` chỉ giúp rehearsal nhiều container.
+MySQL, Redis, Qdrant và RabbitMQ là hạ tầng riêng. `compose.yml` chỉ giúp rehearsal nhiều
+container.
 
 ## Topology khuyến nghị
 
 - Web là immutable static assets sau CDN/Nginx.
 - API là stateless container; file upload phải lưu Cloudinary/object storage.
 - AI deploy độc lập để scale CPU/RAM và release không ảnh hưởng API.
-- Production dùng managed MySQL/Redis có backup, replication, TLS và monitoring.
+- Production dùng managed MySQL/Redis có backup, replication, TLS và monitoring. Khi bật
+  semantic search hoặc worker, dùng Qdrant/RabbitMQ managed hoặc cluster riêng; không public
+  các cổng này ra Internet.
 - Reverse proxy `/api`, `/uploads`, `/socket.io` về API để giữ same-origin.
 
 ## Rehearsal local

@@ -11,7 +11,7 @@ Các ứng dụng dùng chung một repository để quản lý contract và quy
 | `apps/web` | React 19, Vite, Redux Toolkit, TypeScript | Storefront và trang quản trị |
 | `apps/api` | Express, Sequelize, Socket.IO, TypeScript | REST API, xác thực, nghiệp vụ, realtime |
 | `apps/ai-service` | FastAPI, SQLAlchemy async, scikit-learn, Gemini | Chat và gợi ý sản phẩm |
-| `infra` | MySQL 8.4, Redis 7.4, Docker Compose | Hạ tầng local/staging |
+| `infra` | MySQL 8.4, Redis 7.4, Qdrant, RabbitMQ, Docker Compose | Hạ tầng local/staging |
 
 ## Kiến trúc
 
@@ -120,9 +120,26 @@ bật `RUN_INFRASTRUCTURE_TESTS=true`.
   `CHAT_RATE_LIMIT_WINDOW_SECONDS`. Redis phải sẵn sàng trong production để giới hạn có hiệu
   lực giữa nhiều API replica.
 
+## Hạ tầng local
+
+`npm run infra:up` khởi động bốn hạ tầng độc lập. Hiện API/AI đã dùng MySQL và Redis;
+Qdrant và RabbitMQ được đưa vào sẵn cho semantic search và tác vụ nền trong các phase tiếp
+theo, nhưng chưa có application consumer/producer nên không tạo workload khi bật.
+
+| Service | Cổng localhost | Vai trò |
+| --- | --- | --- |
+| MySQL | `3306` | Nguồn dữ liệu nghiệp vụ chuẩn |
+| Redis | `6379` | Cache, rate limit, Socket.IO adapter |
+| Qdrant | `6333` HTTP/dashboard, `6334` gRPC | Vector search cho embedding sản phẩm |
+| RabbitMQ | `5672` AMQP, `15672` management UI | Queue cho đồng bộ embedding/retry tác vụ nền |
+
+Qdrant và RabbitMQ chỉ bind vào `127.0.0.1`, yêu cầu credential từ `.env`, có named volume
+để giữ dữ liệu local. Qdrant có endpoint liveness `http://localhost:6333/healthz` và dashboard
+`http://localhost:6333/dashboard`; RabbitMQ management UI ở `http://localhost:15672`.
+
 ## Docker và triển khai
 
-- `infra/compose.infrastructure.yml`: MySQL + Redis cho local/staging.
+- `infra/compose.infrastructure.yml`: MySQL, Redis, Qdrant và RabbitMQ cho local/staging.
 - `compose.yml`: build ba ứng dụng để rehearsal.
 - `compose.production.yml`: chạy ba image immutable; không đóng gói MySQL/Redis.
 - `.github/workflows/release-images.yml`: publish image API, web và AI lên GHCR.

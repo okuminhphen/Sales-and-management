@@ -1,6 +1,6 @@
 # Audit cơ sở dữ liệu
 
-Ngày audit: 2026-09-04. Đây là audit tĩnh từ Sequelize models và migrations. Chưa thể dump
+Ngày audit: 2026-09-15. Đây là audit tĩnh từ Sequelize models và migrations. Chưa thể dump
 schema thật vì Docker Desktop/MySQL không chạy trên máy local. Trước mọi migration production,
 phải chạy [`sql/inspect_database.sql`](sql/inspect_database.sql) trên database thật.
 
@@ -31,8 +31,12 @@ không có Sequelize model hoặc module ứng dụng tương ứng.
    `lower_case_table_names=1` để tương thích dữ liệu legacy.
 3. Model `Cart` từng lệch migration: migration lưu `userId`, model cũ khai báo `name` và
    `description`. Model đã sửa nhưng vẫn phải kiểm tra/chuyển kiểu cột trên DB thật.
-4. Các cột tiền đang dùng `FLOAT`. Phải đổi thành `DECIMAL(19,4)` hoặc integer minor units.
+4. Các cột tiền `Product.price`, `Orders.totalPrice`, `Orders.shippingFee`,
+   `OrdersDetails.priceAtOrder`, `OrdersDetails.totalPrice` và `Payment.amount` đang dùng
+   `FLOAT`. Phải đổi thành `DECIMAL(19,4)` hoặc integer minor units; `FLOAT` gây sai số tiền.
 5. Nhiều cột quan hệ thiếu foreign key, composite unique key và index ở database level.
+   `ProductSize`, `Inventory`, `CartProductSize`, `UserBehavior` và `OrdersDetails` là các
+   điểm cần ưu tiên kiểm tra trên schema thật.
 6. Mã branch/employee sinh theo “đọc dòng cuối + 1”, có race condition khi ghi đồng thời.
 7. Model/migration drift: một số field chỉ có trong migration; một số bảng logistics không
    còn ứng dụng sử dụng. Cần xác lập một source of truth.
@@ -44,6 +48,30 @@ không có Sequelize model hoặc module ứng dụng tương ứng.
 Registry đã khai báo tường minh model name và sửa lỗi `db.Notifications` thành
 `db.Notification`. Order code dùng database ID sau insert, loại bỏ race “last order + 1”.
 Race tương tự của branch/employee vẫn còn.
+
+## Đánh giá thiết kế và chuẩn v2 đề xuất
+
+Phân vùng domain hiện tại hợp lý cho hệ thống bán hàng: catalog, order/payment, warehouse,
+transfer và identity đã tách entity riêng. Tuy nhiên **schema hiện tại chưa đạt mức best
+practice production** vì các integrity rule chủ yếu nằm ở code/association, không được bảo
+đảm bảo đầy đủ ở database. Không được áp dụng các constraint dưới đây trực tiếp vào database
+đang có trước khi kiểm tra dữ liệu orphan/trùng lặp.
+
+| Entity | Ràng buộc/index nên có ở baseline v2 | Lý do |
+| --- | --- | --- |
+| `Product` | `price >= 0`; index `categoryId`; giá `DECIMAL` | Giá chính xác, lọc catalog nhanh |
+| `ProductSize` | `NOT NULL productId,sizeId`; `UNIQUE(productId,sizeId)`; FK tới `Product`,`Size`; `stock >= 0` nếu còn giữ stock tổng | Không sinh biến thể trùng hoặc mồ côi |
+| `Inventory` | `NOT NULL branchId,productSizeId`; `UNIQUE(branchId,productSizeId)`; FK; `stock >= 0` | Một tồn kho cho mỗi chi nhánh/biến thể |
+| `CartProductSize` | `NOT NULL`; `UNIQUE(cartId,productSizeId)`; FK; `quantity > 0` | Không có dòng cart trùng hoặc số lượng âm |
+| `Orders` | FK `userId`,`branchId`; index `(userId, createdAt)`, `(status, createdAt)`; `code` unique/not null sau backfill | Truy vấn lịch sử và vận hành đơn hàng |
+| `OrdersDetails` | FK `orderId`,`productId`; `quantity > 0`; giá snapshot `DECIMAL`; index `orderId` | Bảo toàn dòng đơn hàng và truy vấn chi tiết |
+| `Payment` | FK `orderId`,`paymentMethodId`; unique theo provider transaction ID; index trạng thái/thời gian | Idempotency callback và đối soát |
+| `UserBehavior` | `UNIQUE(userId,productId)`; FK; index `(userId,updatedAt)` | Một aggregate behavior cho một user/sản phẩm |
+| `Review` | FK `userId`,`productId`; `CHECK rating BETWEEN 1 AND 5`; policy `UNIQUE(userId,productId)` nếu chỉ một review | Chất lượng dữ liệu review |
+
+Các cột audit `createdAt`, `updatedAt`, timezone UTC, charset `utf8mb4` và InnoDB nên được
+chuẩn hóa trong baseline. `deletedAt` chỉ dùng soft delete cho entity thật sự cần khôi phục;
+order/payment/stock history cần immutable audit trail, không nên xóa mềm tùy tiện.
 
 ## Việc bắt buộc trước production
 
