@@ -15,6 +15,8 @@ const envSchema = z
     MYSQL_PASSWORD: z.string().default(""),
     DEFAULT_FULFILLMENT_BRANCH_ID: z.coerce.number().int().positive().default(13),
     REDIS_URL: z.string().default("redis://localhost:6379"),
+    RABBITMQ_URL: z.string().url().default("amqp://sales_app:local-rabbitmq-password-change-me@localhost:5672/sales_dev"),
+    OUTBOX_BATCH_SIZE: z.coerce.number().int().positive().max(500).default(100),
     AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
     AI_SERVICE_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(10_000),
     CHAT_RATE_LIMIT_MAX: z.coerce.number().int().positive().max(1_000).default(30),

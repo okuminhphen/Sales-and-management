@@ -13,6 +13,13 @@ services:
       MYSQL_USER: "${MYSQL_USER:?Set MYSQL_USER}"
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}"
       GEMINI_API_KEY: "${GEMINI_API_KEY:?Set GEMINI_API_KEY}"
+      GEMINI_EMBEDDING_MODEL: "${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}"
+      EMBEDDING_DIMENSIONS: "${EMBEDDING_DIMENSIONS:-768}"
+      QDRANT_ENABLED: "${QDRANT_ENABLED:-true}"
+      QDRANT_URL: "${QDRANT_URL:?Set QDRANT_URL}"
+      QDRANT_API_KEY: "${QDRANT_API_KEY:?Set QDRANT_API_KEY}"
+      QDRANT_COLLECTION: "${QDRANT_COLLECTION:-catalog_products_v1}"
+      RABBITMQ_URL: "${RABBITMQ_URL:?Set RABBITMQ_URL}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
     expose:
       - "8000"
@@ -46,6 +53,7 @@ services:
       MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}"
       DEFAULT_FULFILLMENT_BRANCH_ID: "${DEFAULT_FULFILLMENT_BRANCH_ID:?Set DEFAULT_FULFILLMENT_BRANCH_ID}"
       REDIS_URL: "${REDIS_URL:?Set REDIS_URL}"
+      RABBITMQ_URL: "${RABBITMQ_URL:?Set RABBITMQ_URL}"
       AI_SERVICE_URL: http://ai-service:8000
       AI_SERVICE_TIMEOUT_MS: "${AI_SERVICE_TIMEOUT_MS:-10000}"
       CHAT_RATE_LIMIT_MAX: "${CHAT_RATE_LIMIT_MAX:-30}"
@@ -88,6 +96,41 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  outbox-publisher:
+    image: "${API_IMAGE:?Set API_IMAGE to an immutable image tag}"
+    restart: unless-stopped
+    command: ["node", "dist/workers/run-outbox-publisher.js"]
+    environment:
+      NODE_ENV: production
+      MYSQL_HOST: "${MYSQL_HOST:?Set MYSQL_HOST}"
+      MYSQL_PORT: "${MYSQL_PORT:-3306}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:?Set MYSQL_DATABASE}"
+      MYSQL_USER: "${MYSQL_USER:?Set MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}"
+      RABBITMQ_URL: "${RABBITMQ_URL:?Set RABBITMQ_URL}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+    networks: [application]
+
+  ai-catalog-indexer:
+    image: "${AI_IMAGE:?Set AI_IMAGE to an immutable image tag}"
+    restart: unless-stopped
+    command: ["sales-ai-consume-catalog-events"]
+    environment:
+      MYSQL_HOST: "${MYSQL_HOST:?Set MYSQL_HOST}"
+      MYSQL_PORT: "${MYSQL_PORT:-3306}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE:?Set MYSQL_DATABASE}"
+      MYSQL_USER: "${MYSQL_USER:?Set MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:?Set GEMINI_API_KEY}"
+      GEMINI_EMBEDDING_MODEL: "${GEMINI_EMBEDDING_MODEL:-gemini-embedding-001}"
+      EMBEDDING_DIMENSIONS: "${EMBEDDING_DIMENSIONS:-768}"
+      QDRANT_ENABLED: "true"
+      QDRANT_URL: "${QDRANT_URL:?Set QDRANT_URL}"
+      QDRANT_API_KEY: "${QDRANT_API_KEY:?Set QDRANT_API_KEY}"
+      QDRANT_COLLECTION: "${QDRANT_COLLECTION:-catalog_products_v1}"
+      RABBITMQ_URL: "${RABBITMQ_URL:?Set RABBITMQ_URL}"
+    networks: [application]
 
   web:
     image: "${WEB_IMAGE:?Set WEB_IMAGE to an immutable image tag}"

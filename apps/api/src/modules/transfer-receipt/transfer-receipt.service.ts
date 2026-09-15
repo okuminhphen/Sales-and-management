@@ -1,4 +1,5 @@
 import db from "../../models/index.js";
+import { recordInventoryMovement } from "../../infrastructure/events/outbox.js";
 
 /* ======================================================
    APPROVE TRANSFER RECEIPT
@@ -37,6 +38,18 @@ const approveTransferReceipt = async (receiptId, adminId) => {
             fromStock.stock -= item.quantity;
 
             await fromStock.save({ transaction });
+            await recordInventoryMovement({
+                branchId: Number(receipt.fromBranchId),
+                productSizeId: Number(item.productSizeId),
+                quantityDelta: -Number(item.quantity),
+                balanceAfter: Number(fromStock.stock),
+                reason: "TRANSFER_OUT",
+                referenceType: "transfer_receipt",
+                referenceId: receipt.id,
+                idempotencyKey: `transfer:${receipt.id}:out:${item.productSizeId}`,
+                createdBy: adminId,
+                transaction,
+            });
 
             // 3️⃣ cộng kho đích
             const [toStock] = await db.Inventory.findOrCreate({
@@ -50,6 +63,18 @@ const approveTransferReceipt = async (receiptId, adminId) => {
             });
             toStock.stock += item.quantity;
             await toStock.save({ transaction });
+            await recordInventoryMovement({
+                branchId: Number(receipt.toBranchId),
+                productSizeId: Number(item.productSizeId),
+                quantityDelta: Number(item.quantity),
+                balanceAfter: Number(toStock.stock),
+                reason: "TRANSFER_IN",
+                referenceType: "transfer_receipt",
+                referenceId: receipt.id,
+                idempotencyKey: `transfer:${receipt.id}:in:${item.productSizeId}`,
+                createdBy: adminId,
+                transaction,
+            });
         }
 
         receipt.status = "approved";

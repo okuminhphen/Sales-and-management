@@ -18,11 +18,13 @@
     "db:migrate:status": "tsx src/database/migrate.ts pending",
     "db:seed": "tsx src/database/seed.ts",
     "db:migrate:prod": "node dist/database/migrate.js up",
-    "db:seed:prod": "node dist/database/seed.js"
+    "db:seed:prod": "node dist/database/seed.js",
+    "outbox:publish": "tsx src/workers/run-outbox-publisher.ts"
   },
   "dependencies": {
     "@redis/client": "^5.12.0",
     "@socket.io/redis-adapter": "^8.3.0",
+    "amqplib": "^0.10.9",
     "axios": "^1.12.0",
     "bcryptjs": "^3.0.0",
     "cloudinary": "^1.41.3",
@@ -48,6 +50,7 @@
     "zod": "^4.1.0"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.8",
     "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.19",
     "@types/dateformat": "^5.0.3",

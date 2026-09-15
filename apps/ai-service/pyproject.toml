@@ -4,15 +4,21 @@ version = "2.0.0"
 description = "AI and recommendation service for HappyShop"
 requires-python = ">=3.12"
 dependencies = [
+  "aio-pika>=9.5,<10",
   "asyncmy>=0.2.10,<1",
   "fastapi>=0.116,<1",
   "google-genai>=1.33,<2",
   "numpy>=2.2,<3",
   "pydantic-settings>=2.10,<3",
+  "qdrant-client>=1.17,<2",
   "scikit-learn>=1.7,<2",
   "sqlalchemy[asyncio]>=2.0.40,<3",
   "uvicorn[standard]>=0.35,<1",
 ]
+
+[project.scripts]
+sales-ai-sync-catalog = "app.scripts.sync_catalog:main"
+sales-ai-consume-catalog-events = "app.scripts.consume_catalog_events:main"
 
 [project.optional-dependencies]
 dev = [

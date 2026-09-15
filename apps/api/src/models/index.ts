@@ -27,10 +27,12 @@ export interface Database {
     Conversation: LegacyModel;
     Employee: LegacyModel;
     Inventory: LegacyModel;
+    InventoryMovement: LegacyModel;
     Message: LegacyModel;
     Notification: LegacyModel;
     Orders: LegacyModel;
     OrdersDetails: LegacyModel;
+    OutboxEvent: LegacyModel;
     Payment: LegacyModel;
     PaymentMethods: LegacyModel;
     Product: LegacyModel;

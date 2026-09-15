@@ -15,6 +15,7 @@ services:
       MYSQL_PORT: 3306
       REDIS_URL: redis://redis:6379
       AI_SERVICE_URL: http://ai-service:8000
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-sales_app}:${RABBITMQ_DEFAULT_PASS:-local-rabbitmq-password-change-me}@rabbitmq:5672/${RABBITMQ_DEFAULT_VHOST:-sales_dev}
       VNP_RETURN_URL: http://localhost:${API_PORT:-8080}/api/v1/payment-return
     ports:
       - "${API_PORT:-8080}:8080"
@@ -37,6 +38,8 @@ services:
     environment:
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
+      QDRANT_URL: http://qdrant:6333
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-sales_app}:${RABBITMQ_DEFAULT_PASS:-local-rabbitmq-password-change-me}@rabbitmq:5672/${RABBITMQ_DEFAULT_VHOST:-sales_dev}
     networks: [infrastructure]
     expose: ["8000"]
     healthcheck:
@@ -44,6 +47,37 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  outbox-publisher:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    command: ["npm", "run", "outbox:publish"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-sales_app}:${RABBITMQ_DEFAULT_PASS:-local-rabbitmq-password-change-me}@rabbitmq:5672/${RABBITMQ_DEFAULT_VHOST:-sales_dev}
+    networks: [infrastructure]
+
+  ai-catalog-indexer:
+    build:
+      context: apps/ai-service
+    restart: unless-stopped
+    profiles: ["ai-indexing"]
+    command: ["sales-ai-consume-catalog-events"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      QDRANT_URL: http://qdrant:6333
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-sales_app}:${RABBITMQ_DEFAULT_PASS:-local-rabbitmq-password-change-me}@rabbitmq:5672/${RABBITMQ_DEFAULT_VHOST:-sales_dev}
+    networks: [infrastructure]
 
   web:
     build:

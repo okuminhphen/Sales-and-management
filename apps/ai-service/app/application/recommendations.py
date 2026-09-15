@@ -2,17 +2,35 @@ import anyio
 from sklearn.feature_extraction.text import TfidfVectorizer  # type: ignore[import-untyped]
 from sklearn.metrics.pairwise import cosine_similarity  # type: ignore[import-untyped]
 
-from app.application.ports import ProductRepository
+from app.application.ports import EmbeddingModel, ProductRepository, ProductVectorStore
 from app.domain.models import Product
 
 
 class RecommendationService:
-    def __init__(self, repository: ProductRepository) -> None:
+    def __init__(
+        self,
+        repository: ProductRepository,
+        embeddings: EmbeddingModel | None = None,
+        vector_store: ProductVectorStore | None = None,
+    ) -> None:
         self._repository = repository
+        self._embeddings = embeddings
+        self._vector_store = vector_store
 
     async def similar_products(self, product_id: int, limit: int = 10) -> list[Product]:
         products = await self._repository.list_products()
-        return await anyio.to_thread.run_sync(self._rank_similar, products, product_id, limit)
+        product_by_id = {product.id: product for product in products}
+        selected = product_by_id.get(product_id)
+        if selected is None:
+            raise LookupError(f"Product {product_id} was not found")
+        semantic_ids = await self._semantic_ids(self._document(selected), limit + 1, document=True)
+        semantic = [
+            product_by_id[item_id]
+            for item_id in semantic_ids
+            if item_id != product_id and item_id in product_by_id
+        ]
+        fallback = await anyio.to_thread.run_sync(self._rank_similar, products, product_id, limit)
+        return self._merge(semantic, fallback, limit)
 
     async def products_for_user(self, user_id: int, limit: int = 10) -> list[Product]:
         products = await self._repository.list_products()
@@ -22,7 +40,41 @@ class RecommendationService:
 
     async def products_for_query(self, query: str, limit: int = 20) -> list[Product]:
         products = await self._repository.list_products()
-        return await anyio.to_thread.run_sync(self._rank_query, products, query, limit)
+        product_by_id = {product.id: product for product in products}
+        semantic_ids = await self._semantic_ids(query, limit)
+        semantic = [product_by_id[item_id] for item_id in semantic_ids if item_id in product_by_id]
+        fallback = await anyio.to_thread.run_sync(self._rank_query, products, query, limit)
+        return self._merge(semantic, fallback, limit)
+
+    @staticmethod
+    def _document(product: Product) -> str:
+        return " ".join((product.name, product.category_name, product.description)).strip()
+
+    async def _semantic_ids(self, text: str, limit: int, document: bool = False) -> list[int]:
+        if self._embeddings is None or self._vector_store is None:
+            return []
+        try:
+            vector = await (
+                self._embeddings.embed_document(text)
+                if document
+                else self._embeddings.embed_query(text)
+            )
+            return await self._vector_store.search(vector, limit)
+        except Exception:
+            # Search remains available through TF-IDF if the optional read model is unavailable.
+            return []
+
+    @staticmethod
+    def _merge(primary: list[Product], fallback: list[Product], limit: int) -> list[Product]:
+        seen: set[int] = set()
+        result: list[Product] = []
+        for product in [*primary, *fallback]:
+            if product.id not in seen:
+                seen.add(product.id)
+                result.append(product)
+            if len(result) == limit:
+                break
+        return result
 
     @staticmethod
     def _documents(products: list[Product]) -> list[str]:
@@ -33,9 +85,7 @@ class RecommendationService:
         ]
 
     @classmethod
-    def _rank_similar(
-        cls, products: list[Product], product_id: int, limit: int
-    ) -> list[Product]:
+    def _rank_similar(cls, products: list[Product], product_id: int, limit: int) -> list[Product]:
         if not products:
             return []
         try:

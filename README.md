@@ -61,6 +61,11 @@ py -3.12 -m venv .venv
 cd ../..
 ```
 
+Khởi tạo schema local **chỉ khi bạn đang tạo database mới**. Chuỗi migration legacy có
+drift lịch sử, vì vậy cần import backup/baseline schema đã được kiểm chứng trước; sau đó
+chạy migration add-only mới. Không chạy lệnh này trên production nếu chưa có backup và
+review ở [Database](docs/database.md).
+
 Chạy từng ứng dụng ở ba terminal:
 
 ```powershell
@@ -80,6 +85,19 @@ Có thể rehearsal toàn bộ container bằng `npm run rehearsal:up` sau khi n
 được tạo bởi `npm run infra:up`. Một lệnh Compose chỉ là tiện ích local, không có nghĩa
 ba ứng dụng bị gộp thành một tiến trình khi deploy.
 
+Khi đã đặt `GEMINI_API_KEY`, chạy một lần để index catalog hiện hữu và bật worker đồng bộ:
+
+```powershell
+cd apps/ai-service
+.venv\Scripts\sales-ai-sync-catalog.exe
+cd ../..
+npm run rehearsal:up -- --profile ai-indexing
+```
+
+Worker API `outbox-publisher` phát event MySQL đã commit sang RabbitMQ; `ai-catalog-indexer`
+nhận event và upsert/delete vector Qdrant. Hai worker là process deploy độc lập, không chạy
+trong request HTTP. Qdrant chỉ là read-model: MySQL vẫn là nguồn dữ liệu chuẩn.
+
 ## Database
 
 ```powershell
@@ -88,9 +106,9 @@ npm run db:migrate --workspace @sales/api
 npm run db:seed --workspace @sales/api
 ```
 
-> Cảnh báo: chuỗi migration legacy chưa replay an toàn trên database rỗng. Không chạy
-> migration production trước khi tạo baseline v2 từ schema thật và hoàn thành checklist
-> trong [docs/database.md](docs/database.md).
+> Cảnh báo: chuỗi migration legacy chưa replay an toàn trên database rỗng. Database local
+> hiện cần restore baseline/backup trước. Không chạy migration production trước khi tạo
+> baseline v2 từ schema thật và hoàn thành checklist trong [docs/database.md](docs/database.md).
 
 ## Kiểm tra chất lượng
 
@@ -123,8 +141,10 @@ bật `RUN_INFRASTRUCTURE_TESTS=true`.
 ## Hạ tầng local
 
 `npm run infra:up` khởi động bốn hạ tầng độc lập. Hiện API/AI đã dùng MySQL và Redis;
-Qdrant và RabbitMQ được đưa vào sẵn cho semantic search và tác vụ nền trong các phase tiếp
-theo, nhưng chưa có application consumer/producer nên không tạo workload khi bật.
+Qdrant và RabbitMQ được dùng bởi luồng index catalog bất đồng bộ. API ghi transactional
+outbox trong cùng transaction với cập nhật catalog; publisher phát `catalog.product.*`, còn
+worker AI index vào Qdrant. Khi không cấu hình Gemini, AI vẫn chạy với TF-IDF fallback và
+profile `ai-indexing` không cần bật.
 
 | Service | Cổng localhost | Vai trò |
 | --- | --- | --- |

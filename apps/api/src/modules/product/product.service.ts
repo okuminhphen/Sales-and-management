@@ -1,6 +1,19 @@
 import db from "../../models/index.js";
 import cloudinary from "../../config/cloudinary.js";
 import { env } from "../../config/env.js";
+import { enqueueOutboxEvent } from "../../infrastructure/events/outbox.js";
+
+const catalogPayload = (product) => {
+    const value = product.toJSON();
+    return {
+        product_id: value.id,
+        name: value.name,
+        description: value.description || "",
+        price: Number(value.price),
+        images: value.images || [],
+        category_id: value.categoryId ?? null,
+    };
+};
 
 const getProducts = async () => {
     try {
@@ -76,6 +89,14 @@ const addNewProduct = async (data) => {
             await db.ProductSize.bulkCreate(productSizes, { transaction });
         }
 
+        await enqueueOutboxEvent({
+            eventType: "catalog.product.upserted",
+            aggregateType: "product",
+            aggregateId: product.id,
+            payload: catalogPayload(product),
+            transaction,
+        });
+
         await transaction.commit();
 
         return { EM: "Create success", EC: 0, DT: product };
@@ -110,22 +131,51 @@ const updateProduct = async (id, data) => {
             { transaction }
         );
 
-        // 🔥 xóa toàn bộ size cũ
-        await db.ProductSize.destroy({
+        // Đồng bộ biến thể theo sizeId, không xóa/tạo lại toàn bộ để giữ kho và lịch sử.
+        const existingVariants = await db.ProductSize.findAll({
             where: { productId: id },
             transaction,
+            lock: transaction.LOCK.UPDATE,
         });
-
-        // 🔥 insert lại size mới
-        if (Array.isArray(sizes) && sizes.length > 0) {
-            const productSizes = sizes.map((s) => ({
-                productId: id,
-                sizeId: s.sizeId,
-                stock: s.stock,
-            }));
-
-            await db.ProductSize.bulkCreate(productSizes, { transaction });
+        const incomingBySize = new Map(
+            (Array.isArray(sizes) ? sizes : []).map((size) => [Number(size.sizeId), size])
+        );
+        if (incomingBySize.size !== (Array.isArray(sizes) ? sizes.length : 0)) {
+            throw new Error("Product sizes must not contain duplicate sizeId values");
         }
+
+        for (const variant of existingVariants) {
+            const incoming = incomingBySize.get(Number(variant.sizeId));
+            if (incoming) {
+                await variant.update({ stock: incoming.stock }, { transaction });
+                incomingBySize.delete(Number(variant.sizeId));
+                continue;
+            }
+            const [inventoryCount, cartCount, transferCount] = await Promise.all([
+                db.Inventory.count({ where: { productSizeId: variant.id }, transaction }),
+                db.CartProductSize.count({ where: { productSizeId: variant.id }, transaction }),
+                db.TransferReceiptItem.count({ where: { productSizeId: variant.id }, transaction }),
+            ]);
+            if (inventoryCount || cartCount || transferCount) {
+                throw new Error("Cannot remove a product size that has inventory or transaction references");
+            }
+            await variant.destroy({ transaction });
+        }
+
+        for (const size of incomingBySize.values()) {
+            await db.ProductSize.create(
+                { productId: id, sizeId: size.sizeId, stock: size.stock },
+                { transaction }
+            );
+        }
+
+        await enqueueOutboxEvent({
+            eventType: "catalog.product.upserted",
+            aggregateType: "product",
+            aggregateId: product.id,
+            payload: catalogPayload(product),
+            transaction,
+        });
 
         await transaction.commit();
 
@@ -138,10 +188,26 @@ const updateProduct = async (id, data) => {
 };
 
 const deleteProduct = async (id) => {
+    const transaction = await db.sequelize.transaction();
     try {
-        const product = await db.Product.findByPk(id);
+        const product = await db.Product.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
         if (!product) {
+            await transaction.rollback();
             return { EM: "Not exist", EC: 1, DT: null };
+        }
+
+        const productSizes = await db.ProductSize.findAll({ where: { productId: id }, transaction });
+        const variantIds = productSizes.map((item) => item.id);
+        if (variantIds.length) {
+            const [inventoryCount, cartCount, transferCount] = await Promise.all([
+                db.Inventory.count({ where: { productSizeId: variantIds }, transaction }),
+                db.CartProductSize.count({ where: { productSizeId: variantIds }, transaction }),
+                db.TransferReceiptItem.count({ where: { productSizeId: variantIds }, transaction }),
+            ]);
+            if (inventoryCount || cartCount || transferCount) {
+                await transaction.rollback();
+                return { EM: "Cannot delete a product with inventory or transaction history", EC: 1, DT: null };
+            }
         }
 
         // ❌ xóa ảnh Cloudinary
@@ -154,13 +220,23 @@ const deleteProduct = async (id) => {
         }
 
         // ❌ xóa quan hệ size
-        await product.setSizes([]); // clear ProductSize
+        await product.setSizes([], { transaction }); // clear ProductSize
+
+        await enqueueOutboxEvent({
+            eventType: "catalog.product.deleted",
+            aggregateType: "product",
+            aggregateId: product.id,
+            payload: { product_id: product.id },
+            transaction,
+        });
 
         // ❌ xóa product
-        await product.destroy();
+        await product.destroy({ transaction });
+        await transaction.commit();
 
         return { EM: "Delete success", EC: 0, DT: null };
     } catch (e) {
+        await transaction.rollback();
         console.error(e);
         return { EM: "Delete fail", EC: 1, DT: null };
     }

@@ -15,7 +15,9 @@ from app.application.recommendations import RecommendationService
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.infrastructure.gemini_chat import GeminiChatModel, UnavailableChatModel
+from app.infrastructure.gemini_embeddings import GeminiEmbeddingModel
 from app.infrastructure.mysql_repository import MySqlProductRepository
+from app.infrastructure.qdrant_product_store import QdrantProductStore
 
 
 def create_app(
@@ -30,14 +32,20 @@ def create_app(
     owns_repository = repository is None
     product_repository = repository or MySqlProductRepository(resolved_settings.database_url)
     model = chat_model or _build_chat_model(resolved_settings)
-    recommendations = RecommendationService(product_repository)
+    embeddings = _build_embedding_model(resolved_settings)
+    vector_store = _build_vector_store(resolved_settings)
+    recommendations = RecommendationService(product_repository, embeddings, vector_store)
     chat = ChatService(recommendations, model)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        if vector_store is not None:
+            await vector_store.ensure_collection()
         yield
         if owns_repository and isinstance(product_repository, MySqlProductRepository):
             await product_repository.close()
+        if vector_store is not None:
+            await vector_store.close()
 
     application = FastAPI(
         title="HappyShop AI Service",
@@ -96,6 +104,27 @@ def _build_chat_model(settings: Settings) -> ChatModel:
     if not settings.gemini_api_key:
         return UnavailableChatModel()
     return GeminiChatModel(settings.gemini_api_key, settings.gemini_model)
+
+
+def _build_embedding_model(settings: Settings) -> GeminiEmbeddingModel | None:
+    if not settings.qdrant_enabled or not settings.gemini_api_key:
+        return None
+    return GeminiEmbeddingModel(
+        settings.gemini_api_key,
+        settings.gemini_embedding_model,
+        settings.embedding_dimensions,
+    )
+
+
+def _build_vector_store(settings: Settings) -> QdrantProductStore | None:
+    if not settings.qdrant_enabled or not settings.gemini_api_key:
+        return None
+    return QdrantProductStore(
+        settings.qdrant_url,
+        settings.qdrant_api_key,
+        settings.qdrant_collection,
+        settings.embedding_dimensions,
+    )
 
 
 app = create_app()

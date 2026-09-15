@@ -22,6 +22,18 @@ class Settings(BaseSettings):
     mysql_password: str = Field(default="", alias="MYSQL_PASSWORD")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+    gemini_embedding_model: str = Field(
+        default="gemini-embedding-001", alias="GEMINI_EMBEDDING_MODEL"
+    )
+    embedding_dimensions: int = Field(default=768, alias="EMBEDDING_DIMENSIONS")
+    qdrant_enabled: bool = Field(default=False, alias="QDRANT_ENABLED")
+    qdrant_url: str = Field(default="http://localhost:6333", alias="QDRANT_URL")
+    qdrant_api_key: str | None = Field(default=None, alias="QDRANT_API_KEY")
+    qdrant_collection: str = Field(default="catalog_products_v1", alias="QDRANT_COLLECTION")
+    rabbitmq_url: str = Field(
+        default="amqp://sales_app:local-rabbitmq-password-change-me@localhost:5672/sales_dev",
+        alias="RABBITMQ_URL",
+    )
 
     @property
     def database_url(self) -> str:

@@ -6,7 +6,8 @@ phải chạy [`sql/inspect_database.sql`](sql/inspect_database.sql) trên datab
 
 ## Cấu trúc logic hiện tại
 
-API nạp 30 Sequelize models và có 49 migrations.
+API nạp 32 Sequelize models và có 50 migrations (gồm `OutboxEvent` và
+`InventoryMovement` add-only).
 
 | Nhóm | Bảng/model chính | Quan hệ chính |
 | --- | --- | --- |
@@ -44,6 +45,9 @@ không có Sequelize model hoặc module ứng dụng tương ứng.
    Mọi thay đổi schema phải đi qua migration versioned.
 9. Cart/order đã được gia cố ownership và transaction, nhưng vẫn cần integration test với
    schema production-size trước release.
+10. `InventoryMovement` hiện ghi immutable ledger cho luồng tạo order và duyệt điều chuyển;
+    cần chuyển các điểm nhập/xuất/điều chỉnh kho còn lại sang cùng helper trước khi bật audit
+    tồn kho như nguồn đối soát chính.
 
 Registry đã khai báo tường minh model name và sửa lỗi `db.Notifications` thành
 `db.Notification`. Order code dùng database ID sau insert, loại bỏ race “last order + 1”.
@@ -62,6 +66,8 @@ practice production** vì các integrity rule chủ yếu nằm ở code/associa
 | `Product` | `price >= 0`; index `categoryId`; giá `DECIMAL` | Giá chính xác, lọc catalog nhanh |
 | `ProductSize` | `NOT NULL productId,sizeId`; `UNIQUE(productId,sizeId)`; FK tới `Product`,`Size`; `stock >= 0` nếu còn giữ stock tổng | Không sinh biến thể trùng hoặc mồ côi |
 | `Inventory` | `NOT NULL branchId,productSizeId`; `UNIQUE(branchId,productSizeId)`; FK; `stock >= 0` | Một tồn kho cho mỗi chi nhánh/biến thể |
+| `InventoryMovement` | append-only; `UNIQUE(idempotencyKey)`; index `(branchId, productSizeId, occurredAt)` | Sổ cái tồn kho, có thể đối soát balance và retry an toàn |
+| `OutboxEvent` | `eventId` unique; index event chưa publish | Phát RabbitMQ sau commit MySQL, tránh mất sự kiện |
 | `CartProductSize` | `NOT NULL`; `UNIQUE(cartId,productSizeId)`; FK; `quantity > 0` | Không có dòng cart trùng hoặc số lượng âm |
 | `Orders` | FK `userId`,`branchId`; index `(userId, createdAt)`, `(status, createdAt)`; `code` unique/not null sau backfill | Truy vấn lịch sử và vận hành đơn hàng |
 | `OrdersDetails` | FK `orderId`,`productId`; `quantity > 0`; giá snapshot `DECIMAL`; index `orderId` | Bảo toàn dòng đơn hàng và truy vấn chi tiết |

@@ -4,6 +4,7 @@ import { sendEmailTemplate } from "../../infrastructure/mail/email.service.js";
 import { createOrder as createOrderGHN, getShippingFee } from "../../infrastructure/shipping/ghn.service.js";
 import { env } from "../../config/env.js";
 import type { AccessTokenClaims } from "../../security/access-token.js";
+import { recordInventoryMovement } from "../../infrastructure/events/outbox.js";
 
 const GHN_BRANCH_DISTRICT_ID = parseInt(process.env.GHN_BRANCH_DISTRICT_ID);
 
@@ -132,6 +133,17 @@ const createOrder = async (orderData) => {
                 },
                 { transaction: t }
             );
+            await recordInventoryMovement({
+                branchId: Number(fulfillmentBranchId),
+                productSizeId: Number(productSize.id),
+                quantityDelta: -quantity,
+                balanceAfter: Number(inventory.stock),
+                reason: "ORDER_CREATED",
+                referenceType: "order",
+                referenceId: newOrder.id,
+                idempotencyKey: `order:${newOrder.id}:product-size:${productSize.id}`,
+                transaction: t,
+            });
 
             // 🔹 2.5 PREPARE ORDER DETAIL
             orderDetailsData.push({
@@ -612,6 +624,17 @@ const createOrderAtBranch = async (orderData) => {
                 { stock: inventory.stock - quantity },
                 { transaction: t }
             );
+            await recordInventoryMovement({
+                branchId: Number(branchId),
+                productSizeId: Number(productSize.id),
+                quantityDelta: -quantity,
+                balanceAfter: Number(inventory.stock),
+                reason: "ORDER_CREATED",
+                referenceType: "order",
+                referenceId: newOrder.id,
+                idempotencyKey: `order:${newOrder.id}:product-size:${productSize.id}`,
+                transaction: t,
+            });
 
             ordersDetailsData.push({
                 orderId,

@@ -58,8 +58,7 @@ class MySqlProductRepository:
         async with self._engine.connect() as connection:
             rows = (await connection.execute(statement, {"user_id": user_id})).mappings().all()
         return [
-            UserSignal(product_id=int(row["product_id"]), score=float(row["score"]))
-            for row in rows
+            UserSignal(product_id=int(row["product_id"]), score=float(row["score"])) for row in rows
         ]
 
     async def close(self) -> None:
