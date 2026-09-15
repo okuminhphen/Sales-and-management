@@ -23,7 +23,7 @@ describe("chatbot HTTP boundary", () => {
         expect(response.body).toEqual({ reply: "Chào bạn", products: [] });
         expect(post).toHaveBeenCalledWith(
             "http://localhost:8000/chat",
-            { message: "Tìm đồ ngủ" },
+            { message: "Tìm đồ ngủ", history: [] },
             expect.objectContaining({
                 headers: { "X-Request-ID": "chat-contract-123" },
                 timeout: 10_000,

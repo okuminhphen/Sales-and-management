@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.application.chunking import chunk_text
 from app.application.recommendations import RecommendationService
 from app.domain.models import Product, UserSignal
 from tests.fakes import FakeProductRepository
@@ -81,3 +82,9 @@ async def test_query_prefers_semantic_vector_result_then_tfidf_fallback() -> Non
     result = await service.products_for_query("Tìm sản phẩm phù hợp", 3)
 
     assert [item.id for item in result] == [3, 2, 1]
+
+
+def test_chunking_is_reserved_for_long_knowledge_documents() -> None:
+    chunks = chunk_text("Một. Hai. Ba.", max_characters=7, overlap_characters=0)
+
+    assert chunks == ["Một.", "Hai.", "Ba."]

@@ -1,3 +1,4 @@
+from app.application.ports import ChatTurn
 from app.domain.models import Product, UserSignal
 
 
@@ -19,5 +20,8 @@ class FakeProductRepository:
 
 
 class FakeChatModel:
-    async def reply(self, message: str, products: list[Product]) -> dict[str, object]:
+    async def reply(
+        self, message: str, products: list[Product], history: list[ChatTurn]
+    ) -> dict[str, object]:
+        del history
         return {"reply": f"Echo: {message}", "products": [products[0].to_public_dict()]}

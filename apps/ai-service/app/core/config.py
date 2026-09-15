@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     qdrant_url: str = Field(default="http://localhost:6333", alias="QDRANT_URL")
     qdrant_api_key: str | None = Field(default=None, alias="QDRANT_API_KEY")
     qdrant_collection: str = Field(default="catalog_products_v1", alias="QDRANT_COLLECTION")
+    rag_product_limit: int = Field(default=8, alias="RAG_PRODUCT_LIMIT")
+    rag_description_char_limit: int = Field(default=400, alias="RAG_DESCRIPTION_CHAR_LIMIT")
+    chat_history_turn_limit: int = Field(default=6, alias="CHAT_HISTORY_TURN_LIMIT")
+    chat_max_output_tokens: int = Field(default=800, alias="CHAT_MAX_OUTPUT_TOKENS")
     rabbitmq_url: str = Field(
         default="amqp://sales_app:local-rabbitmq-password-change-me@localhost:5672/sales_dev",
         alias="RABBITMQ_URL",

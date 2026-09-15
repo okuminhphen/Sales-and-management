@@ -4,11 +4,18 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.application.chat import ChatService
+from app.application.ports import ChatTurn
 from app.application.recommendations import RecommendationService
 
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2_000)
+    history: list["ChatHistoryItem"] = Field(default_factory=list, max_length=6)
+
+
+class ChatHistoryItem(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=1_000)
 
 
 class ChatResponse(BaseModel):
@@ -50,6 +57,7 @@ def create_router(
 
     @router.post("/chat", response_model=ChatResponse, tags=["chat"])
     async def chat_with_customer(payload: ChatRequest) -> dict[str, object]:
-        return await chat.reply(payload.message.strip())
+        history = [ChatTurn(item.role, item.content.strip()) for item in payload.history]
+        return await chat.reply(payload.message.strip(), history)
 
     return router

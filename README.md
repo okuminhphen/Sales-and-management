@@ -98,6 +98,16 @@ Worker API `outbox-publisher` phát event MySQL đã commit sang RabbitMQ; `ai-c
 nhận event và upsert/delete vector Qdrant. Hai worker là process deploy độc lập, không chạy
 trong request HTTP. Qdrant chỉ là read-model: MySQL vẫn là nguồn dữ liệu chuẩn.
 
+### Luồng RAG catalog
+
+Mỗi sản phẩm ngắn được index thành một vector với `name + category + description`; không
+chunk máy móc theo từng đoạn. Khi chat, AI kết hợp thứ hạng semantic Qdrant và lexical
+TF-IDF (fallback khi Qdrant/embedding lỗi), đọc lại product từ MySQL, rồi chỉ đưa tối đa
+`RAG_PRODUCT_LIMIT` product và `RAG_DESCRIPTION_CHAR_LIMIT` ký tự mô tả/product vào Gemini.
+Client có thể gửi tối đa 6 lượt lịch sử `{ role: "user" | "assistant", content }`; API
+validate trước khi chuyển tiếp. `app/application/chunking.py` chỉ dành cho FAQ, policy hoặc
+tài liệu dài khi được bổ sung sau này.
+
 ## Database
 
 ```powershell

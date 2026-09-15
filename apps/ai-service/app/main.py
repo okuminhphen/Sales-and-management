@@ -35,7 +35,7 @@ def create_app(
     embeddings = _build_embedding_model(resolved_settings)
     vector_store = _build_vector_store(resolved_settings)
     recommendations = RecommendationService(product_repository, embeddings, vector_store)
-    chat = ChatService(recommendations, model)
+    chat = ChatService(recommendations, model, resolved_settings.rag_product_limit)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -103,7 +103,13 @@ def create_app(
 def _build_chat_model(settings: Settings) -> ChatModel:
     if not settings.gemini_api_key:
         return UnavailableChatModel()
-    return GeminiChatModel(settings.gemini_api_key, settings.gemini_model)
+    return GeminiChatModel(
+        settings.gemini_api_key,
+        settings.gemini_model,
+        settings.rag_description_char_limit,
+        settings.chat_history_turn_limit,
+        settings.chat_max_output_tokens,
+    )
 
 
 def _build_embedding_model(settings: Settings) -> GeminiEmbeddingModel | None:

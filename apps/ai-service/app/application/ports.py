@@ -3,6 +3,12 @@ from typing import Protocol
 from app.domain.models import Product, UserSignal
 
 
+class ChatTurn:
+    def __init__(self, role: str, content: str) -> None:
+        self.role = role
+        self.content = content
+
+
 class ProductRepository(Protocol):
     async def list_products(self) -> list[Product]: ...
 
@@ -10,7 +16,9 @@ class ProductRepository(Protocol):
 
 
 class ChatModel(Protocol):
-    async def reply(self, message: str, products: list[Product]) -> dict[str, object]: ...
+    async def reply(
+        self, message: str, products: list[Product], history: list[ChatTurn]
+    ) -> dict[str, object]: ...
 
 
 class EmbeddingModel(Protocol):
