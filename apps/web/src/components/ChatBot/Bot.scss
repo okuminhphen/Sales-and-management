@@ -124,6 +124,18 @@
   background-color: #0056b3;
 }
 
+.send-button:disabled,
+.chat-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.chat-error {
+  margin: 8px 0;
+  color: #b42318;
+  font-size: 13px;
+}
+
 .products-container {
   margin-top: 15px;
   padding: 10px;

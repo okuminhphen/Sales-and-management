@@ -1,6 +1,6 @@
 # Kiến trúc hệ thống
 
-Ngày audit gần nhất: 2026-09-04.
+Ngày audit gần nhất: 2026-09-15.
 
 ## Quyết định kiến trúc
 
@@ -11,10 +11,14 @@ hạ tầng riêng. Socket.IO là transport của API, không phải service ngh
 Web React
   ├─ HTTP/Socket.IO -> API Express -> feature services -> Sequelize -> MySQL
   │                               └-> Redis cache/adapter
-  └─ API proxy -> FastAPI -> application use cases -> repository/chat ports
+  └─ POST /api/v1/bot/chat -> API -> FastAPI -> application use cases -> repository/chat ports
                                              ├-> MySQL adapter
                                              └-> Gemini adapter
 ```
+
+FastAPI không public trực tiếp cho browser. API là BFF/gateway của chat: xác thực boundary
+nếu cần, rate limit, timeout upstream và mapping lỗi. `X-Request-ID` được tạo ở API (hoặc
+nhận từ reverse proxy), chuyển tới AI service và xuất hiện trong response/log của cả hai.
 
 ## Phân bổ thư mục
 
@@ -71,6 +75,8 @@ JWT thay vì tin dữ liệu từ browser.
 - Adapter: Sequelize, Redis, SMTP, GHN, Cloudinary và Gemini nằm ở biên hệ thống.
 - Dependency Injection: size module và AI tests dùng fake repository/model.
 - Fail-fast configuration: cấu hình được parse và chặn JWT không an toàn ở production.
+- Observability: API và AI ghi JSON log có timestamp, level, service, request ID, HTTP status
+  và duration; logger che các field bí mật thông dụng. Request body không được log mặc định.
 
 ## Kết quả audit toàn project
 
@@ -91,7 +97,8 @@ JWT thay vì tin dữ liệu từ browser.
    `features/<feature>/{api,components,hooks,schema,types}` và giữ `shared` cho UI chung.
 4. Sequelize models chưa có model/attribute types đầy đủ và nằm ở legacy boundary chung.
 5. Migration/database còn rủi ro ghi tại `database.md`; chưa đủ điều kiện khởi tạo DB production mới.
-6. Chưa có observability hoàn chỉnh: structured log, trace, metrics, alert và rate limiting.
+6. Đã có structured log, request ID, timeout AI và rate limit chat qua Redis; vẫn thiếu
+   distributed tracing, metrics, dashboard, alert và centralized log storage.
 
 ## Roadmap ưu tiên
 
@@ -99,7 +106,8 @@ JWT thay vì tin dữ liệu từ browser.
 2. Bật strict TypeScript từng API feature, typed Sequelize repository, sau đó bật strict toàn API.
 3. Refactor frontend theo feature, tách component trên 300 dòng, xóa toàn bộ `@ts-nocheck`.
 4. Thêm contract test web–API, test transaction/order/payment và WebSocket integration.
-5. Thêm rate limit, idempotency, structured logging, metrics/tracing và readiness health.
+5. Thêm distributed tracing, metrics, readiness health và alert; giữ rate limit/chat timeout
+   dưới kiểm thử tải.
 
 Kiến trúc hiện tại là nền tảng tốt và deployable, nhưng chưa nên tuyên bố “hoàn tất clean
 architecture” trước khi xử lý database, strict typing và frontend decomposition.

@@ -56,9 +56,8 @@ npm ci
 npm run infra:up
 
 cd apps/ai-service
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
 cd ../..
 ```
 
@@ -67,12 +66,15 @@ Chạy từng ứng dụng ở ba terminal:
 ```powershell
 npm run dev:web
 npm run dev:api
-cd apps/ai-service; .venv\Scripts\Activate.ps1; uvicorn app.main:app --reload --port 8000
+cd apps/ai-service; .venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
 - Web: `http://localhost:3000`
 - API health: `http://localhost:8080/health/live`
 - FastAPI/OpenAPI: `http://localhost:8000/docs`
+
+`venv` chỉ cần tạo và cài package lần đầu (hoặc sau khi đổi dependency). Khi chạy lại,
+gọi trực tiếp Python trong `.venv` như lệnh trên; không bắt buộc activate môi trường.
 
 Có thể rehearsal toàn bộ container bằng `npm run rehearsal:up` sau khi network hạ tầng
 được tạo bởi `npm run infra:up`. Một lệnh Compose chỉ là tiện ích local, không có nghĩa
@@ -107,6 +109,17 @@ CI chạy Node typecheck/test/build, Python Ruff/Mypy/Pytest và integration tes
 Redis bằng container tạm. Hai integration test infrastructure tự bỏ qua ở local nếu chưa
 bật `RUN_INFRASTRUCTURE_TESTS=true`.
 
+## Observability và chatbot
+
+- Browser chỉ gọi `POST /api/v1/bot/chat`; không gọi trực tiếp FastAPI hoặc Gemini.
+- API chuyển tiếp request tới `AI_SERVICE_URL/chat` với timeout `AI_SERVICE_TIMEOUT_MS` và
+  header `X-Request-ID`; FastAPI giữ nguyên ID đó trong response/log để trace một lượt chat.
+- API và AI ghi log JSON (không log body request); các key nhạy cảm như token, password và
+  API key được che ở lớp logger.
+- Chat public được rate limit bằng Redis qua `CHAT_RATE_LIMIT_MAX` và
+  `CHAT_RATE_LIMIT_WINDOW_SECONDS`. Redis phải sẵn sàng trong production để giới hạn có hiệu
+  lực giữa nhiều API replica.
+
 ## Docker và triển khai
 
 - `infra/compose.infrastructure.yml`: MySQL + Redis cho local/staging.
@@ -122,7 +135,9 @@ trong private network. Xem [hướng dẫn triển khai](docs/deployment.md).
 - Source ứng dụng đã chuyển sang TypeScript/TSX hoặc Python; không còn source JS.
 - API đã chia theo feature module và có Zod DTO tại HTTP boundary.
 - FastAPI strict với Mypy và có test bằng dependency injection.
-- Frontend còn 34 file `@ts-nocheck` và một số component quá lớn; đây là technical debt.
+- Frontend còn 33 file `@ts-nocheck` và một số component quá lớn; đây là technical debt.
+- Widget chatbot đã là TSX typed, có trạng thái loading/error và giữ kết quả sản phẩm theo
+  từng lượt trả lời; phần màn hình lớn còn lại cần tách dần theo feature.
 - Database legacy cần baseline và chuẩn hóa khóa ngoại, index, kiểu tiền trước production.
 
 ## Quy trình Git đề xuất

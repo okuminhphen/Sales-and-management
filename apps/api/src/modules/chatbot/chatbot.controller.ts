@@ -10,7 +10,10 @@ const sendMessageFunc = async (
 ): Promise<void> => {
     try {
         const { message } = req.body;
-        res.status(200).json(await sendChatMessage(message));
+        const requestId = res.getHeader("X-Request-ID");
+        res.status(200).json(
+            await sendChatMessage(message, typeof requestId === "string" ? requestId : undefined),
+        );
     } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
             res.status(502).json({

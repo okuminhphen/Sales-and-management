@@ -16,6 +16,10 @@ const envSchema = z
     DEFAULT_FULFILLMENT_BRANCH_ID: z.coerce.number().int().positive().default(13),
     REDIS_URL: z.string().default("redis://localhost:6379"),
     AI_SERVICE_URL: z.string().url().default("http://localhost:8000"),
+    AI_SERVICE_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(10_000),
+    CHAT_RATE_LIMIT_MAX: z.coerce.number().int().positive().max(1_000).default(30),
+    CHAT_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().max(3_600).default(60),
+    LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
     VNP_TMN_CODE: z.string().default(""),
     VNP_HASH_SECRET: z.string().default(""),
     VNP_URL: z

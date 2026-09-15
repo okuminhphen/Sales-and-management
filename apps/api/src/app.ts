@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import cookieParser from "cookie-parser";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import configCors from "./config/cors.js";
+import { requestContext } from "./middlewares/requestContext.js";
+import { logger } from "./observability/logger.js";
 import initApiRouter from "./routes/api.js";
 
 export const createApp = (): Express => {
@@ -11,6 +13,7 @@ export const createApp = (): Express => {
 
     app.disable("x-powered-by");
     app.use(configureSecurityHeaders);
+    app.use(requestContext);
     configCors(app);
     app.use(express.json({ limit: "1mb" }));
     app.use(express.urlencoded({ extended: true, limit: "1mb" }));
@@ -30,10 +33,19 @@ export const createApp = (): Express => {
     });
 
     app.use(
-        (error: Error, _request: Request, response: Response, _next: NextFunction) => {
-            console.error(error);
+        (error: Error, request: Request, response: Response, _next: NextFunction) => {
+            logger.error("http.request.failed", {
+                requestId: request.requestId,
+                method: request.method,
+                path: request.originalUrl,
+                error,
+            });
             response.status(500).json({
-                error: { code: "INTERNAL_ERROR", message: "Internal server error" },
+                error: {
+                    code: "INTERNAL_ERROR",
+                    message: "Internal server error",
+                    requestId: request.requestId,
+                },
             });
         }
     );

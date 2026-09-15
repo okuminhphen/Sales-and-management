@@ -1,5 +1,6 @@
 import { createClient, type RedisClientType } from "@redis/client";
 import { env } from "./env.js";
+import { logger } from "../observability/logger.js";
 
 let redisClient: RedisClientType | undefined;
 
@@ -7,7 +8,7 @@ export const getRedisClient = (): RedisClientType => {
     if (!redisClient) {
         redisClient = createClient({ url: env.REDIS_URL });
         redisClient.on("error", (error) => {
-            console.error("Redis error", error);
+            logger.error("redis.client_error", { error });
         });
     }
 

@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { getReadyRedisClient } from "../config/redis.js";
+import { logger } from "../observability/logger.js";
 
 export const cache = (keyPrefix: string) =>
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -46,14 +47,20 @@ export const cache = (keyPrefix: string) =>
             try {
                 void redisClient.set(key, JSON.stringify(body), { EX: 300 });
             } catch (error) {
-                console.error("Error caching data:", error);
+                logger.error("cache.write_failed", {
+                    requestId: res.getHeader("X-Request-ID"),
+                    error,
+                });
             }
             return originalJson(body);
         }) as Response["json"];
 
         next();
     } catch (error) {
-        console.error("Cache middleware error:", error);
+        logger.error("cache.middleware_failed", {
+            requestId: res.getHeader("X-Request-ID"),
+            error,
+        });
         next();
     }
 };

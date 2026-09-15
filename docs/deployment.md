@@ -81,8 +81,12 @@ backfill, rồi xóa field cũ trong release sau.
 - Cấu hình `PAYMENT_WEBHOOK_SECRET`; webhook không chữ ký phải bị từ chối.
 - CORS theo allowlist; xác thực Socket.IO handshake và room membership.
 - Redis adapter cho nhiều API replica; sticky session nếu còn long-polling.
-- Rate limit auth/chat/payment và idempotency key cho order/payment callback.
-- CPU/RAM limits, autoscaling, structured logs, trace, metrics và alert.
+- Redis phải khả dụng cho rate limit chat hiện tại; đặt `CHAT_RATE_LIMIT_MAX` và
+  `CHAT_RATE_LIMIT_WINDOW_SECONDS` theo lưu lượng thực tế. Thêm rate limit riêng cho auth,
+  payment và idempotency key cho order/payment callback.
+- Chuyển tiếp `X-Request-ID` từ reverse proxy. Thu thập JSON log của `sales-api` và
+  `sales-ai-service`; không index request body, token hoặc API key.
+- CPU/RAM limits, autoscaling, distributed trace, metrics và alert.
 - Thay Multer Cloudinary adapter legacy bằng adapter tương thích Multer 2 trước production.
 
 ## Rollback

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     app_name: str = "sales-ai-service"
     app_env: str = Field(default="development", alias="NODE_ENV")
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     mysql_host: str = Field(default="localhost", alias="MYSQL_HOST")
     mysql_port: int = Field(default=3306, alias="MYSQL_PORT")
     mysql_database: str = Field(default="btl_tmdt", alias="MYSQL_DATABASE")

@@ -8,6 +8,7 @@ describe("health endpoint", () => {
 
         expect(response.status).toBe(200);
         expect(response.body).toEqual({ status: "ok" });
+        expect(response.headers["x-request-id"]).toMatch(/^[a-zA-Z0-9_-]{8,128}$/);
     });
 
     it("returns a stable JSON error for unknown routes", async () => {

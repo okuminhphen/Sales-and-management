@@ -15,7 +15,9 @@ def test_health_and_chat_contracts() -> None:
     )
 
     with TestClient(app) as client:
-        assert client.get("/health/live").json() == {"status": "ok"}
+        health = client.get("/health/live", headers={"X-Request-ID": "ai-contract-123"})
+        assert health.json() == {"status": "ok"}
+        assert health.headers["x-request-id"] == "ai-contract-123"
         response = client.post("/chat", json={"message": "Có đồ ngủ không?"})
 
     assert response.status_code == 200
