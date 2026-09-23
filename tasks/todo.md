@@ -148,7 +148,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [x] Core review: create theo customer V2 context, unique DB chống trùng đồng thời;
     listing phân trang ổn định, không lộ customer/account ID; unit/MySQL `_test` integration.
   - [x] Core banner metadata: create/update/delete khi không có media; global catalog
-    permission + employee profile, validate đầu vào, transaction/row lock; unit/MySQL `_test`.
+    permission từ role nội bộ (`SUPER_ADMIN` không cần employee profile), validate đầu vào,
+    transaction/row lock; unit/MySQL `_test`.
+  - [x] Core admin banner directory: thấy đủ draft/active/inactive, phân trang ổn định,
+    chỉ cho global catalog manager; lọc ảnh/target URL và có unit/MySQL `_test`.
   - [ ] Banner media lifecycle: upload ảnh hợp lệ, dọn ảnh cũ sau khi DB commit và bảo đảm
     cleanup có retry/durable record; không xóa DB row chứa media khi cơ chế này chưa sẵn sàng.
   - [ ] DTO/HTTP route compatibility cho cart, review và banner trên V2 access context;

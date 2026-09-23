@@ -40,7 +40,7 @@ const defaultPage = 1;
 const defaultLimit = 20;
 const maximumLimit = 100;
 
-const normalizeListQuery = (
+export const normalizeListQuery = (
     input: CatalogBannerListInput | undefined,
 ): CatalogBannerListQuery | null => {
     const page = input?.page === undefined ? defaultPage : input.page;

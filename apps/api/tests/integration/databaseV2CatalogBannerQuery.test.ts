@@ -5,7 +5,9 @@ import { env } from "../../src/config/env.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { CatalogBannerQueryV2Service } from "../../src/modules/catalog/application/catalog-banner-query-v2.service.js";
+import { CatalogBannerAdminQueryV2Service } from "../../src/modules/catalog/application/catalog-banner-admin-query-v2.service.js";
 import { SequelizeCatalogBannerV2Repository } from "../../src/modules/catalog/persistence/catalog-banner-query-v2.repository.js";
+import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 const runDatabaseV2Tests = process.env.RUN_DATABASE_V2_TESTS === "true";
 
@@ -71,5 +73,23 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 public banner directory on MyS
         });
         if (listed.kind !== "banners") return;
         expect(listed.page.banners.some((banner) => banner.name === inactiveName)).toBe(false);
+
+        const manager: V2AccessContext = {
+            accountId: "1", customerId: null, employeeId: null,
+            grants: [{ roleCode: "SUPER_ADMIN", scope: { type: "global" }, permissions: ["catalog.manage.global"] }],
+        };
+        const adminService = new CatalogBannerAdminQueryV2Service({
+            repository: new SequelizeCatalogBannerV2Repository(persistence),
+        });
+        const adminListed = await adminService.list(manager, { page: 1, limit: 100 });
+        expect(adminListed).toMatchObject({
+            kind: "banners",
+            page: { banners: expect.arrayContaining([
+                expect.objectContaining({
+                    name: inactiveName, status: "inactive", image: null, targetUrl: null,
+                }),
+                expect.objectContaining({ name: activeName, status: "active" }),
+            ]) },
+        });
     });
 });
