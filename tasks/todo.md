@@ -41,9 +41,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Acceptance: categories/products/sizes/variants/reviews/banners đúng DBML.
   - Verify: static schema test + focused MySQL test.
   - Result: migration `0002-catalog` tạo 6 bảng, FK catalog có thể tạo ngay, checks về giá/rating và index trọng yếu; `reviews.order_item_id` được index và FK defer có chủ đích sang T08.
-- [ ] T08 — Baseline cart/order/voucher/payment.
+- [x] T08 — Baseline cart/order/voucher/payment.
   - Acceptance: amount/idempotency/snapshot/unique constraints đúng DBML.
   - Verify: valid/invalid money and duplicate-key integration tests.
+  - Result: migration `0003-commerce` tạo 11 bảng và FK `reviews.order_item_id`; 2 unit tests và 6 MySQL 8.4 integration tests PASS (DECIMAL, snapshot, cart/voucher/payment constraints, idempotency). API typecheck/build và full suite PASS.
 - [ ] T09 — Baseline shipment/return/refund.
   - Acceptance: shipment, event, return item và refund constraints đúng DBML.
   - Verify: focused integration tests.
