@@ -140,19 +140,20 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     SKU/stock. Mutation category/product/size/variant, DTO/route compatibility, policy chống
     cycle category và contract availability theo branch vẫn chưa chuyển.
 - [ ] T28 — Cart/review/banner endpoints V2.
-  - Tiến độ: banner directory public chỉ đọc `active`, có pagination deterministic (20/100),
-    serialize BIGINT, lọc JSON ảnh và target URL trước khi ra client; có unit/MySQL `_test`
-    integration. Own-cart read core dùng customer ID từ V2 access context, phân trang và trả
-    giá DECIMAL string; item ngừng bán vẫn hiện với `catalogActive=false`. Cart add core đã dùng
-    DB-derived customer ID, transaction + cart row lock, chặn variant ngừng bán và quantity vượt
-    `INT`; unit/MySQL `_test` integration xác nhận cộng dồn đồng thời không mất cập nhật hay trùng
-    dòng. Cart remove core xóa atomic theo customer ownership, che phân biệt foreign/missing
-    item ID; có MySQL `_test` integration. Cart update core khóa theo owner, chỉ đổi số lượng
-    nguyên dương của item còn bán và có test MySQL `_test`. Review create core lấy customer từ
-    V2 context, validate rating/comment và dùng unique DB chống review trùng đồng thời; có
-    unit/MySQL `_test` integration. Review listing core có pagination 20/100, ordering ổn định,
-    projection tránh lộ customer/account ID và test MySQL `_test`. Banner write/xoá media,
-    DTO/route compatibility và audit chưa chuyển.
+  - [x] Core banner directory: chỉ đọc `active`, phân trang 20/100, serialize BIGINT,
+    lọc JSON ảnh và target URL trước khi ra client; unit/MySQL `_test` integration.
+  - [x] Core own-cart: read/add/update/remove theo customer ID từ V2 access context;
+    transaction/row lock cho mutation, giới hạn quantity, không mất cập nhật đồng thời,
+    không lộ item của owner khác; unit/MySQL `_test` integration.
+  - [x] Core review: create theo customer V2 context, unique DB chống trùng đồng thời;
+    listing phân trang ổn định, không lộ customer/account ID; unit/MySQL `_test` integration.
+  - [x] Core banner metadata: create/update/delete khi không có media; global catalog
+    permission + employee profile, validate đầu vào, transaction/row lock; unit/MySQL `_test`.
+  - [ ] Banner media lifecycle: upload ảnh hợp lệ, dọn ảnh cũ sau khi DB commit và bảo đảm
+    cleanup có retry/durable record; không xóa DB row chứa media khi cơ chế này chưa sẵn sàng.
+  - [ ] DTO/HTTP route compatibility cho cart, review và banner trên V2 access context;
+    hiện các core trên **chưa được mount** vào runtime HTTP legacy.
+  - [ ] Audit và kiểm thử hợp đồng HTTP end-to-end sau khi V2 auth/access composition sẵn sàng.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.
