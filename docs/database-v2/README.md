@@ -8,7 +8,7 @@ Bảng metadata do migration runner tạo ra không thuộc 49 bảng nghiệp v
 
 - [`target-schema.dbml`](./target-schema.dbml) mô tả schema đích đã được duyệt.
 - DBML là hợp đồng thiết kế, **không phải SQL để chạy trực tiếp**.
-- Baseline migration thực thi và kiểm chứng MySQL 8.4 được triển khai ở các task T04–T11.
+- Baseline migration thực thi và kiểm chứng MySQL 8.4 được triển khai từng phần ở các task T04–T11.
 - Cutover chỉ áp dụng cho database local mới, có guard rõ ràng; production/staging và backfill
   dữ liệu nằm ngoài initiative này.
 - Trạng thái cuối chỉ có một schema và một write path; không duy trì dual-write hoặc view tương
@@ -39,3 +39,30 @@ Kế hoạch triển khai chi tiết được theo dõi tại [`tasks/plan.md`](
 
 Không chỉnh trực tiếp schema đích mà không cập nhật revision, checksum/manifest, ADR liên quan và
 các test bảo vệ schema.
+
+## Chạy baseline V2 an toàn ở local
+
+V2 runner hoàn toàn tách khỏi migration legacy. Nó chỉ có `status` và `up`; không có lệnh
+`down`, reset hoặc drop. Runner luôn yêu cầu đủ hai biến dưới đây và từ chối mọi database không
+kết thúc bằng `_test`:
+
+```powershell
+$env:V2_MIGRATIONS_ENABLED = "true"
+$env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
+npm run db:v2:up --workspace @sales/api
+npm run db:v2:status --workspace @sales/api
+```
+
+Tạo database `_test` riêng và cấp quyền cho user API trước lần chạy đầu. Không đặt hai biến trên
+vào cấu hình production và không thay `MYSQL_DATABASE=sale_and_managements_db` bằng database V2
+trước checkpoint cutover. Manifest checksum được kiểm tra trước khi kết nối MySQL; schema chưa
+được review, checksum lệch, thiếu target hoặc target không phải `_test` đều bị chặn.
+
+Để chạy focused integration test MySQL hiện có:
+
+```powershell
+$env:RUN_DATABASE_V2_TESTS = "true"
+$env:V2_MIGRATIONS_ENABLED = "true"
+$env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
+npm run test --workspace @sales/api -- tests/integration/databaseV2IdentityAccess.test.ts
+```

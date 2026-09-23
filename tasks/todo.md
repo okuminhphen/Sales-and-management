@@ -33,9 +33,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Acceptance: status/up chạy tách legacy; không sync alter, không auto drop/reset.
   - Verify: T04 xanh + typecheck.
   - Result: runner độc lập chỉ nhận `status`/`up`, chỉ mở explicit `_test` target và dùng metadata `database_v2_migrations` riêng; typecheck/build PASS.
-- [ ] T06 — Baseline identity/access/organization/customer.
+- [x] T06 — Baseline identity/access/organization/customer.
   - Acceptance: 9 bảng đầu, indexes/checks và vòng FK branch-manager tạo đúng thứ tự.
   - Verify: static schema test + focused MySQL test.
+  - Result: migration `0001-identity-access` tạo 9 bảng và FK vòng sau `employees`; static test và MySQL 8.4 integration test PASS, rerun chỉ có một metadata row.
 - [ ] T07 — Baseline catalog.
   - Acceptance: categories/products/sizes/variants/reviews/banners đúng DBML.
   - Verify: static schema test + focused MySQL test.
