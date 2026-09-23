@@ -62,6 +62,7 @@
     "tests/integration/databaseV2InventoryTransferModels.test.ts",
     "tests/integration/databaseV2CommerceFulfillmentModels.test.ts",
     "tests/integration/databaseV2CommunicationModels.test.ts",
+    "tests/integration/databaseV2FullPersistence.test.ts",
     "tests/integration/sizeRoutes.test.ts"
   ]
 }

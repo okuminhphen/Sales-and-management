@@ -45,8 +45,8 @@ export type EmployeeAttributes = Timestamps & {
 
 type New<Attributes extends { id: unknown }> = Optional<Attributes, "id">;
 
-const bigintId = () => ({ type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true });
-const integerId = () => ({ type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true });
+const bigintId = () => ({ type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true, allowNull: false });
+const integerId = () => ({ type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true, allowNull: false });
 const timestamps = {
     createdAt: { type: DataTypes.DATE, allowNull: false, field: "created_at" },
     updatedAt: { type: DataTypes.DATE, allowNull: false, field: "updated_at" },
@@ -146,6 +146,7 @@ export const createIdentityAccessPersistenceModule = (sequelize: Sequelize): V2P
             CustomerAddress.belongsTo(Customer, { foreignKey: "customerId", as: "customer" });
             Branch.hasMany(Employee, { foreignKey: "branchId", as: "employees" });
             Employee.belongsTo(Branch, { foreignKey: "branchId", as: "branch" });
+            Employee.belongsTo(Account, { foreignKey: "accountId", as: "account" });
             Branch.belongsTo(Employee, { foreignKey: "managerEmployeeId", as: "manager" });
             Employee.hasOne(Branch, { foreignKey: "managerEmployeeId", as: "managedBranch" });
         },

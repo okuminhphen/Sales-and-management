@@ -37,7 +37,7 @@ export type BannerAttributes = Timestamps & {
 
 type New<Attributes extends { id: unknown }> = Optional<Attributes, "id">;
 
-const bigintId = () => ({ type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true });
+const bigintId = () => ({ type: DataTypes.BIGINT, primaryKey: true, autoIncrement: true, allowNull: false });
 const timestamps = {
     createdAt: { type: DataTypes.DATE, allowNull: false, field: "created_at" },
     updatedAt: { type: DataTypes.DATE, allowNull: false, field: "updated_at" },

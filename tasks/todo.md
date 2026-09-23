@@ -94,10 +94,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 - [x] T19 — `communication-ai` + `personalization` + outbox typed models.
   - Acceptance: chat/assistant/notification/behavior/outbox khớp schema.
   - Verify: schema-model contract test.
-- [ ] T20 — Full registry against V2 MySQL.
+- [x] T20 — Full registry against V2 MySQL.
   - Acceptance: mọi model query được, table/column/type/nullability drift đều làm test fail.
   - Verify: API integration/typecheck/build.
-- [ ] Checkpoint 2 — 49-table typed persistence đạt trên DB V2 test.
+- [x] Checkpoint 2 — 49-table typed persistence đạt trên DB V2 test.
+  - Result: composition root load đủ 49 model; 49 model query được; 104 FK đều có source
+    `belongsTo`; cột/type/nullability được contract-test trên MySQL `_test`. API full suite,
+    strict typecheck và build PASS; legacy runtime chưa import V2 persistence.
 
 ## Phase 3 — Backend compatibility-first
 
