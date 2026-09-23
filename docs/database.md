@@ -1,8 +1,14 @@
 # Audit cơ sở dữ liệu
 
-Ngày audit: 2026-09-15. Đây là audit tĩnh từ Sequelize models và migrations. Chưa thể dump
-schema thật vì Docker Desktop/MySQL không chạy trên máy local. Trước mọi migration production,
-phải chạy [`sql/inspect_database.sql`](sql/inspect_database.sql) trên database thật.
+Ngày audit ban đầu: 2026-09-15; cập nhật kiểm chứng local: 2026-09-23. Schema hiện tại đã
+được replay trên MySQL 8.4 local từ database rỗng: 50 migration tạo 38 bảng (tính cả
+`SequelizeMeta`) và không còn migration pending. Đây không phải inspection production;
+trước mọi migration production vẫn phải chạy
+[`sql/inspect_database.sql`](sql/inspect_database.sql) trên database thật.
+
+Database mặc định hiện dùng tên `sale_and_managements_db`. Cấu hình này áp dụng cho database
+mới; nếu MySQL volume đã khởi tạo với tên cũ, cần backup và chuyển schema/data riêng. Không xóa
+volume để ép MySQL khởi tạo lại.
 
 ## Cấu trúc logic hiện tại
 
@@ -24,9 +30,10 @@ không có Sequelize model hoặc module ứng dụng tương ứng.
 
 ## Rủi ro mức cao
 
-1. Chuỗi migration hiện tại không replay được an toàn trên database rỗng. Các file nền
-   `migrate-*.ts` xếp sau migration có timestamp, khiến một số `addColumn` chạy trước
-   `createTable`. Không dùng chuỗi này để bootstrap production mới.
+1. Migration runner đã khóa thứ tự các file nền `migrate-*.ts` trước migration timestamp và
+   đã replay thành công trên database MySQL local rỗng. Đây chỉ là lớp tương thích schema
+   legacy; không dùng kết quả rehearsal local để bootstrap production mới khi chưa audit dữ
+   liệu, backup và phê duyệt cutover.
 2. Tên bảng không nhất quán giữa số ít/số nhiều, PascalCase/lowercase và tên suy luận/tường
    minh. Windows và Linux MySQL có thể xử lý khác nhau. Compose local đang tạm dùng
    `lower_case_table_names=1` để tương thích dữ liệu legacy.
@@ -83,15 +90,15 @@ order/payment/stock history cần immutable audit trail, không nên xóa mềm 
 
 1. Backup và chạy inspection SQL trên staging/production.
 2. Tạo baseline v2 versioned từ schema thật, chỉ chứa cấu trúc và không chứa data/secrets.
-3. Đối chiếu từng model với baseline; archive chuỗi migration không replay được nhưng giữ
-   lịch sử để audit.
+3. Đối chiếu từng model với baseline; giữ chuỗi migration legacy và manifest thứ tự để audit,
+   nhưng không xem chúng là schema V2 chuẩn hóa.
 4. Viết forward migration chuẩn hóa tên bảng, `Cart.userId`, kiểu tiền, FK, index và unique
    constraints; xử lý orphan rows trước khi thêm constraint.
 5. Rehearsal restore + migration trên bản sao staging có kích thước tương đương production.
 6. Ghi lại thời gian, kế hoạch rollback và người chịu trách nhiệm phê duyệt.
 
-Cho tới khi hoàn thành, container ứng dụng vẫn build/test được nhưng không nên khởi tạo
-database production mới bằng migration legacy.
+Cho tới khi hoàn thành, migration legacy chỉ được dùng để bootstrap local/rehearsal tương
+thích ứng dụng hiện tại; không nên dùng để khởi tạo database production mới.
 
 CI dùng MySQL 8.4 và Redis 7.4 tạm để test adapter/infrastructure. Test này không chạy toàn
 bộ chuỗi migration legacy và không được phép trỏ tới staging/production.

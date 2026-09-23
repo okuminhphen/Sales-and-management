@@ -61,10 +61,16 @@ py -3.12 -m venv .venv
 cd ../..
 ```
 
-Khởi tạo schema local **chỉ khi bạn đang tạo database mới**. Chuỗi migration legacy có
-drift lịch sử, vì vậy cần import backup/baseline schema đã được kiểm chứng trước; sau đó
-chạy migration add-only mới. Không chạy lệnh này trên production nếu chưa có backup và
-review ở [Database](docs/database.md).
+Khởi tạo schema local **chỉ khi bạn đang tạo database mới**. Migration runner có manifest
+đưa các migration tạo bảng legacy lên trước migration timestamp, và đã được rehearsal từ
+database MySQL rỗng. Không dùng kết quả này để tự động bootstrap production; production vẫn
+cần backup, audit dữ liệu và review theo [Database](docs/database.md).
+
+```powershell
+npm run db:migrate --workspace @sales/api
+npm run db:migrate:status --workspace @sales/api
+npm run db:seed --workspace @sales/api
+```
 
 Chạy từng ứng dụng ở ba terminal:
 
@@ -77,6 +83,11 @@ cd apps/ai-service; .venv\Scripts\python.exe -m uvicorn app.main:app --reload --
 - Web: `http://localhost:3000`
 - API health: `http://localhost:8080/health/live`
 - FastAPI/OpenAPI: `http://localhost:8000/docs`
+
+Frontend đọc cấu hình build-time từ file `.env` ở root monorepo. Google OAuth là tùy
+chọn ở local: nếu `VITE_GOOGLE_CLIENT_ID` để trống, ứng dụng không khởi tạo Google
+Identity Services và ẩn nút Google; đăng nhập/đăng ký thường vẫn được hiển thị. Muốn bật
+Google OAuth, đặt OAuth Web Client ID vào biến này rồi khởi động lại `npm run dev:web`.
 
 `venv` chỉ cần tạo và cài package lần đầu (hoặc sau khi đổi dependency). Khi chạy lại,
 gọi trực tiếp Python trong `.venv` như lệnh trên; không bắt buộc activate môi trường.
@@ -110,15 +121,20 @@ tài liệu dài khi được bổ sung sau này.
 
 ## Database
 
+Tên database mặc định cho môi trường mới là `sale_and_managements_db` (cấu hình qua
+`MYSQL_DATABASE`). MySQL chỉ khởi tạo database này tự động khi data volume được tạo lần đầu;
+đổi giá trị biến môi trường không đổi tên database bên trong volume đã khởi tạo.
+
 ```powershell
 npm run db:migrate:status --workspace @sales/api
 npm run db:migrate --workspace @sales/api
 npm run db:seed --workspace @sales/api
 ```
 
-> Cảnh báo: chuỗi migration legacy chưa replay an toàn trên database rỗng. Database local
-> hiện cần restore baseline/backup trước. Không chạy migration production trước khi tạo
-> baseline v2 từ schema thật và hoàn thành checklist trong [docs/database.md](docs/database.md).
+> Migration legacy đã replay thành công trên MySQL local chạy với
+> `lower_case_table_names=1`. Đây là lớp tương thích cho ứng dụng hiện tại, chưa phải schema
+> V2 chuẩn hóa và chưa được phê duyệt để bootstrap production. Hoàn thành checklist trong
+> [docs/database.md](docs/database.md) trước mọi thay đổi production.
 
 ## Kiểm tra chất lượng
 
@@ -166,6 +182,32 @@ profile `ai-indexing` không cần bật.
 Qdrant và RabbitMQ chỉ bind vào `127.0.0.1`, yêu cầu credential từ `.env`, có named volume
 để giữ dữ liệu local. Qdrant có endpoint liveness `http://localhost:6333/healthz` và dashboard
 `http://localhost:6333/dashboard`; RabbitMQ management UI ở `http://localhost:15672`.
+
+## Dịch vụ email (Resend) và xác minh OTP
+
+- **Hạ tầng email**: Sử dụng official SDK của **Resend** theo kiến trúc Ports-and-Adapters (`EmailSender` port và `ResendEmailAdapter`).
+- **Biến môi trường**:
+  - `EMAIL_PROVIDER`: `resend` (mặc định) hoặc `test` (dùng trong kiểm thử không gửi mail thật).
+  - `RESEND_API_KEY`: API key từ Resend dashboard (bắt buộc trong production).
+  - `EMAIL_FROM`: Địa chỉ người gửi (mặc định `HappyShop <onboarding@resend.dev>`).
+  - `OTP_HMAC_SECRET`: Khóa bí mật dùng để tạo HMAC-SHA256 digest của mã OTP (tối thiểu 16 ký tự; bắt buộc thiết lập chuỗi mạnh trong production).
+  - `EMAIL_TIMEOUT_MS`: Thời gian chờ tối đa khi gửi email (mặc định `5000ms`).
+  - `RECAPTCHA_ENABLED`: Bật kiểm tra reCAPTCHA tại API; local mặc định `false`, production bắt buộc là `true`.
+  - `RECAPTCHA_SECRET_KEY`: Secret key chỉ đặt ở API; không đưa vào frontend hoặc Git.
+  - `RECAPTCHA_MIN_SCORE`: Ngưỡng điểm v3 tối thiểu, mặc định `0.5`.
+  - `RECAPTCHA_ALLOWED_HOSTNAMES`: Danh sách hostname được phép, phân tách bằng dấu phẩy; production nên cấu hình hostname thật.
+  - `RECAPTCHA_TIMEOUT_MS`: Timeout gọi Google siteverify, mặc định `5000ms`.
+  - `VITE_RECAPTCHA_SITE_KEY`: Site key public được đóng vào frontend tại build-time. Để trống đồng nghĩa frontend không mount provider.
+- **Quy trình xác minh OTP đăng ký**:
+  1. Người dùng nhập thông tin đăng ký tại trang web.
+  2. Nếu reCAPTCHA bật, frontend lấy token v3 action `register` mới và gửi cùng email tới `POST /api/v1/auth/email-verification/challenges`.
+  3. API tự xác minh token với Google (action, score, hostname); chỉ khi hợp lệ mới tạo challenge và gửi mã OTP 6 số. Gửi lại OTP cũng bắt buộc token mới.
+  4. Mã OTP được lưu dưới dạng HMAC digest trong Redis (TTL 300 giây / 5 phút, cooldown gửi lại 60 giây, tối đa 5 lần thử sai).
+  5. Người dùng nhập OTP; frontend gọi `POST /api/v1/auth/email-verification/challenges/:challengeId/verify` để nhận `verificationToken` dùng 1 lần (TTL 600 giây).
+  6. Frontend gọi `POST /api/v1/register` kèm `emailVerificationToken`. Backend claim token, tạo tài khoản và role trong transaction, sau commit mới finalize token.
+  7. Email chào mừng được gửi mà không kèm mật khẩu thô của người dùng.
+
+Local có thể để cả `RECAPTCHA_ENABLED=false` và `VITE_RECAPTCHA_SITE_KEY=`. Production phải cấu hình đồng thời site key lúc build web và secret key/hostname ở runtime API; không bật một phía riêng lẻ.
 
 ## Docker và triển khai
 

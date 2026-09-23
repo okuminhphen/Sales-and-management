@@ -67,7 +67,8 @@ chạy tự động khi API startup.
 
 ## Thứ tự release
 
-1. Backup MySQL; rehearsal forward/rollback migration. Chuỗi legacy chưa an toàn cho DB mới.
+1. Backup MySQL; rehearsal forward/rollback migration trên bản sao production. Manifest
+   legacy đã chạy được ở local nhưng chưa thay thế baseline V2 hoặc audit dữ liệu thật.
 2. Chạy typecheck, unit/integration test và build trong CI.
 3. Chạy backward-compatible migration bằng job riêng sau khi có baseline v2.
 4. Deploy AI, API, rồi web; kiểm tra `/health/live` sau từng bước.
