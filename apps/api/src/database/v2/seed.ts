@@ -16,6 +16,26 @@ export type V2SuperAdminCredentials = {
     password: string;
 };
 
+const MAX_SEED_TRANSACTION_ATTEMPTS = 5;
+
+const getMySqlErrorCode = (error: unknown): string | null => {
+    if (!error || typeof error !== "object") return null;
+    const parent = "parent" in error ? error.parent : undefined;
+    if (!parent || typeof parent !== "object" || !("code" in parent)) return null;
+    return typeof parent.code === "string" ? parent.code : null;
+};
+
+const isRetryableSeedTransactionError = (error: unknown): boolean => {
+    const code = getMySqlErrorCode(error);
+    return code === "ER_LOCK_DEADLOCK" || code === "ER_LOCK_WAIT_TIMEOUT";
+};
+
+const waitForSeedRetry = async (attempt: number): Promise<void> => {
+    const boundedJitter = Math.floor(Math.random() * 25);
+    const delayMs = (25 * (2 ** attempt)) + boundedJitter;
+    await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+};
+
 export const ROLE_SEEDS: readonly SeedRecord[] = [
     { code: "CUSTOMER", name: "Khách hàng", description: "Tài khoản khách hàng." },
     { code: "SALES_STAFF", name: "Nhân viên bán hàng", description: "Nhân viên bán hàng tại chi nhánh." },
@@ -136,12 +156,23 @@ export const seedV2Database = async (
 ): Promise<void> => {
     const credentials = normalizeCredentials(unvalidatedCredentials);
     const passwordHash = await bcrypt.hash(credentials.password, 12);
-    await sequelize.transaction(async (transaction) => {
-        await seedRoles(sequelize, transaction);
-        await seedPermissions(sequelize, transaction);
-        await seedPaymentMethods(sequelize, transaction);
-        await seedSuperAdmin(sequelize, transaction, credentials.email, passwordHash);
-    });
+
+    for (let attempt = 0; attempt < MAX_SEED_TRANSACTION_ATTEMPTS; attempt += 1) {
+        try {
+            await sequelize.transaction(async (transaction) => {
+                await seedRoles(sequelize, transaction);
+                await seedPermissions(sequelize, transaction);
+                await seedPaymentMethods(sequelize, transaction);
+                await seedSuperAdmin(sequelize, transaction, credentials.email, passwordHash);
+            });
+            return;
+        } catch (error) {
+            const canRetry = attempt < MAX_SEED_TRANSACTION_ATTEMPTS - 1
+                && isRetryableSeedTransactionError(error);
+            if (!canRetry) throw error;
+            await waitForSeedRetry(attempt);
+        }
+    }
 };
 
 export const runV2Seed = async (): Promise<void> => {

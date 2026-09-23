@@ -105,4 +105,20 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 seed on MySQL", () => {
         expect(nonSuperAdminGrants[0]?.total).toBe(0);
         await expect(readSeedAuditState(sequelize)).resolves.toEqual(firstSeedAuditState);
     });
+
+    it("tolerates concurrent idempotent seed attempts without leaking a MySQL deadlock", async () => {
+        const credentials = Array.from({ length: 4 }, (_, index) => ({
+            email: `database-v2-concurrent-seed-${index}@example.test`,
+            password: `test-only-concurrent-seed-password-${index}`,
+        }));
+
+        await expect(Promise.all(credentials.map((credential) => seedV2Database(sequelize, credential))))
+            .resolves.toHaveLength(credentials.length);
+
+        const accounts = await sequelize.query<{ total: number }>(
+            "SELECT COUNT(*) AS total FROM accounts WHERE email IN (?, ?, ?, ?)",
+            { replacements: credentials.map((credential) => credential.email), type: QueryTypes.SELECT },
+        );
+        expect(accounts[0]?.total).toBe(credentials.length);
+    });
 });

@@ -107,6 +107,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 - [ ] T21 — Auth register/OTP và customer login trên Account/Customer.
   - Tiến độ: core service/repository V2, OTP claim lifecycle và MySQL integration đã có; chưa chuyển HTTP route khi consumer legacy còn cần numeric ID.
 - [ ] T22 — Google login và admin login trên Account/scoped roles.
+  - Tiến độ: core đăng nhập backoffice bằng username/password đã dùng `accounts`, DB-derived
+    scoped grants và MySQL integration. Google login chưa được chuyển: hợp đồng 49 bảng hiện
+    chưa có immutable provider subject (ví dụ Google `sub`), nên không được liên kết Account
+    theo email. Cần một revision schema được phê duyệt trước khi triển khai OAuth V2.
 - [ ] T23 — JWT/access context và authorization helpers V2.
   - Tiến độ: V2 JWT (BIGINT string + issuer/audience), DB-derived access context và scoped authorization helper đã có; middleware/route chuyển dần theo capability sau.
 - [ ] T24 — User/customer profile endpoints V2.

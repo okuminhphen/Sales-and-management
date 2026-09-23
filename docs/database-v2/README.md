@@ -101,6 +101,24 @@ authorization V2 ở T23.
 - Không import registry V2 vào runtime legacy trong Phase 2. Registry chỉ được nối vào app sau
   khi module compatibility tương ứng đã có integration test trên V2.
 
+## Authentication V2 đang triển khai
+
+Customer và backoffice password flow được tách thành application service, persistence adapter
+và access-context reader. Password được so sánh qua một `PasswordHasher` port; cả credential
+không tồn tại, inactive hoặc passwordless đều thực hiện bcrypt work tương đương để không tạo
+timing oracle. Backoffice chỉ nhận context có role nội bộ từ database; `CUSTOMER` không thể dùng
+role global để vào backoffice, và role nội bộ theo chi nhánh phải có employee profile active.
+
+Kết quả đăng nhập hiện chỉ là core đã có unit test và MySQL `_test` integration test. HTTP route,
+JWT middleware và frontend vẫn giữ compatibility legacy cho đến khi slice tương ứng hoàn chỉnh;
+không bật riêng registry V2 trong runtime legacy.
+
+Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
+`sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
+có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt
+trước, vẫn giữ giới hạn 49 bảng bằng cách bổ sung field/unique constraint trực tiếp vào
+`accounts`.
+
 Để chạy focused integration test MySQL hiện có:
 
 ```powershell

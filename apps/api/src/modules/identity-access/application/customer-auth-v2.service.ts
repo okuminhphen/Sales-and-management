@@ -1,5 +1,11 @@
-import bcrypt from "bcryptjs";
 import { logger } from "../../../observability/logger.js";
+import {
+    bcryptPasswordHasher,
+    PASSWORD_TIMING_HASH,
+    type PasswordHasher,
+} from "./password-hasher.js";
+
+export { bcryptPasswordHasher, type PasswordHasher } from "./password-hasher.js";
 
 export type AccountSecurityStatus = "pending" | "active" | "locked" | "inactive";
 export type CustomerProfileStatus = "active" | "inactive" | "anonymized";
@@ -16,11 +22,6 @@ export interface VerificationTokenGateway {
     claim: (token: string, email: string) => Promise<VerificationTokenClaim>;
     release: (token: string) => Promise<boolean>;
     finalize: (token: string) => Promise<boolean>;
-}
-
-export interface PasswordHasher {
-    hash: (password: string) => Promise<string>;
-    compare: (password: string, passwordHash: string) => Promise<boolean>;
 }
 
 export type RegisterVerifiedCustomerInput = {
@@ -81,21 +82,12 @@ export type CustomerLoginResult =
     | { kind: "invalid_credentials" }
     | { kind: "authentication_unavailable" };
 
-export const bcryptPasswordHasher: PasswordHasher = {
-    hash: async (password) => bcrypt.hash(password, 12),
-    compare: async (password, passwordHash) => bcrypt.compare(password, passwordHash),
-};
-
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
 const normalizeLoginIdentifier = (emailOrPhone: string): string => {
     const identifier = emailOrPhone.trim();
     return identifier.includes("@") ? identifier.toLowerCase() : identifier;
 };
-
-// Valid bcrypt hash used only to make unknown/passwordless/inactive account checks
-// perform comparable password work. It is not a credential and cannot authenticate.
-const PASSWORD_TIMING_HASH = "$2b$12$75xwIK3SpomlWW7XQNMOZOAGXr3wJc2hQmJ8f/24eimgflwba8cKC";
 
 export class CustomerAuthV2Service {
     constructor(
