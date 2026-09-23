@@ -146,6 +146,15 @@ và chuyển branch không nhận từ patch thường vì chúng ảnh hưởng
 đó sẽ là use-case riêng. Core đã có MySQL
 integration, còn HTTP route vẫn chờ V2 composition root thay vì gắn nhầm vào middleware legacy.
 
+Branch V2 hiện có core tạo/đọc/cập nhật với `BIGINT` string, mã branch bất biến và quyền ghi
+chỉ từ grant global `branch.manage.global`; grant theo branch không thể tự tạo hay thay cấu hình
+toàn hệ thống. Đọc directory loại trừ role `CUSTOMER` dù có mapping permission sai và luôn phân
+trang deterministic theo `code` (mặc định 20, tối đa 100). Generic patch không nhận `code` hoặc
+`manager_employee_id`; không có hard-delete và không tự tạo inventory cũ. Gán manager, liên kết
+account và điều chuyển nhân viên là use-case riêng vì chúng thay đổi phạm vi quyền hoặc quan hệ
+audit. Core có unit test và integration test MySQL `_test`; HTTP route vẫn chờ composition root
+V2 để không trộn contract định danh legacy.
+
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
 có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt

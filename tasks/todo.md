@@ -123,9 +123,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     route vẫn chờ composition runtime V2, không mount vào legacy app.
 - [ ] T26 — Employee và branch endpoints V2.
   - Tiến độ: employee core đã có branch/global authorization, DECIMAL/ID serialization,
-    duplicate code mapping, deactivate thay hard-delete và MySQL integration. Branch lifecycle,
-    account-linking, employee transfer và HTTP route vẫn là slice tiếp theo vì có audit/scope
-    semantics riêng; chưa mount vào legacy app.
+    duplicate code mapping, deactivate thay hard-delete và MySQL integration. Branch core đã có
+    create/read/update, mã bất biến, global-only write, mapping duplicate code và test MySQL
+    `_test`; directory phân trang theo code (20/100), không hard-delete hay tự tạo inventory cũ.
+    Gán manager, account-linking, employee transfer, audit cho production HTTP và route V2 vẫn
+    là slice tiếp theo vì có audit/scope semantics riêng; chưa mount vào legacy app.
 - [ ] T27 — Category/product/size/variant endpoints V2.
 - [ ] T28 — Cart/review/banner endpoints V2.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
