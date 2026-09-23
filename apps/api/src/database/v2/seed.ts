@@ -86,8 +86,8 @@ const normalizeCredentials = (
 const seedRoles = async (sequelize: Sequelize, transaction: Transaction): Promise<void> => {
     for (const role of ROLE_SEEDS) {
         await sequelize.query(
-            "INSERT INTO roles (code, name, description, created_at, updated_at) VALUES (?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE name = ?, description = ?, updated_at = UTC_TIMESTAMP(3)",
-            { replacements: [role.code, role.name, role.description, role.name, role.description], transaction },
+            "INSERT INTO roles (code, name, description, created_at, updated_at) VALUES (?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE updated_at = IF(name <> ? OR NOT (description <=> ?), UTC_TIMESTAMP(3), updated_at), name = ?, description = ?",
+            { replacements: [role.code, role.name, role.description, role.name, role.description, role.name, role.description], transaction },
         );
     }
 };
@@ -95,8 +95,8 @@ const seedRoles = async (sequelize: Sequelize, transaction: Transaction): Promis
 const seedPermissions = async (sequelize: Sequelize, transaction: Transaction): Promise<void> => {
     for (const permission of PERMISSION_SEEDS) {
         await sequelize.query(
-            "INSERT INTO permissions (code, description, created_at, updated_at) VALUES (?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE description = ?, updated_at = UTC_TIMESTAMP(3)",
-            { replacements: [permission.code, permission.description, permission.description], transaction },
+            "INSERT INTO permissions (code, description, created_at, updated_at) VALUES (?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE updated_at = IF(NOT (description <=> ?), UTC_TIMESTAMP(3), updated_at), description = ?",
+            { replacements: [permission.code, permission.description, permission.description, permission.description], transaction },
         );
     }
 };
@@ -104,8 +104,8 @@ const seedPermissions = async (sequelize: Sequelize, transaction: Transaction): 
 const seedPaymentMethods = async (sequelize: Sequelize, transaction: Transaction): Promise<void> => {
     for (const paymentMethod of PAYMENT_METHOD_SEEDS) {
         await sequelize.query(
-            "INSERT INTO payment_methods (code, name, description, is_active, created_at, updated_at) VALUES (?, ?, ?, TRUE, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE name = ?, description = ?, is_active = TRUE, updated_at = UTC_TIMESTAMP(3)",
-            { replacements: [paymentMethod.code, paymentMethod.name, paymentMethod.description, paymentMethod.name, paymentMethod.description], transaction },
+            "INSERT INTO payment_methods (code, name, description, is_active, created_at, updated_at) VALUES (?, ?, ?, TRUE, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE updated_at = IF(name <> ? OR NOT (description <=> ?) OR is_active <> TRUE, UTC_TIMESTAMP(3), updated_at), name = ?, description = ?, is_active = TRUE",
+            { replacements: [paymentMethod.code, paymentMethod.name, paymentMethod.description, paymentMethod.name, paymentMethod.description, paymentMethod.name, paymentMethod.description], transaction },
         );
     }
 };

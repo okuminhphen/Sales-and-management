@@ -16,6 +16,27 @@ const superAdmin = {
     password: "test-only-seed-password-not-a-secret",
 };
 
+type SeedAuditRow = {
+    code: string;
+    updatedAt: string;
+};
+
+const readSeedAuditState = async (sequelize: Sequelize): Promise<readonly (readonly SeedAuditRow[])[]> =>
+    Promise.all([
+        sequelize.query<SeedAuditRow>(
+            "SELECT code, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') AS updatedAt FROM roles ORDER BY code",
+            { type: QueryTypes.SELECT },
+        ),
+        sequelize.query<SeedAuditRow>(
+            "SELECT code, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') AS updatedAt FROM permissions ORDER BY code",
+            { type: QueryTypes.SELECT },
+        ),
+        sequelize.query<SeedAuditRow>(
+            "SELECT code, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') AS updatedAt FROM payment_methods ORDER BY code",
+            { type: QueryTypes.SELECT },
+        ),
+    ]);
+
 describe.skipIf(!runDatabaseV2Tests)("Database V2 seed on MySQL", () => {
     let sequelize: Sequelize;
 
@@ -43,6 +64,12 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 seed on MySQL", () => {
             "SELECT password_hash AS passwordHash FROM accounts WHERE email = ?",
             { replacements: [superAdmin.email], type: QueryTypes.SELECT },
         );
+        await Promise.all([
+            sequelize.query("UPDATE roles SET updated_at = '2000-01-01 00:00:00'"),
+            sequelize.query("UPDATE permissions SET updated_at = '2000-01-01 00:00:00'"),
+            sequelize.query("UPDATE payment_methods SET updated_at = '2000-01-01 00:00:00'"),
+        ]);
+        const firstSeedAuditState = await readSeedAuditState(sequelize);
         await seedV2Database(sequelize, superAdmin);
 
         const [roles, permissions, paymentMethods, accounts, assignments, grants, nonSuperAdminGrants] = await Promise.all([
@@ -76,5 +103,6 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 seed on MySQL", () => {
         expect(assignments[0]?.total).toBe(1);
         expect(grants[0]?.total).toBe(PERMISSION_SEEDS.length);
         expect(nonSuperAdminGrants[0]?.total).toBe(0);
+        await expect(readSeedAuditState(sequelize)).resolves.toEqual(firstSeedAuditState);
     });
 });
