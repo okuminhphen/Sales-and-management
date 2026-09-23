@@ -53,9 +53,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Acceptance: balance/reservation/movement và transfer constraints/indexes đúng DBML.
   - Verify: XOR/quantity/FK integration tests.
   - Result: migration `0005-inventory` tạo 9 bảng/28 FK; 2 unit tests và 3 MySQL 8.4 integration tests PASS cho stock, reservation XOR/idempotency, transfer quantity và movement source. API typecheck/build, full suite 151 pass và DBML validator PASS.
-- [ ] T11 — Baseline communication/personalization/outbox.
+- [x] T11 — Baseline communication/personalization/outbox.
   - Acceptance: chat state/seq/dedup/lease, behavior stats và outbox đúng DBML.
   - Verify: focused integration tests.
+  - Result: migration `0006-communication` tạo 9 bảng/23 FK; 2 unit tests và 4 MySQL 8.4 integration tests PASS cho chat state, message/command dedup, assistant lease/schedule, behavior aggregate và outbox event. API typecheck/build, full suite 157 pass và DBML validator PASS.
 - [ ] T12 — Full schema metadata verification.
   - Acceptance: đúng 49 bảng nghiệp vụ + migration metadata riêng, 104 FK, rerun zero pending.
   - Verify: V2 infrastructure suite trên MySQL `_test`, không skip.
