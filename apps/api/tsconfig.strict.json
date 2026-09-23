@@ -61,6 +61,7 @@
     "tests/integration/databaseV2CatalogModels.test.ts",
     "tests/integration/databaseV2InventoryTransferModels.test.ts",
     "tests/integration/databaseV2CommerceFulfillmentModels.test.ts",
+    "tests/integration/databaseV2CommunicationModels.test.ts",
     "tests/integration/sizeRoutes.test.ts"
   ]
 }

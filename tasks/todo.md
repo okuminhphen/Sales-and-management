@@ -91,7 +91,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 - [x] T18 — `commerce` + `payment-fulfillment` typed models/associations.
   - Acceptance: cart/order/voucher/payment/shipment/return/refund khớp schema.
   - Verify: schema-model contract test.
-- [ ] T19 — `communication-ai` + `personalization` + outbox typed models.
+- [x] T19 — `communication-ai` + `personalization` + outbox typed models.
   - Acceptance: chat/assistant/notification/behavior/outbox khớp schema.
   - Verify: schema-model contract test.
 - [ ] T20 — Full registry against V2 MySQL.
