@@ -10,7 +10,7 @@ const testApi = (req, res) => {
 
 const handleRegister = async (req, res) => {
     try {
-        if (!req.body.email || !req.body.phone || !req.body.password) {
+        if (!req.body.email || !req.body.phone || !req.body.password || !req.body.emailVerificationToken) {
             return res.status(200).json({
                 EM: "Missing required parameters", // error message
                 EC: "1", //error code

@@ -28,3 +28,16 @@ Thumbs.db
 # Runtime files
 uploads/
 *.log
+
+# Credential and signing material
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# PhungLM private AI workflow
+/.agents/skills/phunglm-*/
+/.agents/rules/phunglm-*.md
+/.phunglm/

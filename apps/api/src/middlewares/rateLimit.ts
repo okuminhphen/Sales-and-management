@@ -2,19 +2,21 @@ import type { NextFunction, Request, Response } from "express";
 import { getReadyRedisClient } from "../config/redis.js";
 import { logger } from "../observability/logger.js";
 
-type RateLimitOptions = {
+export type RateLimitOptions = {
     keyPrefix: string;
     maxRequests: number;
     windowSeconds: number;
+    keyGenerator?: (request: Request) => string | Promise<string>;
 };
 
-const clientKey = (request: Request): string => {
-    const forwarded = request.headers["x-forwarded-for"];
-    const source = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0];
-    return (source?.trim() || request.ip || "unknown").replace(/[^a-zA-Z0-9_.:-]/g, "_");
+export const defaultClientIpKey = (request: Request): string => {
+    // Only use Express-resolved request.ip (which respects configured trust proxy settings)
+    // or fallback to socket.remoteAddress. Do not manually parse untrusted x-forwarded-for header directly.
+    const ip = request.ip || request.socket?.remoteAddress || "unknown";
+    return ip.replace(/[^a-zA-Z0-9_.:-]/g, "_");
 };
 
-export const rateLimit = ({ keyPrefix, maxRequests, windowSeconds }: RateLimitOptions) =>
+export const rateLimit = ({ keyPrefix, maxRequests, windowSeconds, keyGenerator }: RateLimitOptions) =>
     async (request: Request, response: Response, next: NextFunction): Promise<void> => {
         const redis = getReadyRedisClient();
         if (!redis) {
@@ -27,7 +29,10 @@ export const rateLimit = ({ keyPrefix, maxRequests, windowSeconds }: RateLimitOp
         }
 
         try {
-            const key = `${keyPrefix}:${clientKey(request)}`;
+            const keySuffix = keyGenerator
+                ? await keyGenerator(request)
+                : defaultClientIpKey(request);
+            const key = `${keyPrefix}:${keySuffix}`;
             const count = await redis.incr(key);
             if (count === 1) await redis.expire(key, windowSeconds);
 

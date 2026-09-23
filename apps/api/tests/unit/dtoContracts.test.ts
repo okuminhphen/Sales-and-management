@@ -15,6 +15,32 @@ describe("request DTO contracts", () => {
         expect(result.success).toBe(false);
     });
 
+    it("requires emailVerificationToken in registration payload", () => {
+        const withoutToken = registerBody.safeParse({
+            email: "valid@example.com",
+            phone: "0123456789",
+            username: "validuser",
+            password: "validpassword123",
+        });
+        const withNonUuidToken = registerBody.safeParse({
+            email: "valid@example.com",
+            phone: "0123456789",
+            username: "validuser",
+            password: "validpassword123",
+            emailVerificationToken: "valid-one-time-token",
+        });
+        expect(withNonUuidToken.success).toBe(false);
+
+        const withUuidToken = registerBody.safeParse({
+            email: "valid@example.com",
+            phone: "0123456789",
+            username: "validuser",
+            password: "validpassword123",
+            emailVerificationToken: "123e4567-e89b-12d3-a456-426614174000",
+        });
+        expect(withUuidToken.success).toBe(true);
+    });
+
     it("coerces multipart product numbers into typed values", () => {
         const result = createProductBody.parse({
             name: "Clean Architecture",

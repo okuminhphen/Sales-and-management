@@ -1,4 +1,3 @@
-import "./App.scss";
 import { BrowserRouter as Router, useLocation } from "react-router-dom";
 import { ToastContainer, Bounce } from "react-toastify";
 import { useState, useEffect } from "react";

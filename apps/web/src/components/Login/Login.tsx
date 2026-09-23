@@ -13,14 +13,15 @@ import {
   FaBed,
   FaMoon,
   FaShoppingBag,
-  FaGoogle,
 } from "react-icons/fa";
-import { useGoogleLogin } from "@react-oauth/google";
+import type { TokenResponse } from "@react-oauth/google";
 import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
 import { loginByUser, logout, setUser } from "../../store/slices/userSlice";
 import { fetchCart } from "../../store/slices/cartSlice";
 import { loginWithGoogle, verifyCaptcha } from "../../services/authService";
+import { GOOGLE_OAUTH_ENABLED } from "../../config/auth";
+import { GoogleOAuthButton } from "../Auth/GoogleOAuthButton";
 
 const Login = (props) => {
   const navigate = useNavigate();
@@ -45,7 +46,7 @@ const Login = (props) => {
 
   const [objValidInput, setObjValidInput] = useState(defaultValidInput);
 
-  const handleGoogleSuccess = async (credentialResponse) => {
+  const handleGoogleSuccess = async (credentialResponse: TokenResponse) => {
     try {
       if (!executeRecaptcha) {
         toast.error("Recaptcha not yet loaded");
@@ -108,11 +109,6 @@ const Login = (props) => {
   //     toast.error("Không thể gửi OTP");
   //   }
   // };
-  const googleLogin = useGoogleLogin({
-    onSuccess: handleGoogleSuccess,
-    onError: () => toast.error("Google login failed!"),
-  });
-
   const handleLogin = async () => {
     if (!executeRecaptcha) {
       toast.error("Recaptcha not yet loaded");
@@ -327,19 +323,21 @@ const Login = (props) => {
                         </>
                       )}*/}
 
-                      <div className="divider">
-                        <p>HOẶC</p>
-                      </div>
+                      {GOOGLE_OAUTH_ENABLED && (
+                        <>
+                          <div className="divider">
+                            <p>HOẶC</p>
+                          </div>
 
-                      <div className="social-login-buttons d-grid gap-2 mb-3">
-                        <button
-                          onClick={() => googleLogin()}
-                          className="btn google-btn"
-                        >
-                          <FaGoogle className="google-icon" />
-                          Đăng nhập bằng Google
-                        </button>
-                      </div>
+                          <div className="social-login-buttons d-grid gap-2 mb-3">
+                            <GoogleOAuthButton
+                              label="Đăng nhập bằng Google"
+                              errorMessage="Google login failed!"
+                              onSuccess={handleGoogleSuccess}
+                            />
+                          </div>
+                        </>
+                      )}
 
                       <div className="d-grid">
                         <button

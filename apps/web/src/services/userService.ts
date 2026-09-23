@@ -14,12 +14,14 @@ const registerNewUser = (
   phone: string,
   username: string,
   password: string,
+  emailVerificationToken: string
 ) => {
   return axios.post<ApiEnvelope<UserSession>>("/register", {
     email,
     phone,
     username,
     password,
+    emailVerificationToken,
   });
 };
 

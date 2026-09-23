@@ -1,25 +1,47 @@
 import axios from "../middlewares/axiosConfig";
-import type { AdminSession } from "../types/auth";
+import type { AdminSession, GoogleAccessTokenCredential } from "../types/auth";
 import type { ApiEnvelope } from "../types/http";
 
-const loginWithGoogle = (credential: string) => {
+const loginWithGoogle = (credential: GoogleAccessTokenCredential) => {
   return axios.post("/auth/google", { credential });
-};
-
-const loginWithFacebook = (accessToken: string) => {
-  return axios.post("/auth/facebook", { accessToken });
 };
 
 const verifyCaptcha = (recaptchaToken: string) => {
   return axios.post("/auth/verify-captcha", { recaptchaToken });
 };
 
-const sendOTP = (email: string) => {
-  return axios.post("/auth/send-otp", { email });
+export interface ChallengeResponseData {
+  challengeId: string;
+  expiresInSeconds: number;
+  resendAfterSeconds: number;
+}
+
+export interface VerifyResponseData {
+  verificationToken?: string;
+  expiresInSeconds?: number;
+  attemptsRemaining?: number;
+}
+
+const createEmailVerificationChallenge = (email: string, recaptchaToken?: string) => {
+  return axios.post<ApiEnvelope<ChallengeResponseData>>(
+    "/auth/email-verification/challenges",
+    recaptchaToken ? { email, recaptchaToken } : { email }
+  );
 };
 
-const verifyOTP = (otp: string, email: string) => {
-  return axios.post("/auth/verify-otp", { otp, email });
+const verifyEmailChallenge = (challengeId: string, otp: string) => {
+  return axios.post<ApiEnvelope<VerifyResponseData>>(
+    `/auth/email-verification/challenges/${challengeId}/verify`,
+    { otp }
+  );
+};
+
+const sendOTP = (email: string) => {
+  return createEmailVerificationChallenge(email);
+};
+
+const verifyOTP = (otp: string, challengeId: string) => {
+  return verifyEmailChallenge(challengeId, otp);
 };
 
 const loginAdmin = (username: string, password: string) => {
@@ -30,9 +52,10 @@ const loginAdmin = (username: string, password: string) => {
 };
 export {
   loginWithGoogle,
-  loginWithFacebook,
   verifyCaptcha,
   verifyOTP,
   sendOTP,
   loginAdmin,
+  createEmailVerificationChallenge,
+  verifyEmailChallenge,
 };

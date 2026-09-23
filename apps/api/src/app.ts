@@ -12,6 +12,11 @@ export const createApp = (): Express => {
     const appDirectory = path.dirname(fileURLToPath(import.meta.url));
 
     app.disable("x-powered-by");
+    if (process.env.NODE_ENV === "production") {
+        app.set("trust proxy", 1);
+    } else {
+        app.set("trust proxy", false);
+    }
     app.use(configureSecurityHeaders);
     app.use(requestContext);
     configCors(app);

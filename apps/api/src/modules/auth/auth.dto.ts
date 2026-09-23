@@ -7,6 +7,7 @@ export const registerBody = z.object({
     phone: z.string().trim().min(8).max(20),
     username: z.string().trim().min(3).max(100),
     password,
+    emailVerificationToken: z.string().uuid("Yêu cầu mã xác thực email đúng định dạng UUID"),
 });
 
 export const loginBody = z.object({
@@ -19,8 +20,6 @@ export const adminLoginBody = z.object({
     password: z.string().min(1).max(128),
 });
 
-export const emailBody = z.object({ email: z.string().trim().email() });
-export const verifyOtpBody = emailBody.extend({ otp: z.string().trim().regex(/^\d{4,8}$/) });
 export const googleLoginBody = z.object({
     credential: z.object({ access_token: z.string().min(1) }),
 });

@@ -7,6 +7,10 @@ export interface AdminSession {
   token: string;
 }
 
+export interface GoogleAccessTokenCredential {
+  access_token: string;
+}
+
 export interface AdminAccountDto {
   id: number;
   username: string;
