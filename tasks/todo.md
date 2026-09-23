@@ -61,11 +61,15 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Acceptance: đúng 49 bảng nghiệp vụ + migration metadata riêng, 104 FK, rerun zero pending.
   - Verify: V2 infrastructure suite trên MySQL `_test`, không skip.
   - Result: MySQL 8.4 integration test xác nhận đúng danh sách 49 bảng + 1 metadata, 104 FK, 6 migration thực thi một lần và rerun zero pending; full API suite 160 pass, typecheck/build PASS.
-- [ ] T13 — Seed V2 idempotent.
+- [x] T13 — Seed V2 idempotent.
   - Acceptance: roles, permissions, payment methods và super-admin account/role không nhân đôi.
   - Verify: chạy seed hai lần trên DB test + integration assertions.
-- [ ] Checkpoint 1 — Baseline/seed MySQL thật đạt; DB chính chưa bị reset.
-  - Chưa đạt: T13 seed còn mở. Metadata runner đã lưu/đối chiếu SHA-256 từng migration; integration test trên DB `_test` đạt.
+  - Result: MySQL `_test` integration xác nhận seed chạy hai lần không trùng role, permission,
+    payment method, account/role grant; chỉ `SUPER_ADMIN` nhận permission nền. Runner thực tế
+    cũng đạt với credential test tạm thời, luôn bị giới hạn `_test`.
+- [x] Checkpoint 1 — Baseline/seed MySQL thật đạt; DB chính chưa bị reset.
+  - Result: 49 bảng nghiệp vụ, 104 FK, migration checksum fail-closed và seed V2 đều được kiểm
+    chứng trên MySQL `_test`; không reset hay ghi vào `sale_and_managements_db`.
 
 ## Phase 2 — Typed persistence theo module
 

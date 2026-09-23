@@ -18,6 +18,7 @@
     "db:migrate:status": "tsx src/database/migrate.ts pending",
     "db:v2:status": "tsx src/database/v2/migrate.ts status",
     "db:v2:up": "tsx src/database/v2/migrate.ts up",
+    "db:v2:seed": "tsx src/database/v2/seed.ts",
     "db:seed": "tsx src/database/seed.ts",
     "db:migrate:prod": "node dist/database/migrate.js up",
     "db:seed:prod": "node dist/database/seed.js",

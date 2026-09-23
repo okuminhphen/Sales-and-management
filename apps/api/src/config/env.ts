@@ -11,6 +11,8 @@ const envSchema = z
     API_PORT: z.coerce.number().int().positive().default(8080),
     FRONTEND_URL: z.string().default("http://localhost:3000"),
     JWT_SECRET: z.string().min(3).default("development-only-secret"),
+    SUPER_ADMIN_EMAIL: z.string().trim().optional().transform((value) => value || undefined),
+    SUPER_ADMIN_PASSWORD: z.string().optional().transform((value) => value || undefined),
     MYSQL_HOST: z.string().default("localhost"),
     MYSQL_PORT: z.coerce.number().int().positive().default(3306),
     MYSQL_DATABASE: z.string().default("sale_and_managements_db"),
