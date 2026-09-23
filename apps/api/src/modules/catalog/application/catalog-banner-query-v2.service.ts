@@ -47,8 +47,9 @@ const normalizeListQuery = (
     const limit = input?.limit === undefined ? defaultLimit : input.limit;
     if (
         typeof page !== "number" || typeof limit !== "number"
-        || !Number.isInteger(page) || !Number.isInteger(limit)
+        || !Number.isSafeInteger(page) || !Number.isSafeInteger(limit)
         || page <= 0 || limit <= 0 || limit > maximumLimit
+        || !Number.isSafeInteger((page - 1) * limit)
     ) return null;
     return { page, limit };
 };

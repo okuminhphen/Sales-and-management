@@ -47,6 +47,9 @@ describe("CatalogCategoryQueryV2Service", () => {
         await expect(service.list({ page: "2", limit: 20 })).resolves.toEqual({
             kind: "invalid_catalog_query",
         });
+        await expect(service.list({ page: Number.MAX_SAFE_INTEGER, limit: 100 })).resolves.toEqual({
+            kind: "invalid_catalog_query",
+        });
         vi.mocked(repository.listCategories).mockRejectedValueOnce(new Error("database details"));
         await expect(service.list()).resolves.toEqual({ kind: "catalog_unavailable" });
     });

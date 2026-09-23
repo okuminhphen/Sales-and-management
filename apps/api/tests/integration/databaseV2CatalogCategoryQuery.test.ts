@@ -54,20 +54,20 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 public category directory on M
         const service = new CatalogCategoryQueryV2Service({
             repository: new SequelizeCatalogCategoryV2Repository(persistence),
         });
-        const listed = await service.list({ page: 1, limit: 100 });
-        expect(listed).toMatchObject({
-            kind: "categories",
-            page: {
-                limit: 100,
-                categories: expect.arrayContaining([
-                    expect.objectContaining({ id: parentRows[0]!.id, code: parentCode, parentId: null }),
-                    expect.objectContaining({ code: childCode, parentId: parentRows[0]!.id }),
-                ]),
-            },
-        });
-        if (listed.kind !== "categories") return;
-        expect(listed.page.categories.map((category) => category.code)).toEqual(
-            [...listed.page.categories.map((category) => category.code)].sort((left, right) => left.localeCompare(right)),
+        const allCategories = [];
+        for (let page = 1; ; page += 1) {
+            const listed = await service.list({ page, limit: 100 });
+            expect(listed.kind).toBe("categories");
+            if (listed.kind !== "categories") return;
+            allCategories.push(...listed.page.categories);
+            if (page >= listed.page.totalPages) break;
+        }
+        expect(allCategories).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: parentRows[0]!.id, code: parentCode, parentId: null }),
+            expect.objectContaining({ code: childCode, parentId: parentRows[0]!.id }),
+        ]));
+        expect(allCategories.map((category) => category.code)).toEqual(
+            [...allCategories.map((category) => category.code)].sort((left, right) => left.localeCompare(right)),
         );
     });
 });

@@ -44,22 +44,19 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 public size directory on MySQL
         const service = new CatalogSizeQueryV2Service({
             repository: new SequelizeCatalogSizeV2Repository(persistence),
         });
-        const listed = await service.list({ page: 1, limit: 100 });
-
-        expect(listed).toMatchObject({
-            kind: "sizes",
-            page: {
-                limit: 100,
-                sizes: expect.arrayContaining([
-                    expect.objectContaining({ id: expect.any(String), name: firstName }),
-                    expect.objectContaining({ id: expect.any(String), name: lastName }),
-                ]),
-            },
-        });
-        if (listed.kind !== "sizes") return;
-        const firstIndex = listed.page.sizes.findIndex((size) => size.name === firstName);
-        const lastIndex = listed.page.sizes.findIndex((size) => size.name === lastName);
+        const allSizes = [];
+        for (let page = 1; ; page += 1) {
+            const listed = await service.list({ page, limit: 100 });
+            expect(listed.kind).toBe("sizes");
+            if (listed.kind !== "sizes") return;
+            allSizes.push(...listed.page.sizes);
+            if (page >= listed.page.totalPages) break;
+        }
+        const firstIndex = allSizes.findIndex((size) => size.name === firstName);
+        const lastIndex = allSizes.findIndex((size) => size.name === lastName);
         expect(firstIndex).toBeGreaterThanOrEqual(0);
         expect(lastIndex).toBeGreaterThan(firstIndex);
+        expect(typeof allSizes[firstIndex]!.id).toBe("string");
+        expect(typeof allSizes[lastIndex]!.id).toBe("string");
     });
 });

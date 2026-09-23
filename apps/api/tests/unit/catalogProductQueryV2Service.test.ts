@@ -50,6 +50,9 @@ describe("CatalogProductQueryV2Service", () => {
         await expect(service.list({ page: 1, limit: 101 })).resolves.toEqual({
             kind: "invalid_product_query",
         });
+        await expect(service.list({ page: Number.MAX_SAFE_INTEGER, limit: 100 })).resolves.toEqual({
+            kind: "invalid_product_query",
+        });
         vi.mocked(repository.findActiveById).mockRejectedValueOnce(new Error("database details"));
         await expect(service.getById("9007199254740994")).resolves.toEqual({
             kind: "catalog_unavailable",

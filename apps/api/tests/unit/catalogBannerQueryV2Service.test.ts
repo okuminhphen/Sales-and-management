@@ -43,6 +43,9 @@ describe("CatalogBannerQueryV2Service", () => {
         await expect(service.list({ page: 0, limit: 20 })).resolves.toEqual({
             kind: "invalid_banner_query",
         });
+        await expect(service.list({ page: Number.MAX_SAFE_INTEGER, limit: 100 })).resolves.toEqual({
+            kind: "invalid_banner_query",
+        });
         vi.mocked(repository.listActive).mockRejectedValueOnce(new Error("database details"));
         await expect(service.list()).resolves.toEqual({ kind: "catalog_unavailable" });
     });
