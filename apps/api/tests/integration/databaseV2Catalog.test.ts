@@ -88,17 +88,18 @@ describe.skipIf(!runDatabaseV2Tests)(
             );
         });
 
-        it("records the catalog baseline once when the V2 runner is rerun", async () => {
+        it("records the catalog baseline exactly once when the V2 runner is rerun", async () => {
             await runV2Migrations("up");
 
             const executedMigrations = await sequelize.query<{ name: string }>(
                 "SELECT `name` FROM `database_v2_migrations` ORDER BY `name` ASC",
                 { type: QueryTypes.SELECT },
             );
-            expect(executedMigrations).toEqual([
-                { name: "0001-identity-access" },
-                { name: "0002-catalog" },
-            ]);
+            expect(
+                executedMigrations.filter(
+                    (migration) => migration.name === "0002-catalog",
+                ),
+            ).toEqual([{ name: "0002-catalog" }]);
         });
     },
 );

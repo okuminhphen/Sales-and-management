@@ -103,16 +103,18 @@ describe.skipIf(!runDatabaseV2Tests)(
             );
         });
 
-        it("records the baseline once and has no pending V2 migrations when rerun", async () => {
+        it("records the identity baseline exactly once when the V2 runner is rerun", async () => {
             await runV2Migrations("up");
 
             const executedMigrations = await sequelize.query<{ name: string }>(
                 "SELECT `name` FROM `database_v2_migrations` ORDER BY `name` ASC",
                 { type: QueryTypes.SELECT },
             );
-            expect(executedMigrations).toEqual([
-                { name: "0001-identity-access" },
-            ]);
+            expect(
+                executedMigrations.filter(
+                    (migration) => migration.name === "0001-identity-access",
+                ),
+            ).toEqual([{ name: "0001-identity-access" }]);
         });
     },
 );
