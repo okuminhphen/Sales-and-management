@@ -4,6 +4,7 @@ import {
     type EntityId,
     type Money,
 } from "../../../shared/contracts/database-scalars.js";
+import type { CatalogPublicImage } from "../../catalog/application/catalog-public-media.js";
 
 export type CartItemView = {
     id: EntityId;
@@ -15,6 +16,7 @@ export type CartItemView = {
     unitPrice: Money;
     quantity: number;
     catalogActive: boolean;
+    images: readonly CatalogPublicImage[];
 };
 
 export type CartListInput = { page?: unknown; limit?: unknown };

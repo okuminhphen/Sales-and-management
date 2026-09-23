@@ -25,6 +25,7 @@ const page: CartPage = {
         unitPrice: serializeMoney("1299000"),
         quantity: 2,
         catalogActive: true,
+        images: [],
     }],
     page: 1,
     limit: 20,

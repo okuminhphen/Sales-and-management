@@ -156,6 +156,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     cleanup có retry/durable record; không xóa DB row chứa media khi cơ chế này chưa sẵn sàng.
   - [ ] DTO/HTTP route compatibility cho cart, review và banner trên V2 access context;
     hiện các core trên **chưa được mount** vào runtime HTTP legacy.
+    - Cart/review: đã có DTO, controller, route factory và HTTP tests; cart đọc ảnh an toàn,
+      chuyển cặp product/size cũ sang variant active, mọi mutation lấy customer ID từ
+      V2 auth context. Chưa mount runtime; banner HTTP còn chờ media lifecycle.
+    - Cart read V2 mặc định giới hạn 100 item/trang; T39 phải cập nhật Web đọc `pagination`
+      trước khi cutover để không bỏ sót giỏ hàng lớn.
   - [ ] Audit và kiểm thử hợp đồng HTTP end-to-end sau khi V2 auth/access composition sẵn sàng.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
 - [ ] T30 — Stock request service V2.

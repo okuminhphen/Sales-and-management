@@ -6,6 +6,8 @@ import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { CartQueryV2Service } from "../../src/modules/commerce/application/cart-query-v2.service.js";
 import { SequelizeCartQueryV2Repository } from "../../src/modules/commerce/persistence/cart-query-v2.repository.js";
+import { SequelizeCartVariantV2Resolver } from "../../src/modules/commerce/persistence/cart-variant-v2.resolver.js";
+import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 const runDatabaseV2Tests = process.env.RUN_DATABASE_V2_TESTS === "true";
@@ -55,8 +57,11 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 own-cart read on MySQL", () =>
             { replacements: [`CART_${suffix}`], type: QueryTypes.SELECT },
         );
         await sequelize.query(
-            "INSERT INTO products (category_id, name, slug, description, base_price, images, status, created_at, updated_at) VALUES (?, 'Cart test product', ?, NULL, '1299000.0000', NULL, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
-            { replacements: [category[0]!.id, `cart-product-${suffix}`], type: QueryTypes.INSERT },
+            "INSERT INTO products (category_id, name, slug, description, base_price, images, status, created_at, updated_at) VALUES (?, 'Cart test product', ?, NULL, '1299000.0000', ?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [category[0]!.id, `cart-product-${suffix}`, JSON.stringify([
+                { url: "https://example.com/cart.jpg", secret: "hidden" },
+                { url: "javascript:alert(1)" },
+            ])], type: QueryTypes.INSERT },
         );
         const product = await sequelize.query<{ id: string }>(
             "SELECT id FROM products WHERE slug = ?",
@@ -109,9 +114,16 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 own-cart read on MySQL", () =>
         expect(result).toMatchObject({ kind: "cart", page: { totalItems: 2, limit: 20 } });
         if (result.kind !== "cart") return;
         expect(result.page.items).toEqual(expect.arrayContaining([
-            expect.objectContaining({ productVariantId: activeVariantId, quantity: 2, catalogActive: true, unitPrice: "1299000.0000" }),
+            expect.objectContaining({ productVariantId: activeVariantId, quantity: 2, catalogActive: true,
+                unitPrice: "1299000.0000", images: [{ url: "https://example.com/cart.jpg" }] }),
             expect.objectContaining({ productVariantId: inactiveVariantId, quantity: 1, catalogActive: false }),
         ]));
         expect(result.page.items.some((item) => item.quantity === 9)).toBe(false);
+
+        const resolver = new SequelizeCartVariantV2Resolver(createSalesV2Persistence(sequelize));
+        await expect(resolver.findActiveId(serializeEntityId(product[0]!.id), serializeEntityId(activeSizeId)))
+            .resolves.toBe(activeVariantId);
+        await expect(resolver.findActiveId(serializeEntityId(product[0]!.id), serializeEntityId(inactiveSizeId)))
+            .resolves.toBeNull();
     });
 });

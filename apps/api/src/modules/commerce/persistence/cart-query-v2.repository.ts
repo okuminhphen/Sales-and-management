@@ -11,6 +11,7 @@ import type {
     CartPage,
     CartQueryV2Repository,
 } from "../application/cart-query-v2.service.js";
+import { toCatalogPublicImages } from "../../catalog/application/catalog-public-media.js";
 
 type CartItemRow = {
     id: unknown;
@@ -23,6 +24,16 @@ type CartItemRow = {
     quantity: unknown;
     productStatus: unknown;
     variantStatus: unknown;
+    images: unknown;
+};
+
+const toPublicImages = (value: unknown) => {
+    if (typeof value !== "string") return toCatalogPublicImages(value);
+    try {
+        return toCatalogPublicImages(JSON.parse(value) as unknown);
+    } catch {
+        return [];
+    }
 };
 
 const toCartItem = (row: CartItemRow): CartItemView => {
@@ -43,6 +54,7 @@ const toCartItem = (row: CartItemRow): CartItemView => {
         unitPrice: serializeMoney(row.unitPrice),
         quantity: row.quantity,
         catalogActive: row.productStatus === "active" && row.variantStatus === "active",
+        images: toPublicImages(row.images),
     };
 };
 
@@ -70,6 +82,7 @@ export class SequelizeCartQueryV2Repository implements CartQueryV2Repository {
                     products.name AS productName,
                     sizes.name AS sizeName,
                     products.base_price AS unitPrice,
+                    products.images AS images,
                     cart_items.quantity AS quantity,
                     products.status AS productStatus,
                     product_variants.status AS variantStatus
