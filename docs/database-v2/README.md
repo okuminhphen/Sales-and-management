@@ -203,6 +203,14 @@ không thuộc khách trả `item_not_found`, còn product/variant ngừng bán 
 `variant_unavailable` (người dùng vẫn có thể remove item đó). DTO/route compatibility và audit
 vẫn là phần tiếp theo của T28; core chưa mount vào runtime legacy.
 
+Review create core V2 nhận product ID dạng BIGINT string, rating nguyên từ 1 đến 5 và comment
+đã trim dài 1–2000 ký tự; customer ID chỉ lấy từ access context DB-derived, không nhận từ body.
+Repository dùng `uq_reviews_customer_product` để chặn trùng cả khi hai request gửi đồng thời;
+duplicate được map thành `already_reviewed`, product không tồn tại thành `product_not_found`,
+các lỗi hạ tầng trả kết quả chung không lộ SQL. Review không tự gắn `order_item_id` hoặc suy
+diễn “đã mua” vì spec V2 chưa có policy verified-purchase. Public review listing và HTTP
+DTO/route compatibility vẫn thuộc T28, core này chưa mount vào legacy app.
+
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
 có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt

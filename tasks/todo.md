@@ -148,8 +148,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     `INT`; unit/MySQL `_test` integration xác nhận cộng dồn đồng thời không mất cập nhật hay trùng
     dòng. Cart remove core xóa atomic theo customer ownership, che phân biệt foreign/missing
     item ID; có MySQL `_test` integration. Cart update core khóa theo owner, chỉ đổi số lượng
-    nguyên dương của item còn bán và có test MySQL `_test`. Review, banner write/xoá media,
-    DTO/route compatibility và audit chưa chuyển.
+    nguyên dương của item còn bán và có test MySQL `_test`. Review create core lấy customer từ
+    V2 context, validate rating/comment và dùng unique DB chống review trùng đồng thời; có
+    unit/MySQL `_test` integration. Review read, banner write/xoá media, DTO/route compatibility
+    và audit chưa chuyển.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.
