@@ -108,6 +108,18 @@ describe("EmployeeV2Service", () => {
             employee,
         });
         expect(repository.updateEmployee).not.toHaveBeenCalled();
-        expect(repository.deactivateEmployee).toHaveBeenCalledWith(employee.id);
+        expect(repository.deactivateEmployee).toHaveBeenCalledWith(employee.id, branchId);
+    });
+
+    it("binds a mutation to the branch that was authorized before persistence", async () => {
+        const repository = createRepository();
+        const service = new EmployeeV2Service({ repository });
+
+        await expect(service.update(globalManager, employee.id, { position: "Senior analytics" }))
+            .resolves.toEqual({ kind: "updated", employee });
+
+        expect(repository.updateEmployee).toHaveBeenCalledWith(employee.id, branchId, {
+            position: "Senior analytics",
+        });
     });
 });

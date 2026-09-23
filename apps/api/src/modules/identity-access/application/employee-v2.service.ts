@@ -67,8 +67,12 @@ export interface EmployeeV2Repository {
     findById: (employeeId: EntityId) => Promise<EmployeeProfile | null>;
     listByBranch: (branchId: EntityId) => Promise<readonly EmployeeProfile[]>;
     createEmployee: (input: NewEmployee) => Promise<EmployeeMutationResult>;
-    updateEmployee: (employeeId: EntityId, patch: EmployeePatch) => Promise<EmployeeMutationResult>;
-    deactivateEmployee: (employeeId: EntityId) => Promise<EmployeeMutationResult>;
+    updateEmployee: (
+        employeeId: EntityId,
+        expectedBranchId: EntityId,
+        patch: EmployeePatch,
+    ) => Promise<EmployeeMutationResult>;
+    deactivateEmployee: (employeeId: EntityId, expectedBranchId: EntityId) => Promise<EmployeeMutationResult>;
 }
 
 export type EmployeeResult =
@@ -178,7 +182,10 @@ export class EmployeeV2Service {
         if (!employeeId || !patch) return { kind: "invalid_employee_input" };
         const existing = await this.findForManagement(context, employeeId);
         if ("kind" in existing) return existing;
-        return this.mapMutation(() => this.dependencies.repository.updateEmployee(employeeId, patch), "updated");
+        return this.mapMutation(
+            () => this.dependencies.repository.updateEmployee(employeeId, existing.branchId, patch),
+            "updated",
+        );
     }
 
     async deactivate(context: V2AccessContext, rawEmployeeId: string): Promise<EmployeeResult> {
@@ -186,7 +193,10 @@ export class EmployeeV2Service {
         if (!employeeId) return { kind: "invalid_employee_input" };
         const existing = await this.findForManagement(context, employeeId);
         if ("kind" in existing) return existing;
-        return this.mapMutation(() => this.dependencies.repository.deactivateEmployee(employeeId), "deactivated");
+        return this.mapMutation(
+            () => this.dependencies.repository.deactivateEmployee(employeeId, existing.branchId),
+            "deactivated",
+        );
     }
 
     private normalizeNewEmployee(input: CreateEmployeeInput): NewEmployee | null {

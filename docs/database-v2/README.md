@@ -140,8 +140,10 @@ V2, chưa mount route vào runtime legacy để không trộn JWT/ID legacy vớ
 
 Employee V2 dùng `BIGINT` string và tiền `DECIMAL(19,4)` string xuyên suốt service. Nhân viên
 được tạo/đọc/cập nhật/deactivate theo branch scope (`employee.*.branch`) hoặc global manager;
-không có hard-delete. `status`, account-linking và chuyển branch không nhận từ patch thường vì
-chúng ảnh hưởng authorization/audit; các thao tác đó sẽ là use-case riêng. Core đã có MySQL
+không có hard-delete. Mọi update/deactivate khóa row và đối chiếu lại branch đã được authorize
+trong transaction để không bị TOCTOU khi sau này có employee transfer. `status`, account-linking
+và chuyển branch không nhận từ patch thường vì chúng ảnh hưởng authorization/audit; các thao tác
+đó sẽ là use-case riêng. Core đã có MySQL
 integration, còn HTTP route vẫn chờ V2 composition root thay vì gắn nhầm vào middleware legacy.
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

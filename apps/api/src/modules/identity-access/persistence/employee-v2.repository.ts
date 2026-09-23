@@ -105,17 +105,33 @@ export class SequelizeEmployeeV2Repository implements EmployeeV2Repository {
         }
     }
 
-    async updateEmployee(employeeId: string, patch: EmployeePatch): Promise<EmployeeMutationResult> {
-        const employee = await this.employee.findByPk(employeeId);
-        if (!employee) return { kind: "employee_not_found" };
-        await employee.update({ ...patch, updatedAt: new Date() });
-        return toEmployeeProfile(employee.dataValues);
+    async updateEmployee(
+        employeeId: string,
+        expectedBranchId: string,
+        patch: EmployeePatch,
+    ): Promise<EmployeeMutationResult> {
+        return this.persistence.inTransaction(async (transaction) => {
+            const employee = await this.employee.findOne({
+                where: { id: employeeId, branchId: expectedBranchId },
+                transaction,
+                lock: transaction.LOCK.UPDATE,
+            });
+            if (!employee) return { kind: "employee_not_found" };
+            await employee.update({ ...patch, updatedAt: new Date() }, { transaction });
+            return toEmployeeProfile(employee.dataValues);
+        });
     }
 
-    async deactivateEmployee(employeeId: string): Promise<EmployeeMutationResult> {
-        const employee = await this.employee.findByPk(employeeId);
-        if (!employee) return { kind: "employee_not_found" };
-        await employee.update({ status: "inactive", updatedAt: new Date() });
-        return toEmployeeProfile(employee.dataValues);
+    async deactivateEmployee(employeeId: string, expectedBranchId: string): Promise<EmployeeMutationResult> {
+        return this.persistence.inTransaction(async (transaction) => {
+            const employee = await this.employee.findOne({
+                where: { id: employeeId, branchId: expectedBranchId },
+                transaction,
+                lock: transaction.LOCK.UPDATE,
+            });
+            if (!employee) return { kind: "employee_not_found" };
+            await employee.update({ status: "inactive", updatedAt: new Date() }, { transaction });
+            return toEmployeeProfile(employee.dataValues);
+        });
     }
 }

@@ -8,6 +8,7 @@ import { seedV2Database } from "../../src/database/v2/seed.js";
 import { EmployeeV2Service } from "../../src/modules/identity-access/application/employee-v2.service.js";
 import { SequelizeEmployeeV2Repository } from "../../src/modules/identity-access/persistence/employee-v2.repository.js";
 import { SequelizeV2AccessContextRepository } from "../../src/modules/identity-access/persistence/v2-access-context.repository.js";
+import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 
 const runDatabaseV2Tests = process.env.RUN_DATABASE_V2_TESTS === "true";
 const superAdmin = {
@@ -62,9 +63,8 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 employee aggregate on MySQL", 
         expect(actor).not.toBeNull();
         if (!actor) return;
 
-        const service = new EmployeeV2Service({
-            repository: new SequelizeEmployeeV2Repository(persistence),
-        });
+        const employees = new SequelizeEmployeeV2Repository(persistence);
+        const service = new EmployeeV2Service({ repository: employees });
         const code = `EMP_${suffix}`;
         const created = await service.create(actor, {
             branchId: branchRows[0]!.id,
@@ -83,6 +83,14 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 employee aggregate on MySQL", 
             },
         });
         if (created.kind !== "created") return;
+
+        const wrongBranchId = branchRows[0]!.id === "1" ? serializeEntityId("2") : serializeEntityId("1");
+        await expect(employees.updateEmployee(created.employee.id, wrongBranchId, {
+            fullName: "This update must not persist",
+        })).resolves.toEqual({ kind: "employee_not_found" });
+        await expect(employees.findById(created.employee.id)).resolves.toMatchObject({
+            fullName: "Nguyễn Văn Integration",
+        });
 
         await expect(service.create(actor, {
             branchId: branchRows[0]!.id,
