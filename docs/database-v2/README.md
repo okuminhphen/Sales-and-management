@@ -155,6 +155,12 @@ account và điều chuyển nhân viên là use-case riêng vì chúng thay đ�
 audit. Core có unit test và integration test MySQL `_test`; HTTP route vẫn chờ composition root
 V2 để không trộn contract định danh legacy.
 
+Catalog category V2 hiện có directory chỉ-đọc public, phân trang deterministic theo `code`
+(mặc định 20, tối đa 100) và serialize `id`/`parent_id` BIGINT thành string. Đây tương thích với
+catalog category legacy vốn public. Tạo, sửa, xoá hoặc đổi `parent_id` chưa được chuyển: schema
+không có trạng thái visibility cho category và policy chống vòng trong cây category chưa được
+duyệt; product/variant vẫn là lát T27 tiếp theo.
+
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
 có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt
