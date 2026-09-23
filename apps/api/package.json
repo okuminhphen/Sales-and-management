@@ -22,7 +22,9 @@
     "db:seed": "tsx src/database/seed.ts",
     "db:migrate:prod": "node dist/database/migrate.js up",
     "db:seed:prod": "node dist/database/seed.js",
-    "outbox:publish": "tsx src/workers/run-outbox-publisher.ts"
+    "outbox:publish": "tsx src/workers/run-outbox-publisher.ts",
+    "banner-media:cleanup": "tsx src/workers/run-banner-media-cleanup.ts",
+    "banner-media:cleanup:prod": "node dist/workers/run-banner-media-cleanup.js"
   },
   "dependencies": {
     "@redis/client": "^5.12.0",

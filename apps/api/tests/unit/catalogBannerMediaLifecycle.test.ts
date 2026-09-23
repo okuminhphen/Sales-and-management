@@ -28,13 +28,13 @@ const customer: V2AccessContext = {
 };
 
 const jpegFile: MediaUploadInput = {
-    buffer: Buffer.from("fake-jpeg-data"),
+    buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x00, 0xff, 0xd9]),
     mimetype: "image/jpeg",
     originalname: "banner.jpg",
 };
 
 const pngFile: MediaUploadInput = {
-    buffer: Buffer.from("fake-png-data"),
+    buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     mimetype: "image/png",
     originalname: "banner.png",
 };
@@ -49,6 +49,7 @@ const gifFile: MediaUploadInput = {
 
 class FakeCatalogMediaProvider implements CatalogMediaProvider {
     readonly uploads: MediaUploadInput[] = [];
+    readonly requestedIds: string[] = [];
     readonly deletions: string[] = [];
     uploadResult: MediaUploadResult = {
         kind: "uploaded",
@@ -56,9 +57,12 @@ class FakeCatalogMediaProvider implements CatalogMediaProvider {
     };
     deleteResult: MediaDeleteResult = { kind: "deleted" };
 
-    async upload(input: MediaUploadInput): Promise<MediaUploadResult> {
+    async upload(input: MediaUploadInput, publicId: string): Promise<MediaUploadResult> {
         this.uploads.push(input);
-        return this.uploadResult;
+        this.requestedIds.push(publicId);
+        return this.uploadResult.kind === "uploaded"
+            ? { kind: "uploaded", asset: { ...this.uploadResult.asset, publicId } }
+            : this.uploadResult;
     }
 
     async delete(publicId: string): Promise<MediaDeleteResult> {
@@ -75,6 +79,7 @@ class FakeCatalogMediaCleanupLog implements CatalogMediaCleanupLog {
 }
 
 const makeRepository = (): CatalogBannerCommandV2Repository => ({
+    reserveUpload: vi.fn(async () => {}),
     create: vi.fn(async () => ({ kind: "created" as const, bannerId: serializeEntityId("7") })),
     update: vi.fn(async () => ({ kind: "updated" as const })),
     deleteWithoutMedia: vi.fn(async () => ({ kind: "deleted" as const })),
@@ -100,6 +105,15 @@ const makeDeps = (
 // ─── Tests ─────────────────────────────────────────────────────
 
 describe("Banner media lifecycle — uploadImage", () => {
+    it("rejects a missing upload before reserving media", async () => {
+        const { deps, repo, media } = makeDeps();
+        const service = new CatalogBannerCommandV2Service(deps);
+        await expect(service.uploadImage(manager, "7", undefined as unknown as MediaUploadInput))
+            .resolves.toEqual({ kind: "upload_failed", reason: "invalid_content" });
+        expect(repo.reserveUpload).not.toHaveBeenCalled();
+        expect(media.uploads).toHaveLength(0);
+    });
+
     it("uploads image to provider, sets image in DB, and returns image_uploaded", async () => {
         const { deps, repo, media } = makeDeps();
         const service = new CatalogBannerCommandV2Service(deps);
@@ -111,7 +125,7 @@ describe("Banner media lifecycle — uploadImage", () => {
         expect(media.uploads[0]).toBe(jpegFile);
         expect(repo.setImage).toHaveBeenCalledWith(
             serializeEntityId("7"),
-            { url: "https://res.cloudinary.com/demo/image/upload/banners/new.jpg", publicId: "banners/new-id" },
+            { url: "https://res.cloudinary.com/demo/image/upload/banners/new.jpg", publicId: media.requestedIds[0] },
         );
     });
 
@@ -142,10 +156,10 @@ describe("Banner media lifecycle — uploadImage", () => {
 
         const result = await service.uploadImage(manager, "7", jpegFile);
 
-        expect(result).toEqual({ kind: "upload_failed", reason: "rate limited" });
+        expect(result).toEqual({ kind: "upload_failed", reason: "provider_unavailable" });
     });
 
-    it("cleans up orphan upload when DB transaction fails", async () => {
+    it("defers cleanup to reconciliation when the DB outcome is uncertain", async () => {
         const { deps, repo, media } = makeDeps();
         vi.mocked(repo.setImage).mockRejectedValueOnce(new Error("DB connection lost"));
         const service = new CatalogBannerCommandV2Service(deps);
@@ -153,8 +167,25 @@ describe("Banner media lifecycle — uploadImage", () => {
         const result = await service.uploadImage(manager, "7", jpegFile);
 
         expect(result).toEqual({ kind: "catalog_unavailable" });
-        // Provider should have received a delete call to clean up the orphan.
-        expect(media.deletions).toEqual(["banners/new-id"]);
+        expect(media.deletions).toEqual([]);
+    });
+
+    it("does not contact the provider unless the cleanup candidate was durably reserved", async () => {
+        const { deps, repo, media } = makeDeps();
+        vi.mocked(repo.reserveUpload).mockRejectedValueOnce(new Error("outbox unavailable"));
+        const result = await new CatalogBannerCommandV2Service(deps).uploadImage(manager, "7", jpegFile);
+        expect(result).toEqual({ kind: "catalog_unavailable" });
+        expect(media.uploads).toHaveLength(0);
+    });
+
+    it("keeps a durable candidate on a DB error without trusting provider availability", async () => {
+        const { deps, repo, media } = makeDeps();
+        vi.mocked(repo.setImage).mockRejectedValueOnce(new Error("DB connection lost"));
+        media.deleteResult = { kind: "provider_error", message: "timeout" };
+        const result = await new CatalogBannerCommandV2Service(deps).uploadImage(manager, "7", jpegFile);
+        expect(result).toEqual({ kind: "catalog_unavailable" });
+        expect(repo.reserveUpload).toHaveBeenCalledWith(media.requestedIds[0]);
+        expect(media.deletions).toEqual([]);
     });
 
     it("cleans up orphan upload when banner does not exist", async () => {
@@ -165,7 +196,7 @@ describe("Banner media lifecycle — uploadImage", () => {
         const result = await service.uploadImage(manager, "7", jpegFile);
 
         expect(result).toEqual({ kind: "banner_not_found" });
-        expect(media.deletions).toEqual(["banners/new-id"]);
+        expect(media.deletions).toEqual([media.requestedIds[0]]);
     });
 
     it("schedules cleanup of old image when replacing an existing image", async () => {
@@ -234,11 +265,32 @@ describe("Banner media lifecycle — uploadImage", () => {
         const { deps, media } = makeDeps();
         const service = new CatalogBannerCommandV2Service(deps);
 
-        const webpFile: MediaUploadInput = { buffer: Buffer.from("webp"), mimetype: "image/webp", originalname: "banner.webp" };
+        const webpFile: MediaUploadInput = { buffer: Buffer.from("RIFF\u0004\u0000\u0000\u0000WEBPdata"), mimetype: "image/webp", originalname: "banner.webp" };
         const result = await service.uploadImage(manager, "7", webpFile);
 
         expect(result).toEqual({ kind: "image_uploaded" });
         expect(media.uploads).toHaveLength(1);
+    });
+
+    it("rejects a forged image MIME when the bytes are not an image", async () => {
+        const { deps, media } = makeDeps();
+        const service = new CatalogBannerCommandV2Service(deps);
+        const result = await service.uploadImage(manager, "7", {
+            buffer: Buffer.from("not an image"), mimetype: "image/jpeg", originalname: "fake.jpg",
+        });
+        expect(result).toEqual({ kind: "upload_failed", reason: "invalid_content" });
+        expect(media.uploads).toHaveLength(0);
+    });
+
+    it("rejects an image larger than 5 MiB before calling the provider", async () => {
+        const { deps, media } = makeDeps();
+        const service = new CatalogBannerCommandV2Service(deps);
+        const result = await service.uploadImage(manager, "7", {
+            buffer: Buffer.concat([jpegFile.buffer, Buffer.alloc(5 * 1024 * 1024)]),
+            mimetype: "image/jpeg", originalname: "large.jpg",
+        });
+        expect(result).toEqual({ kind: "upload_failed", reason: "file_too_large" });
+        expect(media.uploads).toHaveLength(0);
     });
 });
 
@@ -280,6 +332,15 @@ describe("Banner media lifecycle — delete with media", () => {
             reason: "banner_deleted",
             error: "network error",
         });
+    });
+
+    it("does not claim DB delete failed when diagnostic logging throws after commit", async () => {
+        const { deps, repo, media, log } = makeDeps();
+        vi.mocked(repo.clearImageAndDelete).mockResolvedValueOnce({ kind: "deleted", oldPublicId: "banners/img-1" });
+        media.deleteResult = { kind: "provider_error", message: "timeout" };
+        log.recordFailedCleanup = () => { throw new Error("stderr closed"); };
+        const result = await new CatalogBannerCommandV2Service(deps).delete(manager, "7");
+        expect(result).toEqual({ kind: "deleted" });
     });
 
     it("returns banner_not_found when banner does not exist", async () => {

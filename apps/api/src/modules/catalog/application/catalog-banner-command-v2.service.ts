@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import type { V2AccessContext } from "../../identity-access/application/access-context.js";
 import { serializeEntityId, type EntityId } from "../../../shared/contracts/database-scalars.js";
 import { canManageBanners } from "./catalog-banner-policy.js";
 import { toCatalogPublicTargetUrl } from "./catalog-public-media.js";
-import type { CatalogMediaProvider, MediaAsset, MediaUploadInput } from "./catalog-media-provider.js";
+import type { CatalogMediaProvider, MediaAsset, MediaUploadInput, MediaUploadResult } from "./catalog-media-provider.js";
 import type { CatalogMediaCleanupLog } from "./catalog-media-cleanup-log.js";
+import { MAX_BANNER_IMAGE_BYTES, BANNER_IMAGE_MIME_TYPES } from "./catalog-media-provider.js";
 
 export type BannerStatus = "draft" | "active" | "inactive";
 export type BannerMetadata = { name: string; targetUrl: string | null; status: BannerStatus };
@@ -21,11 +23,12 @@ export type BannerCommandResult = BannerCommandOutcome
     | { kind: "invalid_banner" }
     | { kind: "catalog_unavailable" };
 
-/** Only metadata may be mutated until the media lifecycle has a durable cleanup path. */
+/** Persistence port for banner metadata and durable media intents. */
 export interface CatalogBannerCommandV2Repository {
-    create: (metadata: BannerMetadata) => Promise<{ kind: "created"; bannerId: EntityId }>;
-    update: (id: EntityId, patch: BannerMetadataPatch) => Promise<
-        { kind: "updated" } | { kind: "banner_not_found" }
+    reserveUpload: (publicId: string) => Promise<void>;
+    create: (metadata: BannerMetadata, asset?: MediaAsset) => Promise<{ kind: "created"; bannerId: EntityId }>;
+    update: (id: EntityId, patch: BannerMetadataPatch, asset?: MediaAsset) => Promise<
+        { kind: "updated"; oldPublicId?: string | null } | { kind: "banner_not_found" }
     >;
     deleteWithoutMedia: (id: EntityId) => Promise<
         { kind: "deleted" } | { kind: "banner_not_found" } | { kind: "media_cleanup_required" }
@@ -96,7 +99,18 @@ const parseId = (input: unknown): EntityId | null => {
     try { return serializeEntityId(input); } catch { return null; }
 };
 
-const allowedImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const hasImageSignature = (file: MediaUploadInput): boolean => {
+    const bytes = file.buffer;
+    if (!Buffer.isBuffer(bytes)) return false;
+    if (file.mimetype === "image/jpeg") {
+        return bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    }
+    if (file.mimetype === "image/png") {
+        return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+    return file.mimetype === "image/webp" && bytes.length >= 12
+        && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
+};
 
 export type CatalogBannerCommandDependencies = {
     repository: CatalogBannerCommandV2Repository;
@@ -107,44 +121,70 @@ export type CatalogBannerCommandDependencies = {
 export class CatalogBannerCommandV2Service {
     constructor(private readonly dependencies: CatalogBannerCommandDependencies) {}
 
-    async create(context: V2AccessContext, input: unknown): Promise<BannerCommandResult> {
+    async create(context: V2AccessContext, input: unknown, file?: MediaUploadInput): Promise<BannerCommandResult> {
         if (!canManageBanners(context)) return { kind: "forbidden" };
         const metadata = normalizeCreate(input);
         if (!metadata) return { kind: "invalid_banner" };
-        try { return await this.dependencies.repository.create(metadata); }
-        catch { return { kind: "catalog_unavailable" }; }
+        if (file === undefined) {
+            try { return await this.dependencies.repository.create(metadata); }
+            catch { return { kind: "catalog_unavailable" }; }
+        }
+        const upload = await this.prepareUpload(file);
+        if (upload.kind !== "uploaded") return upload;
+        try { return await this.dependencies.repository.create(metadata, upload.asset); }
+        catch {
+            // A failed acknowledgement does not prove rollback. The durable worker
+            // reconciles the reservation against DB references before deleting.
+            return { kind: "catalog_unavailable" };
+        }
     }
 
-    async update(context: V2AccessContext, idInput: unknown, input: unknown): Promise<BannerCommandResult> {
+    async update(context: V2AccessContext, idInput: unknown, input: unknown, file?: MediaUploadInput): Promise<BannerCommandResult> {
         if (!canManageBanners(context)) return { kind: "forbidden" };
         const id = parseId(idInput);
-        const patch = normalizePatch(input);
+        const patch = file !== undefined && isRecord(input) && Object.keys(input).length === 0 ? {} : normalizePatch(input);
         if (!id || !patch) return { kind: "invalid_banner" };
-        try { return await this.dependencies.repository.update(id, patch); }
-        catch { return { kind: "catalog_unavailable" }; }
+        if (file === undefined) {
+            try {
+                const result = await this.dependencies.repository.update(id, patch);
+                return result.kind === "updated" ? { kind: "updated" } : result;
+            } catch { return { kind: "catalog_unavailable" }; }
+        }
+        const upload = await this.prepareUpload(file);
+        if (upload.kind !== "uploaded") return upload;
+        let result: Awaited<ReturnType<CatalogBannerCommandV2Repository["update"]>>;
+        try { result = await this.dependencies.repository.update(id, patch, upload.asset); }
+        catch {
+            // Commit may have succeeded; do not delete an image still referenced by DB.
+            return { kind: "catalog_unavailable" };
+        }
+        if (result.kind === "banner_not_found") {
+            await this.cleanupOrphan(upload.asset);
+            return result;
+        }
+        if (result.oldPublicId) await this.cleanupOldMedia(result.oldPublicId, "image_replaced");
+        return { kind: "updated" };
     }
 
     async delete(context: V2AccessContext, idInput: unknown): Promise<BannerCommandResult> {
         if (!canManageBanners(context)) return { kind: "forbidden" };
         const id = parseId(idInput);
         if (!id) return { kind: "invalid_banner" };
-        try {
-            const result = await this.dependencies.repository.clearImageAndDelete(id);
-            if (result.kind === "banner_not_found") return result;
-            // Row is deleted; now attempt to clean up old media (best effort after commit).
-            if (result.oldPublicId) {
-                await this.cleanupOldMedia(result.oldPublicId, "banner_deleted");
-            }
-            return { kind: "deleted" };
-        } catch { return { kind: "catalog_unavailable" }; }
+        let result: Awaited<ReturnType<CatalogBannerCommandV2Repository["clearImageAndDelete"]>>;
+        try { result = await this.dependencies.repository.clearImageAndDelete(id); }
+        catch { return { kind: "catalog_unavailable" }; }
+        if (result.kind === "banner_not_found") return result;
+        // Cleanup intent was committed with the banner deletion; this direct attempt is optional.
+        if (result.oldPublicId) await this.cleanupOldMedia(result.oldPublicId, "banner_deleted");
+        return { kind: "deleted" };
     }
 
     /**
      * Upload an image to a banner. If the banner already has an image, the old
      * image is scheduled for cleanup after the DB commit succeeds.
      *
-     * Pattern: upload first → transact DB → cleanup old media after commit.
-     * If DB fails after upload, the newly uploaded image is cleaned up.
+     * Pattern: reserve upload → provider upload → transact DB and queue old-media
+     * cleanup → attempt immediate cleanup. Pending intents survive a process crash.
      */
     async uploadImage(
         context: V2AccessContext,
@@ -154,41 +194,68 @@ export class CatalogBannerCommandV2Service {
         if (!canManageBanners(context)) return { kind: "forbidden" };
         const id = parseId(idInput);
         if (!id) return { kind: "invalid_banner" };
-        if (!allowedImageMimeTypes.has(file.mimetype)) {
+        const uploadResult = await this.prepareUpload(file);
+        if (uploadResult.kind !== "uploaded") return uploadResult;
+
+        let dbResult: Awaited<ReturnType<CatalogBannerCommandV2Repository["setImage"]>>;
+        try { dbResult = await this.dependencies.repository.setImage(id, uploadResult.asset); }
+        catch {
+            // Commit may have succeeded; the worker safely reconciles pending intents.
+            return { kind: "catalog_unavailable" };
+        }
+        if (dbResult.kind === "banner_not_found") {
+            await this.cleanupOrphan(uploadResult.asset);
+            return dbResult;
+        }
+        if (dbResult.oldPublicId) await this.cleanupOldMedia(dbResult.oldPublicId, "image_replaced");
+        return { kind: "image_uploaded" };
+    }
+
+    private async prepareUpload(file: MediaUploadInput): Promise<
+        { kind: "uploaded"; asset: MediaAsset } | { kind: "upload_failed"; reason: string } | { kind: "catalog_unavailable" }
+    > {
+        if (!file || typeof file !== "object") {
+            return { kind: "upload_failed", reason: "invalid_content" };
+        }
+        if (!BANNER_IMAGE_MIME_TYPES.has(file.mimetype)) {
             return { kind: "upload_failed", reason: "unsupported_format" };
         }
+        if (!Buffer.isBuffer(file.buffer) || file.buffer.length === 0 || !hasImageSignature(file)) {
+            return { kind: "upload_failed", reason: "invalid_content" };
+        }
+        if (file.buffer.length > MAX_BANNER_IMAGE_BYTES) {
+            return { kind: "upload_failed", reason: "file_too_large" };
+        }
 
-        // 1. Upload to provider first (outside DB transaction).
-        const uploadResult = await this.dependencies.mediaProvider.upload(file);
+        // A durable cleanup candidate exists before any external upload can succeed.
+        const publicId = `banners/${randomUUID()}`;
+        try {
+            await this.dependencies.repository.reserveUpload(publicId);
+        } catch {
+            return { kind: "catalog_unavailable" };
+        }
+        let uploadResult: MediaUploadResult;
+        try {
+            uploadResult = await this.dependencies.mediaProvider.upload(file, publicId);
+        } catch {
+            return { kind: "upload_failed", reason: "provider_unavailable" };
+        }
         if (uploadResult.kind === "invalid_file") {
             return { kind: "upload_failed", reason: uploadResult.reason };
         }
         if (uploadResult.kind === "provider_error") {
-            return { kind: "upload_failed", reason: uploadResult.message };
+            return { kind: "upload_failed", reason: "provider_unavailable" };
+        }
+        if (uploadResult.asset.publicId !== publicId) {
+            return { kind: "upload_failed", reason: "provider_invalid_response" };
         }
 
-        // 2. Update DB in transaction (row lock prevents concurrent replace).
-        let dbResult: Awaited<ReturnType<CatalogBannerCommandV2Repository["setImage"]>>;
-        try {
-            dbResult = await this.dependencies.repository.setImage(id, uploadResult.asset);
-        } catch {
-            // DB failed — clean up the orphaned upload (best effort).
-            await this.dependencies.mediaProvider.delete(uploadResult.asset.publicId).catch(() => {});
-            return { kind: "catalog_unavailable" };
-        }
+        return uploadResult;
+    }
 
-        if (dbResult.kind === "banner_not_found") {
-            // Banner doesn't exist — clean up the uploaded image.
-            await this.dependencies.mediaProvider.delete(uploadResult.asset.publicId).catch(() => {});
-            return { kind: "banner_not_found" };
-        }
-
-        // 3. DB committed — clean up old image (best effort after commit).
-        if (dbResult.oldPublicId) {
-            await this.cleanupOldMedia(dbResult.oldPublicId, "image_replaced");
-        }
-
-        return { kind: "image_uploaded" };
+    private async cleanupOrphan(asset: MediaAsset): Promise<void> {
+        // The durable reservation remains pending even when this immediate attempt fails.
+        await this.dependencies.mediaProvider.delete(asset.publicId).catch(() => {});
     }
 
     /** Best-effort cleanup of an old media asset after DB has committed. */
@@ -198,12 +265,16 @@ export class CatalogBannerCommandV2Service {
             message: error instanceof Error ? error.message : String(error),
         }));
         if (deleteResult && deleteResult.kind === "provider_error") {
-            this.dependencies.cleanupLog.recordFailedCleanup({
-                publicId,
-                reason,
-                error: deleteResult.message,
-                timestamp: new Date().toISOString(),
-            });
+            try {
+                this.dependencies.cleanupLog.recordFailedCleanup({
+                    publicId,
+                    reason,
+                    error: deleteResult.message,
+                    timestamp: new Date().toISOString(),
+                });
+            } catch {
+                // Logging is diagnostic only. The durable outbox job remains pending for retry.
+            }
         }
     }
 }

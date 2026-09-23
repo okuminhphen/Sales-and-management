@@ -24,6 +24,7 @@ const noopMedia: CatalogMediaProvider = {
 const noopCleanup: CatalogMediaCleanupLog = { recordFailedCleanup: vi.fn() };
 
 const repository = (): CatalogBannerCommandV2Repository => ({
+    reserveUpload: vi.fn(async () => {}),
     create: vi.fn(async () => ({ kind: "created" as const, bannerId: serializeEntityId("7") })),
     update: vi.fn(async () => ({ kind: "updated" as const })),
     deleteWithoutMedia: vi.fn(async () => ({ kind: "deleted" as const })),

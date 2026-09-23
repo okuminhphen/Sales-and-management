@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { QueryTypes, type Transaction } from "sequelize";
 import type { V2Persistence } from "../../../database/v2/persistence.js";
 import { serializeDatabaseEntityId, type EntityId } from "../../../shared/contracts/database-scalars.js";
 import type { MediaAsset } from "../application/catalog-media-provider.js";
@@ -15,6 +17,32 @@ const readOldPublicId = (image: unknown): string | null => {
     return typeof publicId === "string" && publicId.length > 0 ? publicId : null;
 };
 
+const queueMediaCleanup = async (
+    persistence: V2Persistence,
+    transaction: Transaction,
+    publicId: string,
+    reason: "image_replaced" | "banner_deleted",
+): Promise<void> => {
+    await persistence.sequelize.query(
+        `INSERT INTO outbox_events
+         (event_id, event_type, aggregate_type, aggregate_id, payload, occurred_at,
+          published_at, attempts, locked_at, last_error, created_at, updated_at)
+         VALUES (?, 'catalog.banner.media_cleanup_requested', 'banner_media', ?, ?,
+                 UTC_TIMESTAMP(3), NULL, 0, NULL, NULL, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`,
+        { replacements: [randomUUID(), publicId, JSON.stringify({ publicId, reason })], transaction },
+    );
+};
+
+const completeUpload = async (persistence: V2Persistence, transaction: Transaction, publicId: string): Promise<void> => {
+    const resolved = await persistence.sequelize.query(
+        `UPDATE outbox_events SET published_at = UTC_TIMESTAMP(3), updated_at = UTC_TIMESTAMP(3)
+         WHERE event_type = 'catalog.banner.media_upload_reserved'
+           AND aggregate_id = ? AND published_at IS NULL AND locked_at IS NULL AND attempts = 0`,
+        { replacements: [publicId], type: QueryTypes.BULKUPDATE, transaction },
+    );
+    if (resolved !== 1) throw new Error("Banner upload reservation was not found.");
+};
+
 /** MySQL adapter; row lock makes image guard and deletion atomic. */
 export class SequelizeCatalogBannerCommandV2Repository implements CatalogBannerCommandV2Repository {
     private readonly banner: CatalogModel<BannerAttributes>;
@@ -23,21 +51,46 @@ export class SequelizeCatalogBannerCommandV2Repository implements CatalogBannerC
         this.banner = getCatalogModel<BannerAttributes>(persistence, "Banner");
     }
 
-    async create(metadata: BannerMetadata): Promise<{ kind: "created"; bannerId: EntityId }> {
-        const now = new Date();
-        const banner = await this.banner.create({
-            ...metadata, image: null, createdAt: now, updatedAt: now,
-        });
-        return { kind: "created", bannerId: serializeDatabaseEntityId(banner.dataValues.id) };
+    async reserveUpload(publicId: string): Promise<void> {
+        await this.persistence.sequelize.query(
+            `INSERT INTO outbox_events
+             (event_id, event_type, aggregate_type, aggregate_id, payload, occurred_at,
+              published_at, attempts, locked_at, last_error, created_at, updated_at)
+             VALUES (?, 'catalog.banner.media_upload_reserved', 'banner_media', ?, ?,
+                     UTC_TIMESTAMP(3), NULL, 0, NULL, NULL, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`,
+            { replacements: [randomUUID(), publicId, JSON.stringify({ publicId })] },
+        );
     }
 
-    async update(id: EntityId, patch: BannerMetadataPatch): Promise<
-        { kind: "updated" } | { kind: "banner_not_found" }
+    async create(metadata: BannerMetadata, asset?: MediaAsset): Promise<{ kind: "created"; bannerId: EntityId }> {
+        return this.persistence.inTransaction(async (transaction) => {
+            const now = new Date();
+            const banner = await this.banner.create({
+                ...metadata, image: asset ? { url: asset.url, publicId: asset.publicId } : null,
+                createdAt: now, updatedAt: now,
+            }, { transaction });
+            if (asset) await completeUpload(this.persistence, transaction, asset.publicId);
+            return { kind: "created", bannerId: serializeDatabaseEntityId(banner.dataValues.id) };
+        });
+    }
+
+    async update(id: EntityId, patch: BannerMetadataPatch, asset?: MediaAsset): Promise<
+        { kind: "updated"; oldPublicId?: string | null } | { kind: "banner_not_found" }
     > {
         return this.persistence.inTransaction(async (transaction) => {
             const banner = await this.banner.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
             if (!banner) return { kind: "banner_not_found" };
-            await banner.update({ ...patch, updatedAt: new Date() }, { transaction });
+            const oldPublicId = readOldPublicId(banner.dataValues.image);
+            await banner.update({ ...patch, updatedAt: new Date(),
+                ...(asset ? { image: { url: asset.url, publicId: asset.publicId } } : {}),
+            }, { transaction });
+            if (asset) {
+                await completeUpload(this.persistence, transaction, asset.publicId);
+                if (oldPublicId && oldPublicId !== asset.publicId) {
+                    await queueMediaCleanup(this.persistence, transaction, oldPublicId, "image_replaced");
+                }
+                return { kind: "updated", oldPublicId };
+            }
             return { kind: "updated" };
         });
     }
@@ -57,16 +110,8 @@ export class SequelizeCatalogBannerCommandV2Repository implements CatalogBannerC
     async setImage(id: EntityId, asset: MediaAsset): Promise<
         { kind: "image_set"; oldPublicId: string | null } | { kind: "banner_not_found" }
     > {
-        return this.persistence.inTransaction(async (transaction) => {
-            const banner = await this.banner.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
-            if (!banner) return { kind: "banner_not_found" };
-            const oldPublicId = readOldPublicId(banner.dataValues.image);
-            await banner.update({
-                image: { url: asset.url, publicId: asset.publicId },
-                updatedAt: new Date(),
-            }, { transaction });
-            return { kind: "image_set", oldPublicId };
-        });
+        const result = await this.update(id, {}, asset);
+        return result.kind === "banner_not_found" ? result : { kind: "image_set", oldPublicId: result.oldPublicId ?? null };
     }
 
     async clearImageAndDelete(id: EntityId): Promise<
@@ -76,6 +121,9 @@ export class SequelizeCatalogBannerCommandV2Repository implements CatalogBannerC
             const banner = await this.banner.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
             if (!banner) return { kind: "banner_not_found" };
             const oldPublicId = readOldPublicId(banner.dataValues.image);
+            if (oldPublicId) {
+                await queueMediaCleanup(this.persistence, transaction, oldPublicId, "banner_deleted");
+            }
             await banner.destroy({ transaction });
             return { kind: "deleted", oldPublicId };
         });

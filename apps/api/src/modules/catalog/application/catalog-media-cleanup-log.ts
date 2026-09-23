@@ -1,10 +1,7 @@
 /**
- * Port for recording failed media cleanup attempts.
+ * Best-effort diagnostic log for failed media cleanup attempts.
  *
- * When the service successfully commits a DB change that orphans an old
- * image but the subsequent provider delete fails, this log records the
- * publicId so it can be retried (manually, by a future worker, or via
- * monitoring alert on structured logs).
+ * Durable retry state lives in V2 outbox_events, not in this logger.
  */
 
 export type MediaCleanupEntry = {
@@ -15,13 +12,12 @@ export type MediaCleanupEntry = {
 };
 
 export interface CatalogMediaCleanupLog {
-    /** Record a failed media cleanup so it can be retried later. */
+    /** Emit diagnostic context; failure must not change a committed business result. */
     recordFailedCleanup(entry: MediaCleanupEntry): void;
 }
 
 /**
- * Default implementation — writes structured JSON to stderr so it is
- * capturable by log aggregators, container runtimes, and monitoring tools.
+ * Default implementation — writes structured JSON to stderr for monitoring.
  */
 export class ConsoleCatalogMediaCleanupLog implements CatalogMediaCleanupLog {
     recordFailedCleanup(entry: MediaCleanupEntry): void {

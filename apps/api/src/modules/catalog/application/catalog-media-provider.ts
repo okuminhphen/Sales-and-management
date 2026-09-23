@@ -34,7 +34,7 @@ export interface CatalogMediaProvider {
      * Upload a file to the `banners` folder.
      * Returns the asset on success or a structured error.
      */
-    upload(input: MediaUploadInput): Promise<MediaUploadResult>;
+    upload(input: MediaUploadInput, publicId: string): Promise<MediaUploadResult>;
 
     /**
      * Delete an asset by its provider-specific public ID.
@@ -42,3 +42,10 @@ export interface CatalogMediaProvider {
      */
     delete(publicId: string): Promise<MediaDeleteResult>;
 }
+
+/** Asset IDs are server-generated and always scoped to the banner folder. */
+export const isOwnedBannerAsset = (publicId: string): boolean =>
+    /^banners\/[A-Za-z0-9_-]{1,92}$/.test(publicId);
+
+export const MAX_BANNER_IMAGE_BYTES = 5 * 1024 * 1024;
+export const BANNER_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set(["image/jpeg", "image/png", "image/webp"]);
