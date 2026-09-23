@@ -25,12 +25,14 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 
 ## Phase 1 — `schema-foundation`
 
-- [ ] T04 — RED tests cho V2 target guard và checksum drift.
+- [x] T04 — RED tests cho V2 target guard và checksum drift.
   - Acceptance: thiếu target, target không `_test`, schema lạ và checksum lệch đều fail closed.
   - Verify: focused test phải đỏ trước implementation.
-- [ ] T05 — V2 runner opt-in và migration metadata.
+  - Result: focused test RED do target guard chưa tồn tại; sau implementation 5 guard cases PASS.
+- [x] T05 — V2 runner opt-in và migration metadata.
   - Acceptance: status/up chạy tách legacy; không sync alter, không auto drop/reset.
   - Verify: T04 xanh + typecheck.
+  - Result: runner độc lập chỉ nhận `status`/`up`, chỉ mở explicit `_test` target và dùng metadata `database_v2_migrations` riêng; typecheck/build PASS.
 - [ ] T06 — Baseline identity/access/organization/customer.
   - Acceptance: 9 bảng đầu, indexes/checks và vòng FK branch-manager tạo đúng thứ tự.
   - Verify: static schema test + focused MySQL test.

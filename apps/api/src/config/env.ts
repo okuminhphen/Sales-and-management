@@ -16,6 +16,8 @@ const envSchema = z
     MYSQL_DATABASE: z.string().default("sale_and_managements_db"),
     MYSQL_USER: z.string().default("root"),
     MYSQL_PASSWORD: z.string().default(""),
+    V2_MIGRATIONS_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+    V2_MIGRATIONS_TARGET_DATABASE: z.string().trim().optional().transform((value) => value || undefined),
     DEFAULT_FULFILLMENT_BRANCH_ID: z.coerce.number().int().positive().default(13),
     REDIS_URL: z.string().default("redis://localhost:6379"),
     RABBITMQ_URL: z.string().url().default("amqp://sales_app:local-rabbitmq-password-change-me@localhost:5672/sales_dev"),
