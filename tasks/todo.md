@@ -88,7 +88,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 - [x] T17 — `inventory-transfer` typed models/associations.
   - Acceptance: inventory/reservation/movement/stock/transfer model ownership rõ.
   - Verify: schema-model contract test.
-- [ ] T18 — `commerce` + `payment-fulfillment` typed models/associations.
+- [x] T18 — `commerce` + `payment-fulfillment` typed models/associations.
   - Acceptance: cart/order/voucher/payment/shipment/return/refund khớp schema.
   - Verify: schema-model contract test.
 - [ ] T19 — `communication-ai` + `personalization` + outbox typed models.
