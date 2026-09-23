@@ -117,6 +117,12 @@ Kết quả đăng nhập hiện chỉ là core đã có unit test và MySQL `_t
 JWT middleware và frontend vẫn giữ compatibility legacy cho đến khi slice tương ứng hoàn chỉnh;
 không bật riêng registry V2 trong runtime legacy.
 
+Middleware V2 chỉ nhận `Authorization: Bearer <V2 JWT>`, verify issuer/audience và dùng
+`account_id` đã ký để load lại `V2AccessContext` active từ database. `roleGrants`, `customerId`
+và `employeeId` trong JWT không được dùng để cấp quyền; chúng chỉ là snapshot cho client. Token
+thiếu/sai hoặc account inactive trả `401` chung, lỗi đọc context trả `503` chung và không có
+token, claim hay database detail trong response/log.
+
 Own-profile V2 dùng aggregate `Account` + `Customer` trong cùng transaction. Khách chỉ sửa được
 `username`, `full_name`, `phone` từ DB-derived customer context; email không có trong patch vì
 mọi thay đổi email phải mở challenge OTP mới. Xung đột username được trả bằng kết quả nghiệp vụ,

@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
     BackofficeAuthV2Service,
     type BackofficeAuthV2Repository,
-    type V2AccessContextReader,
 } from "../../src/modules/identity-access/application/backoffice-auth-v2.service.js";
-import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
+import type {
+    V2AccessContext,
+    V2AccessContextReader,
+} from "../../src/modules/identity-access/application/access-context.js";
 import type { PasswordHasher } from "../../src/modules/identity-access/application/password-hasher.js";
 
 const passwordHasher: PasswordHasher = {

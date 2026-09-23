@@ -1,5 +1,5 @@
 import { logger } from "../../../observability/logger.js";
-import type { V2AccessContext } from "./access-context.js";
+import type { V2AccessContext, V2AccessContextReader } from "./access-context.js";
 import { PASSWORD_TIMING_HASH, type PasswordHasher } from "./password-hasher.js";
 
 type BackofficeAccountStatus = "pending" | "active" | "locked" | "inactive";
@@ -14,11 +14,6 @@ export type BackofficeCredential = {
 export interface BackofficeAuthV2Repository {
     findCredentialByUsername: (username: string) => Promise<BackofficeCredential | null>;
     recordSuccessfulLogin: (accountId: string) => Promise<void>;
-}
-
-/** Authorization must always be rebuilt from active V2 database records. */
-export interface V2AccessContextReader {
-    findActiveByAccountId: (accountId: string) => Promise<V2AccessContext | null>;
 }
 
 export type BackofficeLoginInput = {

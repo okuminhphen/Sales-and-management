@@ -19,6 +19,11 @@ export type V2AccessContext = {
     }[];
 };
 
+/** Port used by HTTP adapters and use-cases that need current authorization state. */
+export interface V2AccessContextReader {
+    findActiveByAccountId: (accountId: string) => Promise<V2AccessContext | null>;
+}
+
 const matchesEntityId = (actual: string | null, expected: string): boolean => {
     try {
         return actual !== null
