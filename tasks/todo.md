@@ -57,13 +57,15 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Acceptance: chat state/seq/dedup/lease, behavior stats và outbox đúng DBML.
   - Verify: focused integration tests.
   - Result: migration `0006-communication` tạo 9 bảng/23 FK; 2 unit tests và 4 MySQL 8.4 integration tests PASS cho chat state, message/command dedup, assistant lease/schedule, behavior aggregate và outbox event. API typecheck/build, full suite 157 pass và DBML validator PASS.
-- [ ] T12 — Full schema metadata verification.
+- [x] T12 — Full schema metadata verification.
   - Acceptance: đúng 49 bảng nghiệp vụ + migration metadata riêng, 104 FK, rerun zero pending.
   - Verify: V2 infrastructure suite trên MySQL `_test`, không skip.
+  - Result: MySQL 8.4 integration test xác nhận đúng danh sách 49 bảng + 1 metadata, 104 FK, 6 migration thực thi một lần và rerun zero pending; full API suite 160 pass, typecheck/build PASS.
 - [ ] T13 — Seed V2 idempotent.
   - Acceptance: roles, permissions, payment methods và super-admin account/role không nhân đôi.
   - Verify: chạy seed hai lần trên DB test + integration assertions.
 - [ ] Checkpoint 1 — Baseline/seed MySQL thật đạt; DB chính chưa bị reset.
+  - Chưa đạt: T13 seed còn mở và metadata runner chưa lưu/đối chiếu checksum từng migration đã thực thi; phải xử lý trước khi chốt checkpoint.
 
 ## Phase 2 — Typed persistence theo module
 

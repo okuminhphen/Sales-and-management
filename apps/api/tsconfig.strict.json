@@ -53,6 +53,7 @@
     "tests/unit/env.test.ts",
     "tests/unit/sizeService.test.ts",
     "tests/integration/infrastructure.test.ts",
+    "tests/integration/databaseV2FullSchema.test.ts",
     "tests/integration/sizeRoutes.test.ts"
   ]
 }
