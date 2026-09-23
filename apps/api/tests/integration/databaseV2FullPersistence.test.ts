@@ -90,7 +90,10 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 full typed persistence on MySQ
                 .map(([attributeName]) => attributeName);
             const associations = Object.values(model!.associations);
             expect(
-                associations.some((association) => matchingAttributes.includes(association.foreignKey)),
+                associations.some(
+                    (association) => association.associationType === "BelongsTo" &&
+                        matchingAttributes.includes(association.foreignKey),
+                ),
                 `${foreignKey.tableName}.${foreignKey.columnName} needs a belongsTo association`,
             ).toBe(true);
         }
