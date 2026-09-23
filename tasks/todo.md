@@ -82,7 +82,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Acceptance: accounts/roles/permissions/assignments/customer/address/branch/employee khớp schema.
   - Verify: schema-model contract test.
   - Result: 9 model typed thuộc module `identity-access`; contract MySQL kiểm tra table/cột và compose association PASS.
-- [ ] T16 — `catalog` typed models/associations.
+- [x] T16 — `catalog` typed models/associations.
   - Acceptance: category/product/variant/size/review/banner khớp schema.
   - Verify: schema-model contract test.
 - [ ] T17 — `inventory-transfer` typed models/associations.
