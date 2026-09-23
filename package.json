@@ -2,6 +2,7 @@
   "name": "sales-and-management",
   "version": "2.0.0",
   "private": true,
+  "packageManager": "npm@11.11.0",
   "description": "Sales and inventory management monorepo",
   "workspaces": [
     "apps/api",
@@ -13,6 +14,8 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "db:v2:validate": "node scripts/database-v2/validate-schema.cjs",
+    "test:db:v2": "node --test scripts/database-v2/schema-validator.test.cjs",
     "infra:up": "docker compose --env-file .env -f infra/compose.infrastructure.yml up -d",
     "infra:down": "docker compose --env-file .env -f infra/compose.infrastructure.yml down",
     "rehearsal:up": "docker compose -f compose.yml up --build",
@@ -23,6 +26,9 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "devDependencies": {
+    "@dbml/core": "10.1.1"
   },
   "overrides": {
     "editorconfig": "1.0.4"
