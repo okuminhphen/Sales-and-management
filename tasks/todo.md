@@ -105,8 +105,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 ## Phase 3 — Backend compatibility-first
 
 - [ ] T21 — Auth register/OTP và customer login trên Account/Customer.
+  - Tiến độ: core service/repository V2, OTP claim lifecycle và MySQL integration đã có; chưa chuyển HTTP route khi consumer legacy còn cần numeric ID.
 - [ ] T22 — Google login và admin login trên Account/scoped roles.
 - [ ] T23 — JWT/access context và authorization helpers V2.
+  - Tiến độ: V2 JWT (BIGINT string + issuer/audience), DB-derived access context và scoped authorization helper đã có; middleware/route chuyển dần theo capability sau.
 - [ ] T24 — User/customer profile endpoints V2.
 - [ ] T25 — Role/permission/admin management endpoints V2.
 - [ ] T26 — Employee và branch endpoints V2.

@@ -2,9 +2,6 @@ import {
     Op,
     UniqueConstraintError,
     type Model,
-    type ModelStatic,
-    type Optional,
-    type Transaction,
 } from "sequelize";
 import type { V2Persistence } from "../../../database/v2/persistence.js";
 import { serializeEntityId } from "../../../shared/contracts/database-scalars.js";
@@ -19,14 +16,11 @@ import type {
     CustomerCredential,
     RegisterVerifiedCustomerInput,
 } from "../application/customer-auth-v2.service.js";
-
-type New<Attributes extends { id: unknown }> = Optional<Attributes, "id">;
-type TypedModel<Attributes extends { id: unknown }> = ModelStatic<Model<Attributes, New<Attributes>>>;
-
-const asTypedModel = <Attributes extends { id: unknown }>(
-    persistence: V2Persistence,
-    name: string,
-): TypedModel<Attributes> => persistence.models.get(name) as TypedModel<Attributes>;
+import {
+    getIdentityAccessModel,
+    type IdentityAccessModel,
+    type NewEntity,
+} from "./identity-access.model-types.js";
 
 const customerRoleCode = "CUSTOMER" as const;
 
@@ -38,16 +32,16 @@ const isEmailUniqueConstraint = (error: UniqueConstraintError): boolean =>
  * AccountRole writes run in exactly one transaction; no legacy model is imported.
  */
 export class SequelizeCustomerAuthV2Repository implements CustomerAuthV2Repository {
-    private readonly account: TypedModel<AccountAttributes>;
-    private readonly accountRole: TypedModel<AccountRoleAttributes>;
-    private readonly customer: TypedModel<CustomerAttributes>;
-    private readonly role: TypedModel<RoleAttributes>;
+    private readonly account: IdentityAccessModel<AccountAttributes>;
+    private readonly accountRole: IdentityAccessModel<AccountRoleAttributes>;
+    private readonly customer: IdentityAccessModel<CustomerAttributes>;
+    private readonly role: IdentityAccessModel<RoleAttributes>;
 
     constructor(private readonly persistence: V2Persistence) {
-        this.account = asTypedModel<AccountAttributes>(persistence, "Account");
-        this.accountRole = asTypedModel<AccountRoleAttributes>(persistence, "AccountRole");
-        this.customer = asTypedModel<CustomerAttributes>(persistence, "Customer");
-        this.role = asTypedModel<RoleAttributes>(persistence, "Role");
+        this.account = getIdentityAccessModel<AccountAttributes>(persistence, "Account");
+        this.accountRole = getIdentityAccessModel<AccountRoleAttributes>(persistence, "AccountRole");
+        this.customer = getIdentityAccessModel<CustomerAttributes>(persistence, "Customer");
+        this.role = getIdentityAccessModel<RoleAttributes>(persistence, "Role");
     }
 
     async registerVerifiedCustomer(input: RegisterVerifiedCustomerInput): Promise<
@@ -173,7 +167,7 @@ export class SequelizeCustomerAuthV2Repository implements CustomerAuthV2Reposito
         );
     }
 
-    private async findCustomer(identifier: string): Promise<Model<CustomerAttributes, New<CustomerAttributes>> | null> {
+    private async findCustomer(identifier: string): Promise<Model<CustomerAttributes, NewEntity<CustomerAttributes>> | null> {
         if (identifier.includes("@")) {
             const account = await this.account.findOne({ where: { email: identifier } });
             if (!account) return null;

@@ -57,6 +57,7 @@
     "tests/unit/env.test.ts",
     "tests/unit/customerAuthV2Service.test.ts",
     "tests/unit/sizeService.test.ts",
+    "tests/unit/v2AccessToken.test.ts",
     "tests/integration/infrastructure.test.ts",
     "tests/integration/databaseV2FullSchema.test.ts",
     "tests/integration/databaseV2Seed.test.ts",
@@ -66,6 +67,7 @@
     "tests/integration/databaseV2CommerceFulfillmentModels.test.ts",
     "tests/integration/databaseV2CommunicationModels.test.ts",
     "tests/integration/databaseV2FullPersistence.test.ts",
+    "tests/integration/databaseV2AccessContext.test.ts",
     "tests/integration/databaseV2CustomerAuth.test.ts",
     "tests/integration/sizeRoutes.test.ts"
   ]
