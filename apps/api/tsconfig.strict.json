@@ -23,6 +23,8 @@
     "src/modules/category/category.dto.ts",
     "src/modules/conversation/conversation.dto.ts",
     "src/modules/employee/employee.dto.ts",
+    "src/modules/identity-access/application/**/*.ts",
+    "src/modules/identity-access/persistence/**/*.ts",
     "src/modules/inventory/inventory.dto.ts",
     "src/modules/message/message.dto.ts",
     "src/modules/notification/notification.dto.ts",
@@ -53,6 +55,7 @@
     "tests/unit/databaseV2Persistence.test.ts",
     "tests/unit/dtoContracts.test.ts",
     "tests/unit/env.test.ts",
+    "tests/unit/customerAuthV2Service.test.ts",
     "tests/unit/sizeService.test.ts",
     "tests/integration/infrastructure.test.ts",
     "tests/integration/databaseV2FullSchema.test.ts",
@@ -63,6 +66,7 @@
     "tests/integration/databaseV2CommerceFulfillmentModels.test.ts",
     "tests/integration/databaseV2CommunicationModels.test.ts",
     "tests/integration/databaseV2FullPersistence.test.ts",
+    "tests/integration/databaseV2CustomerAuth.test.ts",
     "tests/integration/sizeRoutes.test.ts"
   ]
 }
