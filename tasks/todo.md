@@ -152,16 +152,27 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     transaction/row lock; unit/MySQL `_test`.
   - [x] Core admin banner directory: thấy đủ draft/active/inactive, phân trang ổn định,
     chỉ cho global catalog manager; lọc ảnh/target URL và có unit/MySQL `_test`.
-  - [ ] Banner media lifecycle: upload ảnh hợp lệ, dọn ảnh cũ sau khi DB commit và bảo đảm
+  - [x] Banner media lifecycle: upload ảnh hợp lệ, dọn ảnh cũ sau khi DB commit và bảo đảm
     cleanup có retry/durable record; không xóa DB row chứa media khi cơ chế này chưa sẵn sàng.
-  - [ ] DTO/HTTP route compatibility cho cart, review và banner trên V2 access context;
+  - [x] DTO/HTTP route compatibility cho cart, review và banner trên V2 access context;
     hiện các core trên **chưa được mount** vào runtime HTTP legacy.
     - Cart/review: đã có DTO, controller, route factory và HTTP tests; cart đọc ảnh an toàn,
       chuyển cặp product/size cũ sang variant active, mọi mutation lấy customer ID từ
-      V2 auth context. Chưa mount runtime; banner HTTP còn chờ media lifecycle.
+      V2 auth context. Banner đã có DTO/controller/route, giới hạn 5 MiB trước buffering,
+      quyền global trước đọc file, metadata + ảnh atomic, HTTP contract test. Media worker
+      chạy riêng sau V2 cutover. DB lỗi chưa rõ commit được reconcile, không xóa ảnh ngay.
     - Cart read V2 mặc định giới hạn 100 item/trang; T39 phải cập nhật Web đọc `pagination`
       trước khi cutover để không bỏ sót giỏ hàng lớn.
-  - [ ] Audit và kiểm thử hợp đồng HTTP end-to-end sau khi V2 auth/access composition sẵn sàng.
+  - [x] Audit vận hành và kiểm thử hợp đồng HTTP xuyên suốt trên composition V2 riêng:
+    `catalog-commerce-v2.ts`, JWT ký thật + DB-derived access context + MySQL `_test`.
+    Audit structured log không ghi body/secret; không phải transactional audit ledger.
+    MySQL test kiểm chứng cả rollback và mất commit acknowledgement, customer ownership,
+    duplicate review, account khóa và auth/permission fail-closed.
+  - [ ] Mount runtime cuối cùng và smoke Web/API sau auth/consumer cutover (T38–T44).
+    Phần HTTP/core đã kiểm chứng; T28 chưa tính đóng runtime khi app chính còn legacy.
+  - Verification: API typecheck (kể cả strict cho catalog/composition), build và full suite
+    với MySQL V2 bật đạt 334 tests; 6 skip thuộc Redis/infra follow-up, không thuộc T28.
+    `git diff --check` đạt. Cloudinary thật chưa được gọi; test dùng fake provider.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.

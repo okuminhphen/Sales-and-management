@@ -182,7 +182,38 @@ stock hay availability; product không tồn tại/draft/inactive đều cho cù
 Banner directory V2 chỉ public các banner `active`, phân trang deterministic theo `created_at DESC`,
 rồi `id DESC` (20/100). JSON media được dùng chung helper với product: chỉ trả `{ url }` hợp lệ
 `http/https`; URL đích chỉ giữ lại đường dẫn nội bộ bắt đầu bằng `/` hoặc `http/https`, không nhận
-`//` hay protocol lạ. Banner write/xoá Cloudinary, DTO/route compatibility và audit chưa chuyển.
+`//` hay protocol lạ. Core banner write hiện có metadata CRUD và vòng đời ảnh. Ảnh JPEG/PNG/WebP
+được kiểm tra MIME, chữ ký file và giới hạn 5 MiB ở application service. Adapter Cloudinary thực
+được nối qua composition V2; test dùng fake, **chưa kiểm chứng upload/delete thật**. Trước khi gọi
+Cloudinary, service ghi một bản ghi giữ chỗ vào `outbox_events`; cập nhật ảnh, hoàn tất giữ chỗ và
+ghi yêu cầu dọn ảnh cũ cùng transaction. Xóa banner cũng ghi yêu cầu dọn ảnh trong transaction.
+Request multipart tạo/sửa banner lưu metadata và ảnh trong cùng transaction. Nếu DB trả lỗi
+nhưng chưa rõ commit đã thành công hay chưa, service không xóa ngay ảnh mới; worker kiểm tra
+tham chiếu DB trước khi dọn để tránh xóa ảnh đã commit thành công.
+Worker độc lập xử lý ảnh mồ côi sau 5 phút, retry job lỗi tối đa 20 lần, chỉ xóa `publicId` thuộc
+namespace `banners/` và kiểm tra ảnh còn được DB tham chiếu hay không. Bản ghi đã hết retry cần
+được operator kiểm tra và xử lý thủ công; không tự xóa hay bỏ qua. Logger cleanup chỉ mang tính
+chẩn đoán, không thay bản ghi durable trong DB.
+
+```sql
+SELECT id, event_type, aggregate_id, attempts, last_error, created_at
+FROM outbox_events
+WHERE published_at IS NULL
+  AND event_type IN ('catalog.banner.media_cleanup_requested',
+                     'catalog.banner.media_upload_reserved')
+  AND attempts >= 20
+ORDER BY created_at;
+```
+
+Worker **chưa tự chạy** vì V2 HTTP/auth chưa cutover. Sau khi xác nhận `MYSQL_DATABASE` thực sự là
+schema V2 và cấu hình Cloudinary, bật `BANNER_MEDIA_CLEANUP_ENABLED=true`, rồi chạy riêng
+`npm run banner-media:cleanup --workspace @sales/api` (local) hoặc
+`npm run banner-media:cleanup:prod --workspace @sales/api` sau khi build. Không bật worker này trên
+database legacy hoặc `_test` có dữ liệu không kiểm soát. Khi triển khai production, chạy worker
+thành process/container riêng và chỉ một outbox consumer xử lý các event
+`catalog.banner.media_*`; publisher nghiệp vụ khác không được nhận nhầm chúng. HTTP route V2 đã có
+giới hạn 5 MiB ngay tại upload middleware, kiểm tra quyền trước khi đọc file và HTTP contract test;
+chưa mount vào runtime legacy. Worker cần giám sát backlog/hết retry trước khi deploy production.
 
 Cart read core V2 chỉ lấy customer từ access context đã kiểm tra với DB, query `carts`/`cart_items`
 theo ownership, phân trang theo `cart_items.id` (20/100) và trả `base_price` hiện tại dưới dạng
@@ -200,8 +231,8 @@ không giữ hàng và không chốt giá. Cart remove core xóa bằng một c�
 `item_not_found`; không tạo cart mới. Cart update core thay quantity nguyên dương trong
 transaction sau khi khóa cart/item của customer. Update cùng quantity vẫn thành công; item
 không thuộc khách trả `item_not_found`, còn product/variant ngừng bán trả
-`variant_unavailable` (người dùng vẫn có thể remove item đó). DTO/route compatibility và audit
-vẫn là phần tiếp theo của T28; core chưa mount vào runtime legacy.
+`variant_unavailable` (người dùng vẫn có thể remove item đó). DTO/route compatibility và audit HTTP
+đã có trong composition V2 riêng; chưa mount vào runtime legacy.
 
 Review create core V2 nhận product ID dạng BIGINT string, rating nguyên từ 1 đến 5 và comment
 đã trim dài 1–2000 ký tự; customer ID chỉ lấy từ access context DB-derived, không nhận từ body.
@@ -211,8 +242,57 @@ các lỗi hạ tầng trả kết quả chung không lộ SQL. Review không t�
 diễn “đã mua” vì spec V2 chưa có policy verified-purchase. Review listing core V2 phân trang
 (20 mặc định, tối đa 100), sắp theo `created_at DESC, id DESC`, trả rating/comment/createdAt
 và username nếu account liên kết còn có username; không trả customer/account ID, email hoặc
-full name. Product chưa có review trả trang rỗng. HTTP DTO/route compatibility vẫn thuộc T28,
-hai core này chưa mount vào legacy app.
+full name. Product chưa có review trả trang rỗng. HTTP DTO/route compatibility đã có và được kiểm
+chứng qua JWT ký thật + MySQL `_test`; chưa mount vào legacy app.
+
+## HTTP cart/review/banner V2 — T28
+
+`apps/api/src/routes/catalog-commerce-v2.ts` là composition cho ba capability này: middleware
+verify JWT V2, load quyền/ownership từ MySQL, rồi nối DTO/controller/service/repository. Mặc định
+dùng adapter Cloudinary thật; test inject fake provider để không gửi file ra dịch vụ ngoài.
+Router được mount trong test tại `/api/v1`. `routes/api.ts` hiện vẫn là legacy; chỉ nối router V2
+khi auth/consumer và rehearsal/cutover đạt checkpoint, không mount cả hai write path cùng lúc.
+
+| Route (sau `/api/v1`) | Quyền và contract |
+| --- | --- |
+| `GET /banner/read/active` | Public, chỉ `active`; `page`/`limit` 20 mặc định, tối đa 100 |
+| `GET /banner/read` | Global `catalog.manage.global` từ role nội bộ, thấy đủ trạng thái |
+| `POST /banner/create` | Global manager; `name`, `url`, `status`; file tùy chọn field `banner` |
+| `PUT /banner/update/:bannerId` | Global manager; metadata, ảnh hoặc cả hai; không nhận patch rỗng |
+| `DELETE /banner/delete/:bannerId` | Global manager; yêu cầu dọn ảnh cùng transaction xóa banner |
+| `GET /cart/read/:userId` | JWT V2; chỉ giỏ của customer từ DB, ID trong URL không quyết định ownership |
+| `POST /cart/add` | `id` product + `sizeId` legacy được resolve sang active variant; quantity nguyên dương |
+| `PUT /cart/update`, `DELETE /cart/delete/:cartProductSizeId` | Chỉ customer sở hữu cart item |
+| `POST /review/add` | Customer từ DB; unique customer/product, duplicate trả 409 |
+| `GET /review/product/:productId` | Public; tên hiển thị/rating/comment, không trả account/customer ID |
+
+Envelope `EM/EC/DT` và field `url`, `image.url`, `reviewText` được giữ. Entity ID trả string;
+tiền trong cart là DECIMAL string. Banner create trả `DT.id`; update/delete trả `DT=null`.
+Danh sách có `pagination`; Web phải đọc hết trang ở T39. `/banner/read` trước đây public nay được
+bảo vệ: storefront phải dùng `/banner/read/active`. Branch manager chỉ có grant theo branch không
+được sửa banner toàn hệ thống. `url` dài tối đa 1000 ký tự theo schema; JSON `image`, actor/role
+và các field không thuộc DTO banner bị từ chối. HTTP 400 cho đầu vào sai, 401/403 cho auth/quyền,
+404 cho không tồn tại, 413 cho file quá 5 MiB, 503 cho hạ tầng lỗi; không trả raw provider/SQL error.
+
+Audit vận hành `v2_http.mutation_audit` dùng structured logger cho mutation cart/review/banner,
+ghi action, account ID từ context đã verify, resource ID khi xác định được, request ID, status
+và outcome. Không ghi body, token, comment, filename hoặc nội dung file. Đây là log best-effort
+theo request, **không phải ledger audit giao dịch bền vững**; log failure không đảo kết quả DB.
+Để production cần thu thập/retention log tập trung và xử lý dependency security debt đã ghi tại
+`tasks/followups.md`. Bản ghi cleanup trong `outbox_events` là trạng thái retry bền vững riêng.
+
+Chạy kiểm thử xuyên suốt T28 (không chạm DB chính, không gọi Cloudinary thật):
+
+```powershell
+$env:RUN_DATABASE_V2_TESTS = "true"
+$env:V2_MIGRATIONS_ENABLED = "true"
+$env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
+npm test --workspace @sales/api -- tests/integration/databaseV2T28Http.test.ts
+```
+
+Suite kiểm tra create/replace/delete ảnh, transaction rollback, mất commit acknowledgement,
+quyền DB thắng JWT hints, cart ownership, review uniqueness, tài khoản khóa và audit không chứa
+request data nhạy cảm. Test này không thay thế smoke Web/AI/runtime chính tại T42–T44.
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim

@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-const stringId = z.string().regex(/^[1-9]\d{0,18}$/).refine(
+const stringId = z.string().regex(/^[1-9]\d{0,18}$/).pipe(z.string().refine(
     (value) => BigInt(value) <= 9_223_372_036_854_775_807n,
-);
+));
 // Existing browser code sends safe JS numbers; V2 database IDs remain strings end-to-end.
 export const cartEntityIdV2 = z.union([
     stringId,

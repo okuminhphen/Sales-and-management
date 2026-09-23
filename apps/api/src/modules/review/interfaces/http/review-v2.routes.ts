@@ -1,4 +1,5 @@
 import { Router, type RequestHandler } from "express";
+import { createV2HttpAudit, type V2HttpAuditWriter } from "../../../../observability/v2-http-audit.js";
 import { validateRequest } from "../../../../middlewares/validateRequest.js";
 import type { ReviewCommandV2Service } from "../../application/review-command-v2.service.js";
 import type { ReviewQueryV2Service } from "../../application/review-query-v2.service.js";
@@ -10,10 +11,11 @@ export const createReviewV2Router = (dependencies: {
     auth: RequestHandler;
     command: ReviewCommandV2Service;
     query: ReviewQueryV2Service;
+    audit?: V2HttpAuditWriter;
 }): Router => {
     const router = Router();
     const controller = createReviewV2Controller(dependencies);
-    router.post("/review/add", dependencies.auth, validateRequest({ body: reviewCreateBodyV2 }), controller.create);
+    router.post("/review/add", createV2HttpAudit("review.create", dependencies.audit), dependencies.auth, validateRequest({ body: reviewCreateBodyV2 }), controller.create);
     router.get("/review/product/:productId", validateRequest({
         params: reviewProductParamsV2,
         query: reviewListQueryV2,

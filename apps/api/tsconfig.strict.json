@@ -7,6 +7,7 @@
     "noImplicitOverride": true
   },
   "include": [
+    "src/types/express.d.ts",
     "src/config/env.ts",
     "src/database/v2/**/*.ts",
     "src/config/redis.ts",
@@ -21,6 +22,7 @@
     "src/modules/cart/cart.dto.ts",
     "src/modules/chatbot/**/*.ts",
     "src/modules/category/category.dto.ts",
+    "src/modules/catalog/**/*.ts",
     "src/modules/conversation/conversation.dto.ts",
     "src/modules/employee/employee.dto.ts",
     "src/modules/identity-access/application/**/*.ts",
@@ -40,6 +42,7 @@
     "src/modules/stock-request/stock-request.dto.ts",
     "src/modules/transfer-receipt/transfer-receipt.dto.ts",
     "src/security/**/*.ts",
+    "src/routes/catalog-commerce-v2.ts",
     "src/shared/contracts/**/*.ts",
     "src/socket.ts",
     "src/utils/cacheHelper.ts",
@@ -80,6 +83,9 @@
     "tests/integration/databaseV2BackofficeAuth.test.ts",
     "tests/integration/databaseV2RoleManagement.test.ts",
     "tests/integration/databaseV2Employee.test.ts",
-    "tests/integration/sizeRoutes.test.ts"
+    "tests/integration/sizeRoutes.test.ts",
+    "tests/integration/bannerV2Http.test.ts",
+    "tests/integration/v2HttpAudit.test.ts",
+    "tests/integration/databaseV2T28Http.test.ts"
   ]
 }

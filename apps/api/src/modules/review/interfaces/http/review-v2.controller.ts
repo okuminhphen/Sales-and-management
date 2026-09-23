@@ -16,6 +16,7 @@ export const createReviewV2Controller = (dependencies: {
         const result = await dependencies.command.create(context, request.body);
         switch (result.kind) {
             case "created":
+                response.locals.auditResourceId = result.reviewId;
                 response.status(201).json({ EM: "Add review successfully", EC: 0, DT: { id: result.reviewId } });
                 return;
             case "product_not_found":

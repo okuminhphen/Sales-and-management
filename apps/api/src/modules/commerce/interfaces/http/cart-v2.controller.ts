@@ -73,6 +73,7 @@ export const createCartV2Controller = (dependencies: {
             }
         },
         update: async (request, response) => {
+            response.locals.auditResourceId = request.body.cartProductSizeId;
             const context = contextOf(request);
             if (!context) return void response.status(401).json({ EM: "Authentication required", EC: 3, DT: null });
             const result = await dependencies.mutation.update(context, {
@@ -94,6 +95,7 @@ export const createCartV2Controller = (dependencies: {
             }
         },
         remove: async (request, response) => {
+            response.locals.auditResourceId = request.params.cartProductSizeId;
             const context = contextOf(request);
             if (!context) return void response.status(401).json({ EM: "Authentication required", EC: 3, DT: null });
             const result = await dependencies.mutation.remove(context, {

@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-const entityId = z.string().regex(/^[1-9]\d{0,18}$/).refine(
+const entityId = z.string().regex(/^[1-9]\d{0,18}$/).pipe(z.string().refine(
     (value) => BigInt(value) <= 9_223_372_036_854_775_807n,
-);
+));
 const legacyBodyId = z.union([
     entityId,
     z.number().int().positive().safe().transform(String),

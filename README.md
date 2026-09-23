@@ -121,6 +121,12 @@ tài liệu dài khi được bổ sung sau này.
 
 ## Database
 
+Database V2 đang được triển khai trên `sale_and_managements_db_test`; ứng dụng local hiện vẫn
+chạy schema legacy cho tới checkpoint cutover. V2 đã có baseline 49 bảng, typed persistence và
+HTTP cart/review/banner được kiểm chứng bằng JWT + MySQL thật trong composition riêng. Các route
+V2 và worker dọn ảnh banner chưa tự bật trong ứng dụng đang chạy. Xem [Database V2](docs/database-v2/README.md)
+và [checklist](tasks/todo.md) để phân biệt phần đã kiểm chứng với phần chưa cutover.
+
 Tên database mặc định cho môi trường mới là `sale_and_managements_db` (cấu hình qua
 `MYSQL_DATABASE`). MySQL chỉ khởi tạo database này tự động khi data volume được tạo lần đầu;
 đổi giá trị biến môi trường không đổi tên database bên trong volume đã khởi tạo.
