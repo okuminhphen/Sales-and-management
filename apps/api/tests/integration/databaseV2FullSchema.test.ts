@@ -10,11 +10,20 @@ type SchemaManifest = {
     referenceCount: number;
     tableNames: string[];
 };
+type MigrationManifest = {
+    migrations: Record<string, string>;
+};
 
 const manifestFile = fileURLToPath(
     new URL("../../../../docs/database-v2/schema-manifest.json", import.meta.url),
 );
 const manifest = JSON.parse(readFileSync(manifestFile, "utf8")) as SchemaManifest;
+const migrationManifestFile = fileURLToPath(
+    new URL("../../../../docs/database-v2/migration-manifest.json", import.meta.url),
+);
+const migrationManifest = JSON.parse(
+    readFileSync(migrationManifestFile, "utf8"),
+) as MigrationManifest;
 const migrationNames = [
     "0001-identity-access",
     "0002-catalog",
@@ -75,5 +84,17 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 full schema on MySQL", () => {
             { type: QueryTypes.SELECT },
         );
         expect(count[0]?.total).toBe(migrationNames.length);
+    });
+
+    it("stores a SHA-256 checksum for each executed migration", async () => {
+        const rows = await sequelize.query<{ name: string; checksum: string }>(
+            "SELECT name, checksum FROM database_v2_migrations ORDER BY name",
+            { type: QueryTypes.SELECT },
+        );
+        expect(rows.map((row) => row.name)).toEqual(migrationNames);
+        expect(rows.every((row) =>
+            /^[a-f0-9]{64}$/.test(row.checksum) &&
+            row.checksum === migrationManifest.migrations[row.name],
+        )).toBe(true);
     });
 });

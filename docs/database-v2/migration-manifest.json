@@ -1,0 +1,12 @@
+{
+  "schemaRevision": 4,
+  "hashAlgorithm": "sha256-lf",
+  "migrations": {
+    "0001-identity-access": "ff57f216c3e1317f4b2a6f4910cb7cbdd4a68edc126ea008a05247fbb508cb59",
+    "0002-catalog": "ae4c946cc0c8f4362f8cd03a6b786dc79db798731045579e1aaf8abd5e4d2dd6",
+    "0003-commerce": "462fc779c5598cc767fb6b3096f115cd498d09dd5b562e6355d12df2bb397d93",
+    "0004-fulfillment": "ac203552b33c851442ff56483ff6144406f4efe598bcb4d24d31a14d15bbed71",
+    "0005-inventory": "cbde790f73f4336ed70f0242e8017bb80062f3bfad93b3fd00dfcd24755e16d2",
+    "0006-communication": "0e0f271f97bb484a40351f6ed045833da983bd8870443d5d2b6c6340334f7a37"
+  }
+}

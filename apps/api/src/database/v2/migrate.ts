@@ -14,6 +14,10 @@ import {
 } from "umzug";
 import { env } from "../../config/env.js";
 import {
+    assertExecutedMigrationChecksums,
+    assertMigrationSources,
+} from "./migration-integrity.js";
+import {
     APPROVED_V2_SCHEMA_FILE,
     assertV2MigrationTarget,
     type V2MigrationTarget,
@@ -29,6 +33,7 @@ const migrationsDirectory = path.join(
 );
 
 type SchemaManifest = {
+    schemaRevision: number;
     schemaFile: string;
     sha256: string;
 };
@@ -46,6 +51,7 @@ type V2MigrationModule = {
 
 type ExecutedMigrationRow = {
     name: string;
+    checksum: string;
 };
 
 const readSchemaManifest = (): SchemaManifest => {
@@ -58,6 +64,7 @@ const readSchemaManifest = (): SchemaManifest => {
     if (
         !parsed ||
         typeof parsed !== "object" ||
+        typeof (parsed as SchemaManifest).schemaRevision !== "number" ||
         typeof (parsed as SchemaManifest).schemaFile !== "string" ||
         typeof (parsed as SchemaManifest).sha256 !== "string"
     ) {
@@ -67,8 +74,7 @@ const readSchemaManifest = (): SchemaManifest => {
     return parsed as SchemaManifest;
 };
 
-const loadV2MigrationTarget = (): V2MigrationTarget => {
-    const manifest = readSchemaManifest();
+const loadV2MigrationTarget = (manifest: SchemaManifest): V2MigrationTarget => {
     const schemaSource = readFileSync(
         path.join(repositoryRoot, APPROVED_V2_SCHEMA_FILE),
         "utf8",
@@ -82,6 +88,24 @@ const loadV2MigrationTarget = (): V2MigrationTarget => {
         schemaSource,
         expectedChecksum: manifest.sha256,
     };
+};
+
+const loadMigrationChecksums = (schemaRevision: number): ReadonlyMap<string, string> => {
+    const manifestPath = path.join(repositoryRoot, "docs/database-v2/migration-manifest.json");
+    const manifest: unknown = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const sourceDirectory = path.join(
+        repositoryRoot,
+        "apps/api/src/database/v2/migrations",
+    );
+    const sources = new Map(
+        readdirSync(sourceDirectory, { withFileTypes: true })
+            .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
+            .map((entry) => [
+                path.parse(entry.name).name,
+                readFileSync(path.join(sourceDirectory, entry.name), "utf8"),
+            ]),
+    );
+    return assertMigrationSources(manifest, sources, schemaRevision);
 };
 
 const assertV2MigrationMetadata = async (
@@ -104,6 +128,10 @@ const assertV2MigrationMetadata = async (
                     type: DataTypes.DATE(3),
                     allowNull: false,
                 },
+                checksum: {
+                    type: DataTypes.CHAR(64),
+                    allowNull: false,
+                },
             },
             {
                 engine: "InnoDB",
@@ -118,12 +146,15 @@ const assertV2MigrationMetadata = async (
     );
     const nameColumn = columns.name;
     const executedAtColumn = columns.executed_at;
+    const checksumColumn = columns.checksum;
 
     if (
         !nameColumn ||
         !nameColumn.primaryKey ||
         !executedAtColumn ||
-        executedAtColumn.allowNull
+        executedAtColumn.allowNull ||
+        !checksumColumn ||
+        checksumColumn.allowNull
     ) {
         throw new Error(
             "Database V2 migration metadata has an unexpected table structure.",
@@ -132,21 +163,28 @@ const assertV2MigrationMetadata = async (
 };
 
 class DatabaseV2MigrationStorage implements UmzugStorage<QueryInterface> {
-    public constructor(private readonly sequelize: Sequelize) {}
+    public constructor(
+        private readonly sequelize: Sequelize,
+        private readonly checksums: ReadonlyMap<string, string>,
+    ) {}
 
     public async executed(): Promise<string[]> {
         const rows = await this.sequelize.query<ExecutedMigrationRow>(
-            `SELECT \`name\` FROM \`${V2_MIGRATION_METADATA_TABLE}\` ORDER BY \`name\` ASC`,
+            `SELECT \`name\`, \`checksum\` FROM \`${V2_MIGRATION_METADATA_TABLE}\` ORDER BY \`name\` ASC`,
             { type: QueryTypes.SELECT },
         );
 
-        return rows.map((row) => row.name);
+        return assertExecutedMigrationChecksums(rows, this.checksums);
     }
 
     public async logMigration({ name }: MigrationParams<QueryInterface>): Promise<void> {
+        const checksum = this.checksums.get(name);
+        if (!checksum) {
+            throw new Error("Database V2 refuses to record an unapproved migration: " + name + ".");
+        }
         await this.sequelize.query(
-            `INSERT INTO \`${V2_MIGRATION_METADATA_TABLE}\` (\`name\`, \`executed_at\`) VALUES (?, UTC_TIMESTAMP(3))`,
-            { replacements: [name], type: QueryTypes.INSERT },
+            `INSERT INTO \`${V2_MIGRATION_METADATA_TABLE}\` (\`name\`, \`executed_at\`, \`checksum\`) VALUES (?, UTC_TIMESTAMP(3), ?)`,
+            { replacements: [name, checksum], type: QueryTypes.INSERT },
         );
     }
 
@@ -158,8 +196,10 @@ class DatabaseV2MigrationStorage implements UmzugStorage<QueryInterface> {
     }
 }
 
-const loadMigrations = () => {
-    if (!runtimeExtension || !existsSync(migrationsDirectory)) return [];
+const loadMigrations = (checksums: ReadonlyMap<string, string>) => {
+    if (!runtimeExtension || !existsSync(migrationsDirectory)) {
+        throw new Error("Database V2 runtime migration directory is missing.");
+    }
 
     const migrationFileNames = readdirSync(migrationsDirectory, {
         withFileTypes: true,
@@ -170,6 +210,14 @@ const loadMigrations = () => {
         )
         .map((entry) => entry.name)
         .sort((left, right) => left.localeCompare(right));
+
+    const runtimeNames = migrationFileNames.map((fileName) => path.parse(fileName).name);
+    if (
+        runtimeNames.length !== checksums.size ||
+        runtimeNames.some((name) => !checksums.has(name))
+    ) {
+        throw new Error("Database V2 runtime migration inventory mismatch.");
+    }
 
     return migrationFileNames.map((fileName) => {
         const migrationPath = path.join(migrationsDirectory, fileName);
@@ -205,15 +253,17 @@ const createV2Sequelize = (targetDatabase: string): Sequelize =>
 export const runV2Migrations = async (
     command: "status" | "up",
 ): Promise<void> => {
-    const target = loadV2MigrationTarget();
+    const schemaManifest = readSchemaManifest();
+    const target = loadV2MigrationTarget(schemaManifest);
     assertV2MigrationTarget(target);
+    const checksums = loadMigrationChecksums(schemaManifest.schemaRevision);
 
     const sequelize = createV2Sequelize(target.targetDatabase!.trim());
     const queryInterface = sequelize.getQueryInterface();
     const migrator = new Umzug<QueryInterface>({
-        migrations: loadMigrations(),
+        migrations: loadMigrations(checksums),
         context: queryInterface,
-        storage: new DatabaseV2MigrationStorage(sequelize),
+        storage: new DatabaseV2MigrationStorage(sequelize, checksums),
         logger: undefined,
     });
 

@@ -7,6 +7,8 @@ Bảng metadata do migration runner tạo ra không thuộc 49 bảng nghiệp v
 ## Phạm vi và trạng thái
 
 - [`target-schema.dbml`](./target-schema.dbml) mô tả schema đích đã được duyệt.
+- [`migration-manifest.json`](./migration-manifest.json) khóa SHA-256 của từng migration V2
+  theo nội dung nguồn TypeScript đã chuẩn hóa xuống dòng LF.
 - DBML là hợp đồng thiết kế, **không phải SQL để chạy trực tiếp**.
 - Baseline migration thực thi và kiểm chứng MySQL 8.4 được triển khai từng phần ở các task T04–T11.
 - Cutover chỉ áp dụng cho database local mới, có guard rõ ràng; production/staging và backfill
@@ -46,6 +48,11 @@ V2 runner hoàn toàn tách khỏi migration legacy. Nó chỉ có `status` và 
 `down`, reset hoặc drop. Runner luôn yêu cầu đủ hai biến dưới đây và từ chối mọi database không
 kết thúc bằng `_test`:
 
+Hiện runner dành cho checkout local của repository: cần có cả nguồn migration TypeScript và
+hai manifest trong `docs/database-v2`. Runtime image trong `apps/api/Dockerfile` chưa đóng gói
+các artifact này; chưa dùng image đó để chạy V2 migration. Deployment/cutover sẽ được xử lý ở
+checkpoint sau, không ngầm coi local rehearsal là production-ready.
+
 ```powershell
 $env:V2_MIGRATIONS_ENABLED = "true"
 $env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
@@ -55,8 +62,13 @@ npm run db:v2:status --workspace @sales/api
 
 Tạo database `_test` riêng và cấp quyền cho user API trước lần chạy đầu. Không đặt hai biến trên
 vào cấu hình production và không thay `MYSQL_DATABASE=sale_and_managements_db` bằng database V2
-trước checkpoint cutover. Manifest checksum được kiểm tra trước khi kết nối MySQL; schema chưa
-được review, checksum lệch, thiếu target hoặc target không phải `_test` đều bị chặn.
+trước checkpoint cutover. Checksum DBML và từng file migration được kiểm tra trước khi kết nối
+MySQL; checksum migration đã thực thi còn được đối chiếu với cột `checksum` trong
+`database_v2_migrations`. Schema/migration chưa được review, hash lệch, thiếu target hoặc
+target không phải `_test` đều bị chặn. Metadata cũ không có cột checksum sẽ bị từ chối;
+runner không tự điền hash cho migration cũ vì không thể tự chứng minh nội dung đã từng chạy.
+Chỉ nâng cấp metadata của DB `_test` cũ sau khi đã đối chiếu tên migration và hash nguồn,
+hoặc tạo DB `_test` mới; không reset DB ứng dụng chính để xử lý trường hợp này.
 
 Để chạy focused integration test MySQL hiện có:
 

@@ -65,7 +65,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Acceptance: roles, permissions, payment methods và super-admin account/role không nhân đôi.
   - Verify: chạy seed hai lần trên DB test + integration assertions.
 - [ ] Checkpoint 1 — Baseline/seed MySQL thật đạt; DB chính chưa bị reset.
-  - Chưa đạt: T13 seed còn mở và metadata runner chưa lưu/đối chiếu checksum từng migration đã thực thi; phải xử lý trước khi chốt checkpoint.
+  - Chưa đạt: T13 seed còn mở. Metadata runner đã lưu/đối chiếu SHA-256 từng migration; integration test trên DB `_test` đạt.
 
 ## Phase 2 — Typed persistence theo module
 
