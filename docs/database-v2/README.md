@@ -89,6 +89,18 @@ của email cấu hình. Seed tạo/cập nhật 6 role chuẩn, permission cata
 không được cấp quyền ngầm, vì mapping least-privilege và scope branch sẽ được áp dụng cùng
 authorization V2 ở T23.
 
+## Convention persistence V2
+
+- Model V2 thuộc module domain; registry chỉ đăng ký model trước rồi mới compose association,
+  không chứa query hay business rule.
+- Mỗi model khai báo `v2ModelOptions("table_name")`: tên bảng lowercase `snake_case`,
+  `freezeTableName=true`, `timestamps=false`. Field audit phải map tường minh tới
+  `created_at`/`updated_at`; không dùng tên Sequelize mặc định.
+- Mọi command ghi nhiều aggregate dùng `inTransaction`; service domain quyết định lock order,
+  isolation và invariant, không dồn logic này vào controller hoặc registry.
+- Không import registry V2 vào runtime legacy trong Phase 2. Registry chỉ được nối vào app sau
+  khi module compatibility tương ứng đã có integration test trên V2.
+
 Để chạy focused integration test MySQL hiện có:
 
 ```powershell

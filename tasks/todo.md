@@ -73,9 +73,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 
 ## Phase 2 — Typed persistence theo module
 
-- [ ] T14 — Registry, transaction boundary và conventions V2.
+- [x] T14 — Registry, transaction boundary và conventions V2.
   - Acceptance: module sở hữu model; composition root không chứa business logic; không import cycle.
   - Verify: registry unit test + typecheck.
+  - Result: registry đóng phát hiện trùng module/model, compose association sau khi đăng ký đủ;
+    `inTransaction` và model option explicit `snake_case` sẵn sàng cho module V2 tiếp theo.
 - [ ] T15 — `identity-access` typed models/associations.
   - Acceptance: accounts/roles/permissions/assignments/customer/address/branch/employee khớp schema.
   - Verify: schema-model contract test.
