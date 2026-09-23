@@ -135,9 +135,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     deterministic theo `name`, rồi `id` (20/100), serialization BIGINT và unit/MySQL `_test`
     integration; nó không trả hoặc suy diễn tồn kho. Product directory/detail public hiện chỉ
     đọc `active`, phân trang `created_at DESC`/`id DESC`, trả DECIMAL/ID an toàn và lọc image JSON
-    thành URL `http/https`; nó không join inventory. Mutation category/product/size/variant,
-    DTO/route compatibility, policy chống cycle category và contract availability theo branch
-    vẫn chưa chuyển.
+    thành URL `http/https`; nó không join inventory. Variant directory theo product chỉ trả parent
+    và variant `active`, định danh variant/size và tên size theo thứ tự deterministic, không lộ
+    SKU/stock. Mutation category/product/size/variant, DTO/route compatibility, policy chống
+    cycle category và contract availability theo branch vẫn chưa chuyển.
 - [ ] T28 — Cart/review/banner endpoints V2.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
 - [ ] T30 — Stock request service V2.

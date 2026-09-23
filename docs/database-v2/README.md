@@ -174,6 +174,11 @@ lọc thành mảng `{ url }` chỉ chấp nhận URL `http/https`, không trả
 read không join `inventories`: khả dụng/tồn kho là dữ liệu theo `(branch, product_variant)` và sẽ
 thuộc contract inventory riêng. Product write, variant, DTO/route compatibility vẫn chưa chuyển.
 
+Variant directory theo product cũng chỉ public read: chỉ parent product và variant `active`, trả
+`variant id`, `size id`, `size name`, theo thứ tự `size.name`, rồi `variant.id`. Không trả SKU,
+stock hay availability; product không tồn tại/draft/inactive đều cho cùng kết quả không tìm thấy.
+Đây là lựa chọn variant để cart V2 tham chiếu đúng aggregate, không phải phép xác nhận giữ hàng.
+
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
 có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt
