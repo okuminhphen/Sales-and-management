@@ -143,8 +143,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Tiến độ: banner directory public chỉ đọc `active`, có pagination deterministic (20/100),
     serialize BIGINT, lọc JSON ảnh và target URL trước khi ra client; có unit/MySQL `_test`
     integration. Own-cart read core dùng customer ID từ V2 access context, phân trang và trả
-    giá DECIMAL string; item ngừng bán vẫn hiện với `catalogActive=false`. Cart mutation, review,
-    banner write/xoá media, DTO/route compatibility và audit chưa chuyển.
+    giá DECIMAL string; item ngừng bán vẫn hiện với `catalogActive=false`. Cart add core đã dùng
+    DB-derived customer ID, transaction + cart row lock, chặn variant ngừng bán và quantity vượt
+    `INT`; unit/MySQL `_test` integration xác nhận cộng dồn đồng thời không mất cập nhật hay trùng
+    dòng. Cart remove core xóa atomic theo customer ownership, che phân biệt foreign/missing
+    item ID; có MySQL `_test` integration. Cart update core khóa theo owner, chỉ đổi số lượng
+    nguyên dương của item còn bán và có test MySQL `_test`. Review, banner write/xoá media,
+    DTO/route compatibility và audit chưa chuyển.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.

@@ -188,7 +188,20 @@ Cart read core V2 chỉ lấy customer từ access context đã kiểm tra với
 theo ownership, phân trang theo `cart_items.id` (20/100) và trả `base_price` hiện tại dưới dạng
 DECIMAL string. Product/variant inactive vẫn xuất hiện trong giỏ với `catalogActive=false` để khách
 nhìn thấy và xử lý. Đọc giỏ không tạo row mới, không xác nhận stock hoặc giữ hàng; checkout phải
-kiểm tra lại giá và inventory trong transaction riêng. Cart mutation và HTTP compatibility còn lại.
+kiểm tra lại giá và inventory trong transaction riêng.
+
+Cart add core V2 nhận `productVariantId` BIGINT string và `quantity` nguyên dương từ request,
+nhưng customer ID chỉ lấy từ access context DB-derived. Chỉ variant/product đang `active` mới
+được thêm; một cart tái sử dụng cho mỗi customer và một dòng cho mỗi variant. Adapter ghi trong
+transaction, dùng unique key của cart cùng `FOR UPDATE` trên cart để tuần tự hóa các lệnh thêm
+đồng thời; tổng quantity không vượt giới hạn `INT` của schema. Thêm giỏ không đọc inventory,
+không giữ hàng và không chốt giá. Cart remove core xóa bằng một câu lệnh SQL có điều kiện
+`customer_id` và `cart_item.id`, nên ID của người khác hoặc ID không tồn tại cùng trả một kết quả
+`item_not_found`; không tạo cart mới. Cart update core thay quantity nguyên dương trong
+transaction sau khi khóa cart/item của customer. Update cùng quantity vẫn thành công; item
+không thuộc khách trả `item_not_found`, còn product/variant ngừng bán trả
+`variant_unavailable` (người dùng vẫn có thể remove item đó). DTO/route compatibility và audit
+vẫn là phần tiếp theo của T28; core chưa mount vào runtime legacy.
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
