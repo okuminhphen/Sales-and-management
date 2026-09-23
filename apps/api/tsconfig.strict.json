@@ -56,6 +56,7 @@
     "tests/unit/dtoContracts.test.ts",
     "tests/unit/env.test.ts",
     "tests/unit/customerAuthV2Service.test.ts",
+    "tests/unit/customerProfileV2Service.test.ts",
     "tests/unit/backofficeAuthV2Service.test.ts",
     "tests/unit/sizeService.test.ts",
     "tests/unit/v2AccessToken.test.ts",
@@ -71,6 +72,7 @@
     "tests/integration/databaseV2FullPersistence.test.ts",
     "tests/integration/databaseV2AccessContext.test.ts",
     "tests/integration/databaseV2CustomerAuth.test.ts",
+    "tests/integration/databaseV2CustomerProfile.test.ts",
     "tests/integration/databaseV2BackofficeAuth.test.ts",
     "tests/integration/sizeRoutes.test.ts"
   ]

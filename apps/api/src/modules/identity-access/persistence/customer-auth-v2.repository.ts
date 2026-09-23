@@ -4,6 +4,7 @@ import {
     type Model,
 } from "sequelize";
 import type { V2Persistence } from "../../../database/v2/persistence.js";
+import { retryV2Transaction } from "../../../database/v2/transaction-retry.js";
 import { serializeEntityId } from "../../../shared/contracts/database-scalars.js";
 import type {
     AccountAttributes,
@@ -49,7 +50,7 @@ export class SequelizeCustomerAuthV2Repository implements CustomerAuthV2Reposito
         | { kind: "email_already_exists" }
     > {
         try {
-            return await this.persistence.inTransaction(async (transaction) => {
+            return await retryV2Transaction(() => this.persistence.inTransaction(async (transaction) => {
                 const existingAccount = await this.account.findOne({
                     where: { email: input.email },
                     transaction,
@@ -118,7 +119,7 @@ export class SequelizeCustomerAuthV2Repository implements CustomerAuthV2Reposito
                 }, { transaction });
 
                 return { kind: "created", accountId, customerId } as const;
-            });
+            }));
         } catch (error) {
             if (error instanceof UniqueConstraintError && isEmailUniqueConstraint(error)) {
                 return { kind: "email_already_exists" };

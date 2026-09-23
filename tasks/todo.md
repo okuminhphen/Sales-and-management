@@ -114,6 +114,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 - [ ] T23 — JWT/access context và authorization helpers V2.
   - Tiến độ: V2 JWT (BIGINT string + issuer/audience), DB-derived access context và scoped authorization helper đã có; middleware/route chuyển dần theo capability sau.
 - [ ] T24 — User/customer profile endpoints V2.
+  - Tiến độ: core own-profile dùng Account + Customer đã có transaction, ownership theo
+    DB-derived access context, username uniqueness mapping và MySQL integration. HTTP endpoint
+    vẫn chờ auth/middleware V2 được nối vào app compatibility, không trộn với legacy numeric ID.
 - [ ] T25 — Role/permission/admin management endpoints V2.
 - [ ] T26 — Employee và branch endpoints V2.
 - [ ] T27 — Category/product/size/variant endpoints V2.

@@ -111,4 +111,30 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 customer authentication on MyS
         await expect(service.login({ emailOrPhone: phone, password: "customer-password-123" }))
             .resolves.toEqual({ kind: "invalid_credentials" });
     });
+
+    it("retries transient transaction conflicts when multiple customers register concurrently", async () => {
+        const persistence = createSalesV2Persistence(sequelize);
+        const service = new CustomerAuthV2Service({
+            repository: new SequelizeCustomerAuthV2Repository(persistence),
+            verificationGateway,
+            passwordHasher: bcryptPasswordHasher,
+        });
+        const unique = crypto.randomUUID();
+        const registrations = await Promise.all(["1", "2"].map((suffix) => service.register({
+            email: `v2-concurrent-customer-${suffix}-${unique}@example.test`,
+            phone: `06${unique.replace(/\D/g, "").slice(0, 7)}${suffix}`,
+            username: `concurrent-${suffix}-${unique.slice(0, 8)}`,
+            password: "customer-password-123",
+            emailVerificationToken: crypto.randomUUID(),
+        })));
+
+        expect(registrations).toHaveLength(2);
+        for (const registration of registrations) {
+            expect(registration).toMatchObject({
+                kind: "registered",
+                accountId: expect.stringMatching(/^\d+$/),
+                customerId: expect.stringMatching(/^\d+$/),
+            });
+        }
+    });
 });

@@ -98,6 +98,10 @@ authorization V2 ở T23.
   `created_at`/`updated_at`; không dùng tên Sequelize mặc định.
 - Mọi command ghi nhiều aggregate dùng `inTransaction`; service domain quyết định lock order,
   isolation và invariant, không dồn logic này vào controller hoặc registry.
+- Write path có thể dùng `retryV2Transaction` cho lỗi cạnh tranh nhất thời của MySQL
+  (`ER_LOCK_DEADLOCK`, `ER_LOCK_WAIT_TIMEOUT`) với backoff hữu hạn. Không retry validation,
+  unique/integrity error hoặc lỗi hạ tầng khác; các lỗi đó phải trả về kết quả nghiệp vụ hoặc lỗi
+  rõ ràng ở use-case sở hữu chúng.
 - Không import registry V2 vào runtime legacy trong Phase 2. Registry chỉ được nối vào app sau
   khi module compatibility tương ứng đã có integration test trên V2.
 
@@ -113,6 +117,11 @@ Kết quả đăng nhập hiện chỉ là core đã có unit test và MySQL `_t
 JWT middleware và frontend vẫn giữ compatibility legacy cho đến khi slice tương ứng hoàn chỉnh;
 không bật riêng registry V2 trong runtime legacy.
 
+Own-profile V2 dùng aggregate `Account` + `Customer` trong cùng transaction. Khách chỉ sửa được
+`username`, `full_name`, `phone` từ DB-derived customer context; email không có trong patch vì
+mọi thay đổi email phải mở challenge OTP mới. Xung đột username được trả bằng kết quả nghiệp vụ,
+không lộ lỗi SQL; uniqueness phone chưa được thêm vì DBML revision 4 không khai báo ràng buộc đó.
+
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
 có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt
@@ -127,6 +136,10 @@ $env:V2_MIGRATIONS_ENABLED = "true"
 $env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
 npm run test --workspace @sales/api -- tests/integration/databaseV2IdentityAccess.test.ts
 ```
+
+Khi `RUN_DATABASE_V2_TESTS=true`, Vitest tự chạy tuần tự các file trong API suite. Lý do là các
+test V2 dùng chung một database `_test` đã được guard và test seed cố ý thay đổi audit timestamp
+để chứng minh idempotency. Unit/API suite không bật V2 vẫn chạy song song như bình thường.
 
 Migration catalog tạo `reviews.order_item_id` và index của nó ở T07. Foreign key
 `fk_reviews_order_item` được tạo ở T08, sau khi `order_items` tồn tại; đây là dependency có chủ
