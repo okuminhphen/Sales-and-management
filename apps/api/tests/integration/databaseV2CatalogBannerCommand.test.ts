@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { QueryTypes, Sequelize } from "sequelize";
 import { env } from "../../src/config/env.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
@@ -9,12 +9,20 @@ import { CatalogBannerCommandV2Service } from "../../src/modules/catalog/applica
 import { SequelizeCatalogBannerCommandV2Repository } from "../../src/modules/catalog/persistence/catalog-banner-command-v2.repository.js";
 import { CatalogBannerQueryV2Service } from "../../src/modules/catalog/application/catalog-banner-query-v2.service.js";
 import { SequelizeCatalogBannerV2Repository } from "../../src/modules/catalog/persistence/catalog-banner-query-v2.repository.js";
+import type { CatalogMediaProvider } from "../../src/modules/catalog/application/catalog-media-provider.js";
+import type { CatalogMediaCleanupLog } from "../../src/modules/catalog/application/catalog-media-cleanup-log.js";
 
 const runDatabaseV2Tests = process.env.RUN_DATABASE_V2_TESTS === "true";
 const manager: V2AccessContext = {
     accountId: "1", customerId: null, employeeId: null,
     grants: [{ roleCode: "SUPER_ADMIN", scope: { type: "global" }, permissions: ["catalog.manage.global"] }],
 };
+
+const fakeMediaProvider: CatalogMediaProvider = {
+    upload: vi.fn(async () => ({ kind: "uploaded" as const, asset: { url: "https://example.com/img.jpg", publicId: "banners/fake" } })),
+    delete: vi.fn(async () => ({ kind: "deleted" as const })),
+};
+const fakeCleanupLog: CatalogMediaCleanupLog = { recordFailedCleanup: vi.fn() };
 
 describe.skipIf(!runDatabaseV2Tests)("Database V2 banner metadata commands on MySQL", () => {
     let sequelize: Sequelize;
@@ -34,6 +42,8 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 banner metadata commands on My
         const persistence = createSalesV2Persistence(sequelize);
         command = new CatalogBannerCommandV2Service({
             repository: new SequelizeCatalogBannerCommandV2Repository(persistence),
+            mediaProvider: fakeMediaProvider,
+            cleanupLog: fakeCleanupLog,
         });
         query = new CatalogBannerQueryV2Service({
             repository: new SequelizeCatalogBannerV2Repository(persistence),
@@ -69,21 +79,25 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 banner metadata commands on My
         expect(remaining).toHaveLength(0);
     });
 
-    it("refuses to delete a row with external media so the asset cannot be orphaned", async () => {
+    it("deletes a row with external media and schedules cleanup via fake provider", async () => {
         const name = `Media banner ${crypto.randomUUID()}`;
+        const publicId = `banners/${crypto.randomUUID()}`;
         await sequelize.query(
             "INSERT INTO banners (name, image, target_url, status, created_at, updated_at) VALUES (?, JSON_OBJECT('url', ?, 'publicId', ?), NULL, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
-            { replacements: [name, "https://res.cloudinary.com/demo/image/upload/banner.jpg", `banners/${crypto.randomUUID()}`] },
+            { replacements: [name, "https://res.cloudinary.com/demo/image/upload/banner.jpg", publicId] },
         );
         const rows = await sequelize.query<{ id: string }>(
             "SELECT id FROM banners WHERE name = ?", { replacements: [name], type: QueryTypes.SELECT },
         );
         const id = rows[0]?.id;
         expect(id).toBeDefined();
-        expect(await command.delete(manager, id)).toEqual({ kind: "media_cleanup_required" });
+        // Now delete should succeed and attempt media cleanup via fake provider.
+        expect(await command.delete(manager, id)).toEqual({ kind: "deleted" });
         const remaining = await sequelize.query<{ id: string }>(
             "SELECT id FROM banners WHERE id = ?", { replacements: [id], type: QueryTypes.SELECT },
         );
-        expect(remaining).toHaveLength(1);
+        expect(remaining).toHaveLength(0);
+        // Fake provider should have been asked to delete the old publicId.
+        expect(fakeMediaProvider.delete).toHaveBeenCalledWith(publicId);
     });
 });

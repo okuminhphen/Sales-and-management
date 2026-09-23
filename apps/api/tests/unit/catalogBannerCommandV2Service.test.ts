@@ -3,8 +3,11 @@ import type { V2AccessContext } from "../../src/modules/identity-access/applicat
 import {
     CatalogBannerCommandV2Service,
     type CatalogBannerCommandV2Repository,
+    type CatalogBannerCommandDependencies,
 } from "../../src/modules/catalog/application/catalog-banner-command-v2.service.js";
 import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
+import type { CatalogMediaProvider } from "../../src/modules/catalog/application/catalog-media-provider.js";
+import type { CatalogMediaCleanupLog } from "../../src/modules/catalog/application/catalog-media-cleanup-log.js";
 
 const manager: V2AccessContext = {
     accountId: "1", customerId: null, employeeId: null,
@@ -14,16 +17,30 @@ const customer: V2AccessContext = {
     accountId: "3", customerId: "4", employeeId: null, grants: [],
 };
 
+const noopMedia: CatalogMediaProvider = {
+    upload: vi.fn(async () => ({ kind: "uploaded" as const, asset: { url: "https://example.com/img.jpg", publicId: "banners/test" } })),
+    delete: vi.fn(async () => ({ kind: "deleted" as const })),
+};
+const noopCleanup: CatalogMediaCleanupLog = { recordFailedCleanup: vi.fn() };
+
 const repository = (): CatalogBannerCommandV2Repository => ({
     create: vi.fn(async () => ({ kind: "created" as const, bannerId: serializeEntityId("7") })),
     update: vi.fn(async () => ({ kind: "updated" as const })),
     deleteWithoutMedia: vi.fn(async () => ({ kind: "deleted" as const })),
+    setImage: vi.fn(async () => ({ kind: "image_set" as const, oldPublicId: null })),
+    clearImageAndDelete: vi.fn(async () => ({ kind: "deleted" as const, oldPublicId: null })),
+});
+
+const deps = (repo: CatalogBannerCommandV2Repository): CatalogBannerCommandDependencies => ({
+    repository: repo,
+    mediaProvider: noopMedia,
+    cleanupLog: noopCleanup,
 });
 
 describe("CatalogBannerCommandV2Service", () => {
     it("requires a DB-derived global catalog permission before mutation", async () => {
         const data = repository();
-        const service = new CatalogBannerCommandV2Service({ repository: data });
+        const service = new CatalogBannerCommandV2Service(deps(data));
         await expect(service.create(customer, { name: "Sale", status: "active" }))
             .resolves.toEqual({ kind: "forbidden" });
         await expect(service.create({ ...customer, grants: [{
@@ -37,12 +54,12 @@ describe("CatalogBannerCommandV2Service", () => {
             .resolves.toEqual({ kind: "forbidden" });
         expect(data.create).not.toHaveBeenCalled();
         expect(data.update).not.toHaveBeenCalled();
-        expect(data.deleteWithoutMedia).not.toHaveBeenCalled();
+        expect(data.clearImageAndDelete).not.toHaveBeenCalled();
     });
 
     it("normalizes metadata and never accepts an untrusted media object", async () => {
         const data = repository();
-        const service = new CatalogBannerCommandV2Service({ repository: data });
+        const service = new CatalogBannerCommandV2Service(deps(data));
         await expect(service.create(manager, {
             name: "  Khuyến mãi  ", status: "draft", targetUrl: " /products ",
         })).resolves.toEqual({ kind: "created", bannerId: "7" });
@@ -56,7 +73,7 @@ describe("CatalogBannerCommandV2Service", () => {
 
     it("rejects invalid names, target URLs, status, IDs and empty updates", async () => {
         const data = repository();
-        const service = new CatalogBannerCommandV2Service({ repository: data });
+        const service = new CatalogBannerCommandV2Service(deps(data));
         for (const input of [
             { name: "", status: "active" },
             { name: "x".repeat(256), status: "active" },
@@ -73,16 +90,16 @@ describe("CatalogBannerCommandV2Service", () => {
             .resolves.toEqual({ kind: "invalid_banner" });
         expect(data.create).not.toHaveBeenCalled();
         expect(data.update).not.toHaveBeenCalled();
-        expect(data.deleteWithoutMedia).not.toHaveBeenCalled();
+        expect(data.clearImageAndDelete).not.toHaveBeenCalled();
     });
 
     it("propagates safe business outcomes but hides database details", async () => {
         const data = repository();
-        vi.mocked(data.deleteWithoutMedia).mockResolvedValueOnce({ kind: "media_cleanup_required" });
+        vi.mocked(data.clearImageAndDelete).mockResolvedValueOnce({ kind: "banner_not_found" });
         vi.mocked(data.update).mockResolvedValueOnce({ kind: "banner_not_found" });
         vi.mocked(data.create).mockRejectedValueOnce(new Error("SQL detail"));
-        const service = new CatalogBannerCommandV2Service({ repository: data });
-        await expect(service.delete(manager, "7")).resolves.toEqual({ kind: "media_cleanup_required" });
+        const service = new CatalogBannerCommandV2Service(deps(data));
+        await expect(service.delete(manager, "7")).resolves.toEqual({ kind: "banner_not_found" });
         await expect(service.update(manager, "7", { name: "Sale" }))
             .resolves.toEqual({ kind: "banner_not_found" });
         await expect(service.create(manager, { name: "Sale", status: "active" }))
