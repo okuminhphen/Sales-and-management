@@ -36,6 +36,12 @@ const matchesEntityId = (actual: string | null, expected: string): boolean => {
 export const hasPermission = (context: V2AccessContext, permission: string): boolean =>
     context.grants.some((grant) => grant.permissions.includes(permission));
 
+/** Global operations must never be authorized by a branch-scoped grant. */
+export const hasGlobalPermission = (context: V2AccessContext, permission: string): boolean =>
+    context.grants.some(
+        (grant) => grant.scope.type === "global" && grant.permissions.includes(permission),
+    );
+
 /** A customer role is ownership-scoped, even when its role assignment is GLOBAL. */
 export const canAccessCustomer = (
     context: V2AccessContext,

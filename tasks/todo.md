@@ -118,6 +118,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     DB-derived access context, username uniqueness mapping và MySQL integration. HTTP endpoint
     vẫn chờ auth/middleware V2 được nối vào app compatibility, không trộn với legacy numeric ID.
 - [ ] T25 — Role/permission/admin management endpoints V2.
+  - Tiến độ: core Role/Permission V2 đã có global-scope authorization, immutable seeded roles,
+    atomic replace permission mapping, chặn xóa role đang được gán và MySQL integration; HTTP
+    route vẫn chờ composition runtime V2, không mount vào legacy app.
 - [ ] T26 — Employee và branch endpoints V2.
 - [ ] T27 — Category/product/size/variant endpoints V2.
 - [ ] T28 — Cart/review/banner endpoints V2.

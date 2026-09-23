@@ -6,6 +6,7 @@ import {
 import {
     canAccessCustomer,
     canAccessBranch,
+    hasGlobalPermission,
     type V2AccessContext,
 } from "../../src/modules/identity-access/application/access-context.js";
 
@@ -59,6 +60,28 @@ describe("V2 access tokens and authorization helpers", () => {
         expect(canAccessCustomer(customerContext, "9007199254740994")).toBe(true);
         expect(canAccessCustomer(customerContext, "9007199254740995")).toBe(false);
         expect(canAccessBranch(customerContext, "9007199254740995", "order.read.branch")).toBe(false);
+    });
+
+    it("requires a global assignment for global administrative permissions", () => {
+        const branchOnlyContext: V2AccessContext = {
+            accountId: "9007199254740993",
+            customerId: null,
+            employeeId: "9007199254740994",
+            grants: [{
+                roleCode: "BRANCH_MANAGER",
+                scope: { type: "branch", branchId: "9007199254740995" },
+                permissions: ["role.manage.global"],
+            }],
+        };
+
+        expect(hasGlobalPermission(branchOnlyContext, "role.manage.global")).toBe(false);
+        expect(hasGlobalPermission({
+            ...branchOnlyContext,
+            grants: [{
+                ...branchOnlyContext.grants[0]!,
+                scope: { type: "global" },
+            }],
+        }, "role.manage.global")).toBe(true);
     });
 
     it("allows a branch-scoped grant only for its branch and matching permission", () => {

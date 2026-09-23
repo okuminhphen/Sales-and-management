@@ -128,6 +128,14 @@ Own-profile V2 dùng aggregate `Account` + `Customer` trong cùng transaction. K
 mọi thay đổi email phải mở challenge OTP mới. Xung đột username được trả bằng kết quả nghiệp vụ,
 không lộ lỗi SQL; uniqueness phone chưa được thêm vì DBML revision 4 không khai báo ràng buộc đó.
 
+Role/permission V2 có application service và MySQL repository riêng. Đọc danh mục cần
+`role.read.global`; tạo/sửa/xóa role cần `role.manage.global` trên **grant global** — grant cấp
+branch không bao giờ có thể quản trị RBAC toàn hệ thống. Role nền do seed (`CUSTOMER`, các role
+nhân viên, `BRANCH_MANAGER`, `SUPER_ADMIN`) là bất biến qua API; thay đổi baseline phải đi qua
+revision seed/migration được review. Role custom luôn tạo với permission không trùng lặp và mapping
+được thay thế trong một transaction; role đã có `account_roles` không được xóa. Đây mới là core
+V2, chưa mount route vào runtime legacy để không trộn JWT/ID legacy với hợp đồng V2.
+
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
 có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt
