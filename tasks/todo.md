@@ -45,9 +45,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Acceptance: amount/idempotency/snapshot/unique constraints đúng DBML.
   - Verify: valid/invalid money and duplicate-key integration tests.
   - Result: migration `0003-commerce` tạo 11 bảng và FK `reviews.order_item_id`; 2 unit tests và 6 MySQL 8.4 integration tests PASS (DECIMAL, snapshot, cart/voucher/payment constraints, idempotency). API typecheck/build và full suite PASS.
-- [ ] T09 — Baseline shipment/return/refund.
+- [x] T09 — Baseline shipment/return/refund.
   - Acceptance: shipment, event, return item và refund constraints đúng DBML.
   - Verify: focused integration tests.
+  - Result: migration `0004-fulfillment` tạo 5 bảng/14 FK; 2 unit tests và 4 MySQL 8.4 integration tests PASS cho snapshot người nhận, dedup shipment event/provider, số lượng hàng trả và refund. API typecheck/build, full suite 146 pass và DBML validator PASS.
 - [ ] T10 — Baseline inventory/stock/transfer.
   - Acceptance: balance/reservation/movement và transfer constraints/indexes đúng DBML.
   - Verify: XOR/quantity/FK integration tests.
