@@ -184,6 +184,12 @@ rồi `id DESC` (20/100). JSON media được dùng chung helper với product: 
 `http/https`; URL đích chỉ giữ lại đường dẫn nội bộ bắt đầu bằng `/` hoặc `http/https`, không nhận
 `//` hay protocol lạ. Banner write/xoá Cloudinary, DTO/route compatibility và audit chưa chuyển.
 
+Cart read core V2 chỉ lấy customer từ access context đã kiểm tra với DB, query `carts`/`cart_items`
+theo ownership, phân trang theo `cart_items.id` (20/100) và trả `base_price` hiện tại dưới dạng
+DECIMAL string. Product/variant inactive vẫn xuất hiện trong giỏ với `catalogActive=false` để khách
+nhìn thấy và xử lý. Đọc giỏ không tạo row mới, không xác nhận stock hoặc giữ hàng; checkout phải
+kiểm tra lại giá và inventory trong transaction riêng. Cart mutation và HTTP compatibility còn lại.
+
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
 có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt
