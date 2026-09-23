@@ -87,12 +87,20 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 branch aggregate on MySQL", ()
             kind: "branch",
             branch: { address: "3 Updated Integration Street" },
         });
-        await expect(service.list(actor)).resolves.toMatchObject({
-            kind: "branches",
-            page: {
-                branches: expect.arrayContaining([expect.objectContaining({ id: created.branch.id, code })]),
-                limit: 20,
-            },
-        });
+        // The shared _test database retains rows from prior runs; the new branch
+        // need not be on the first page of a code-sorted directory.
+        const firstPage = await service.list(actor);
+        expect(firstPage).toMatchObject({ kind: "branches", page: { limit: 20 } });
+        if (firstPage.kind !== "branches") return;
+        const pages = [firstPage.page];
+        for (let page = 2; page <= firstPage.page.totalPages; page += 1) {
+            const result = await service.list(actor, { page });
+            expect(result.kind).toBe("branches");
+            if (result.kind !== "branches") return;
+            pages.push(result.page);
+        }
+        expect(pages.flatMap((page) => page.branches)).toEqual(
+            expect.arrayContaining([expect.objectContaining({ id: created.branch.id, code })]),
+        );
     });
 });
