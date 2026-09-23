@@ -6,6 +6,8 @@ import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { ReviewCommandV2Service } from "../../src/modules/review/application/review-command-v2.service.js";
 import { SequelizeReviewCommandV2Repository } from "../../src/modules/review/persistence/review-command-v2.repository.js";
+import { ReviewQueryV2Service } from "../../src/modules/review/application/review-query-v2.service.js";
+import { SequelizeReviewQueryV2Repository } from "../../src/modules/review/persistence/review-query-v2.repository.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 const runDatabaseV2Tests = process.env.RUN_DATABASE_V2_TESTS === "true";
@@ -13,6 +15,7 @@ const runDatabaseV2Tests = process.env.RUN_DATABASE_V2_TESTS === "true";
 describe.skipIf(!runDatabaseV2Tests)("Database V2 review command on MySQL", () => {
     let sequelize: Sequelize;
     let service: ReviewCommandV2Service;
+    let queryService: ReviewQueryV2Service;
     let owner: V2AccessContext;
     let other: V2AccessContext;
     let productId: string;
@@ -35,6 +38,9 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 review command on MySQL", () =
         await sequelize.authenticate();
         service = new ReviewCommandV2Service({
             repository: new SequelizeReviewCommandV2Repository(createSalesV2Persistence(sequelize)),
+        });
+        queryService = new ReviewQueryV2Service({
+            repository: new SequelizeReviewQueryV2Repository(createSalesV2Persistence(sequelize)),
         });
     });
 
@@ -87,5 +93,36 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 review command on MySQL", () =
         })).resolves.toEqual({ kind: "product_not_found" });
         const count = await one<{ total: number }>("SELECT COUNT(*) AS total FROM reviews WHERE customer_id = ?", [owner.customerId]);
         expect(Number(count.total)).toBe(0);
+    });
+
+    it("lists reviews in stable pages without leaking customer or account IDs", async () => {
+        const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+        await sequelize.query(
+            `INSERT INTO accounts
+             (email, username, password_hash, status, email_verified_at, last_login_at, created_at, updated_at)
+             VALUES (?, ?, NULL, 'active', UTC_TIMESTAMP(3), NULL, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`,
+            { replacements: [`review-${suffix}@example.test`, `reviewer_${suffix}`] },
+        );
+        const accountId = (await one<{ id: string }>("SELECT id FROM accounts WHERE email = ?", [`review-${suffix}@example.test`])).id;
+        await sequelize.query("UPDATE customers SET account_id = ? WHERE id = ?", {
+            replacements: [accountId, owner.customerId],
+        });
+        await service.create(owner, { productId, rating: 5, comment: "Một" });
+        await service.create(other, { productId, rating: 4, comment: "Hai" });
+        await sequelize.query("UPDATE reviews SET created_at = '2026-01-01 00:00:00' WHERE product_id = ?", {
+            replacements: [productId],
+        });
+        const first = await queryService.listByProductId(productId, { page: 1, limit: 1 });
+        const second = await queryService.listByProductId(productId, { page: 2, limit: 1 });
+        expect(first).toMatchObject({ kind: "reviews", page: { totalItems: 2, totalPages: 2, limit: 1 } });
+        expect(second).toMatchObject({ kind: "reviews", page: { totalItems: 2, totalPages: 2, limit: 1 } });
+        if (first.kind !== "reviews" || second.kind !== "reviews") return;
+        expect(BigInt(first.page.items[0]!.id)).toBeGreaterThan(BigInt(second.page.items[0]!.id));
+        expect([first.page.items[0]?.authorUsername, second.page.items[0]?.authorUsername])
+            .toEqual(expect.arrayContaining([`reviewer_${suffix}`, null]));
+        expect(first.page.items[0]).not.toHaveProperty("customerId");
+        expect(first.page.items[0]).not.toHaveProperty("accountId");
+        const empty = await queryService.listByProductId("9223372036854775807");
+        expect(empty).toMatchObject({ kind: "reviews", page: { items: [], totalItems: 0 } });
     });
 });

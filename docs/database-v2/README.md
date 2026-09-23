@@ -208,8 +208,11 @@ Review create core V2 nhận product ID dạng BIGINT string, rating nguyên t�
 Repository dùng `uq_reviews_customer_product` để chặn trùng cả khi hai request gửi đồng thời;
 duplicate được map thành `already_reviewed`, product không tồn tại thành `product_not_found`,
 các lỗi hạ tầng trả kết quả chung không lộ SQL. Review không tự gắn `order_item_id` hoặc suy
-diễn “đã mua” vì spec V2 chưa có policy verified-purchase. Public review listing và HTTP
-DTO/route compatibility vẫn thuộc T28, core này chưa mount vào legacy app.
+diễn “đã mua” vì spec V2 chưa có policy verified-purchase. Review listing core V2 phân trang
+(20 mặc định, tối đa 100), sắp theo `created_at DESC, id DESC`, trả rating/comment/createdAt
+và username nếu account liên kết còn có username; không trả customer/account ID, email hoặc
+full name. Product chưa có review trả trang rỗng. HTTP DTO/route compatibility vẫn thuộc T28,
+hai core này chưa mount vào legacy app.
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
