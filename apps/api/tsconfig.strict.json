@@ -44,6 +44,7 @@
     "tests/unit/databaseScalarContracts.test.ts",
     "tests/unit/databaseV2TargetGuard.test.ts",
     "tests/unit/databaseV2IdentityAccessMigration.test.ts",
+    "tests/unit/databaseV2CatalogMigration.test.ts",
     "tests/unit/dtoContracts.test.ts",
     "tests/unit/env.test.ts",
     "tests/unit/sizeService.test.ts",

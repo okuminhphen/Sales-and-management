@@ -66,3 +66,7 @@ $env:V2_MIGRATIONS_ENABLED = "true"
 $env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
 npm run test --workspace @sales/api -- tests/integration/databaseV2IdentityAccess.test.ts
 ```
+
+Migration catalog tạo `reviews.order_item_id` và index của nó ở T07. Foreign key
+`fk_reviews_order_item` được tạo ở T08, sau khi `order_items` tồn tại; đây là dependency có chủ
+đích, không phải bỏ sót constraint.

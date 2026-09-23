@@ -37,9 +37,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Acceptance: 9 bảng đầu, indexes/checks và vòng FK branch-manager tạo đúng thứ tự.
   - Verify: static schema test + focused MySQL test.
   - Result: migration `0001-identity-access` tạo 9 bảng và FK vòng sau `employees`; static test và MySQL 8.4 integration test PASS, rerun chỉ có một metadata row.
-- [ ] T07 — Baseline catalog.
+- [x] T07 — Baseline catalog.
   - Acceptance: categories/products/sizes/variants/reviews/banners đúng DBML.
   - Verify: static schema test + focused MySQL test.
+  - Result: migration `0002-catalog` tạo 6 bảng, FK catalog có thể tạo ngay, checks về giá/rating và index trọng yếu; `reviews.order_item_id` được index và FK defer có chủ đích sang T08.
 - [ ] T08 — Baseline cart/order/voucher/payment.
   - Acceptance: amount/idempotency/snapshot/unique constraints đúng DBML.
   - Verify: valid/invalid money and duplicate-key integration tests.
