@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
     EmployeeV2Service,
+    type EmployeePage,
     type EmployeeProfile,
     type EmployeeV2Repository,
 } from "../../src/modules/identity-access/application/employee-v2.service.js";
@@ -36,9 +37,17 @@ const globalManager: V2AccessContext = {
     }],
 };
 
+const employeePage: EmployeePage = {
+    employees: [employee],
+    page: 1,
+    limit: 20,
+    totalItems: 1,
+    totalPages: 1,
+};
+
 const createRepository = (): EmployeeV2Repository => ({
     findById: vi.fn(async () => employee),
-    listByBranch: vi.fn(async () => [employee]),
+    listByBranch: vi.fn(async () => employeePage),
     createEmployee: vi.fn(async () => employee),
     updateEmployee: vi.fn(async () => employee),
     deactivateEmployee: vi.fn(async () => employee),
@@ -57,10 +66,13 @@ describe("EmployeeV2Service", () => {
             }],
         };
 
-        await expect(service.listByBranch(branchManager, branchId)).resolves.toEqual({
+        await expect(service.listByBranch(branchManager, branchId, { page: 2, limit: 50 })).resolves.toEqual({
             kind: "employees",
-            employees: [employee],
+            page: employeePage,
         });
+        await expect(service.listByBranch(branchManager, branchId, { page: "2", limit: 20 }))
+            .resolves.toEqual({ kind: "invalid_employee_input" });
+        expect(repository.listByBranch).toHaveBeenLastCalledWith(branchId, { page: 2, limit: 50 });
         vi.mocked(repository.findById).mockResolvedValueOnce({
             ...employee,
             branchId: serializeEntityId("9007199254740996"),

@@ -143,7 +143,8 @@ Employee V2 dùng `BIGINT` string và tiền `DECIMAL(19,4)` string xuyên suố
 không có hard-delete. Mọi update/deactivate khóa row và đối chiếu lại branch đã được authorize
 trong transaction để không bị TOCTOU khi sau này có employee transfer. `status`, account-linking
 và chuyển branch không nhận từ patch thường vì chúng ảnh hưởng authorization/audit; các thao tác
-đó sẽ là use-case riêng. Core đã có MySQL
+đó sẽ là use-case riêng. Directory theo branch phân trang stable bằng `code` (mặc định 20, tối đa
+100) để không trả PII không giới hạn. Core đã có MySQL
 integration, còn HTTP route vẫn chờ V2 composition root thay vì gắn nhầm vào middleware legacy.
 
 Branch V2 hiện có core tạo/đọc/cập nhật với `BIGINT` string, mã branch bất biến và quyền ghi

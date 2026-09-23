@@ -110,7 +110,10 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 employee aggregate on MySQL", 
         });
         await expect(service.listByBranch(actor, branchRows[0]!.id)).resolves.toMatchObject({
             kind: "employees",
-            employees: [expect.objectContaining({ id: created.employee.id, status: "inactive" })],
+            page: {
+                limit: 20,
+                employees: [expect.objectContaining({ id: created.employee.id, status: "inactive" })],
+            },
         });
     });
 });

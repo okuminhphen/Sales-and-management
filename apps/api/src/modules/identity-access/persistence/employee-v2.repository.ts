@@ -7,7 +7,9 @@ import {
 import type {
     EmployeeMutationResult,
     EmployeePatch,
+    EmployeePage,
     EmployeeProfile,
+    EmployeeListQuery,
     EmployeeV2Repository,
     NewEmployee,
 } from "../application/employee-v2.service.js";
@@ -72,9 +74,20 @@ export class SequelizeEmployeeV2Repository implements EmployeeV2Repository {
         return employee ? toEmployeeProfile(employee.dataValues) : null;
     }
 
-    async listByBranch(branchId: string): Promise<readonly EmployeeProfile[]> {
-        const employees = await this.employee.findAll({ where: { branchId }, order: [["code", "ASC"]] });
-        return employees.map((employee) => toEmployeeProfile(employee.dataValues));
+    async listByBranch(branchId: string, query: EmployeeListQuery): Promise<EmployeePage> {
+        const { count, rows } = await this.employee.findAndCountAll({
+            where: { branchId },
+            offset: (query.page - 1) * query.limit,
+            limit: query.limit,
+            order: [["code", "ASC"]],
+        });
+        return {
+            employees: rows.map((employee) => toEmployeeProfile(employee.dataValues)),
+            page: query.page,
+            limit: query.limit,
+            totalItems: count,
+            totalPages: Math.ceil(count / query.limit),
+        };
     }
 
     async createEmployee(input: NewEmployee): Promise<EmployeeMutationResult> {

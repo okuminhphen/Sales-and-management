@@ -55,6 +55,24 @@ export type NewEmployee = {
 
 export type EmployeePatch = Omit<Partial<NewEmployee>, "branchId" | "accountId" | "code">;
 
+export type EmployeeListInput = {
+    page?: unknown;
+    limit?: unknown;
+};
+
+export type EmployeeListQuery = {
+    page: number;
+    limit: number;
+};
+
+export type EmployeePage = {
+    employees: readonly EmployeeProfile[];
+    page: number;
+    limit: number;
+    totalItems: number;
+    totalPages: number;
+};
+
 export type EmployeeMutationResult =
     | EmployeeProfile
     | { kind: "employee_not_found" }
@@ -65,7 +83,7 @@ export type EmployeeMutationResult =
 
 export interface EmployeeV2Repository {
     findById: (employeeId: EntityId) => Promise<EmployeeProfile | null>;
-    listByBranch: (branchId: EntityId) => Promise<readonly EmployeeProfile[]>;
+    listByBranch: (branchId: EntityId, query: EmployeeListQuery) => Promise<EmployeePage>;
     createEmployee: (input: NewEmployee) => Promise<EmployeeMutationResult>;
     updateEmployee: (
         employeeId: EntityId,
@@ -78,7 +96,7 @@ export interface EmployeeV2Repository {
 export type EmployeeResult =
     | { kind: "forbidden" }
     | { kind: "invalid_employee_input" }
-    | { kind: "employees"; employees: readonly EmployeeProfile[] }
+    | { kind: "employees"; page: EmployeePage }
     | { kind: "created"; employee: EmployeeProfile }
     | { kind: "updated"; employee: EmployeeProfile }
     | { kind: "deactivated"; employee: EmployeeProfile }
@@ -91,6 +109,9 @@ export type EmployeeResult =
 
 const employeeCodePattern = /^[A-Z][A-Z0-9_-]{2,49}$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const defaultPage = 1;
+const defaultLimit = 20;
+const maximumLimit = 100;
 
 const normalizeText = (value: unknown, maximumLength: number): string | undefined =>
     typeof value === "string" && value.trim().length > 0 && value.trim().length <= maximumLength
@@ -137,6 +158,17 @@ const parseEntityId = (value: unknown): EntityId | null => {
     }
 };
 
+const normalizeListQuery = (input: EmployeeListInput | undefined): EmployeeListQuery | null => {
+    const page = input?.page === undefined ? defaultPage : input.page;
+    const limit = input?.limit === undefined ? defaultLimit : input.limit;
+    if (
+        typeof page !== "number" || typeof limit !== "number"
+        || !Number.isInteger(page) || !Number.isInteger(limit)
+        || page <= 0 || limit <= 0 || limit > maximumLimit
+    ) return null;
+    return { page, limit };
+};
+
 const canManageEmployeesAt = (context: V2AccessContext, branchId: EntityId): boolean =>
     canAccessBranch(context, branchId, "employee.manage.branch")
     || canAccessBranch(context, branchId, "employee.manage.global");
@@ -154,12 +186,18 @@ const isEmployee = (result: EmployeeMutationResult): result is EmployeeProfile =
 export class EmployeeV2Service {
     constructor(private readonly dependencies: { repository: EmployeeV2Repository }) {}
 
-    async listByBranch(context: V2AccessContext, rawBranchId: string): Promise<EmployeeResult> {
+    async listByBranch(
+        context: V2AccessContext,
+        rawBranchId: string,
+        input?: EmployeeListInput,
+    ): Promise<EmployeeResult> {
         const branchId = parseEntityId(rawBranchId);
         if (!branchId) return { kind: "invalid_employee_input" };
         if (!canReadEmployeesAt(context, branchId)) return { kind: "forbidden" };
+        const query = normalizeListQuery(input);
+        if (!query) return { kind: "invalid_employee_input" };
         try {
-            return { kind: "employees", employees: await this.dependencies.repository.listByBranch(branchId) };
+            return { kind: "employees", page: await this.dependencies.repository.listByBranch(branchId, query) };
         } catch {
             return { kind: "employee_unavailable" };
         }
