@@ -15,9 +15,11 @@ const customer: V2AccessContext = {
 
 const setup = () => {
     const submittedBy: string[] = [];
+    const submittedProducts: string[] = [];
     const command = new ReviewCommandV2Service({ repository: {
-        create: async (customerId) => {
+        create: async (customerId, productId) => {
             submittedBy.push(customerId);
+            submittedProducts.push(productId);
             return { kind: "created", reviewId: serializeEntityId("9") };
         },
     } });
@@ -37,7 +39,7 @@ const setup = () => {
     const app = express();
     app.use(express.json());
     app.use("/api/v1", createReviewV2Router({ auth, command, query }));
-    return { app, submittedBy };
+    return { app, submittedBy, submittedProducts };
 };
 
 describe("Review V2 HTTP compatibility", () => {
@@ -71,7 +73,20 @@ describe("Review V2 HTTP compatibility", () => {
         await request(app).get("/api/v1/review/product/900719925474099300000").expect(400);
         await request(app).post("/api/v1/review/add")
             .set("Authorization", "Bearer signed-token")
+            .send({ productId: 9007199254740992, rating: 5, comment: "Tốt" }).expect(400);
+        await request(app).post("/api/v1/review/add")
+            .set("Authorization", "Bearer signed-token")
             .send({ productId: 7, rating: 6, comment: "Tốt" }).expect(400);
         expect(submittedBy).toEqual([]);
+    });
+
+    it("accepts a legacy safe numeric product ID and converts it to the V2 string contract", async () => {
+        const { app, submittedBy, submittedProducts } = setup();
+        const response = await request(app).post("/api/v1/review/add")
+            .set("Authorization", "Bearer signed-token")
+            .send({ productId: 7, rating: 5, comment: "Tốt" });
+        expect(response.status).toBe(201);
+        expect(submittedBy).toEqual(["3"]);
+        expect(submittedProducts).toEqual(["7"]);
     });
 });
