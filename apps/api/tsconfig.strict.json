@@ -47,6 +47,7 @@
     "tests/unit/databaseV2CatalogMigration.test.ts",
     "tests/unit/databaseV2CommerceMigration.test.ts",
     "tests/unit/databaseV2FulfillmentMigration.test.ts",
+    "tests/unit/databaseV2InventoryMigration.test.ts",
     "tests/unit/dtoContracts.test.ts",
     "tests/unit/env.test.ts",
     "tests/unit/sizeService.test.ts",
