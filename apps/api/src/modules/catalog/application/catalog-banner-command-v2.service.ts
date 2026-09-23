@@ -1,5 +1,6 @@
-import { hasGlobalPermission, type V2AccessContext } from "../../identity-access/application/access-context.js";
+import type { V2AccessContext } from "../../identity-access/application/access-context.js";
 import { serializeEntityId, type EntityId } from "../../../shared/contracts/database-scalars.js";
+import { canManageBanners } from "./catalog-banner-policy.js";
 import { toCatalogPublicTargetUrl } from "./catalog-public-media.js";
 
 export type BannerStatus = "draft" | "active" | "inactive";
@@ -84,9 +85,6 @@ const normalizePatch = (input: unknown): BannerMetadataPatch | null => {
 const parseId = (input: unknown): EntityId | null => {
     try { return serializeEntityId(input); } catch { return null; }
 };
-
-const canManageBanners = (context: V2AccessContext): boolean =>
-    context.employeeId !== null && hasGlobalPermission(context, "catalog.manage.global");
 
 export class CatalogBannerCommandV2Service {
     constructor(private readonly dependencies: { repository: CatalogBannerCommandV2Repository }) {}

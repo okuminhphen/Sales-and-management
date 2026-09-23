@@ -7,7 +7,7 @@ import {
 import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 
 const manager: V2AccessContext = {
-    accountId: "1", customerId: null, employeeId: "2",
+    accountId: "1", customerId: null, employeeId: null,
     grants: [{ roleCode: "SUPER_ADMIN", scope: { type: "global" }, permissions: ["catalog.manage.global"] }],
 };
 const customer: V2AccessContext = {
@@ -26,7 +26,9 @@ describe("CatalogBannerCommandV2Service", () => {
         const service = new CatalogBannerCommandV2Service({ repository: data });
         await expect(service.create(customer, { name: "Sale", status: "active" }))
             .resolves.toEqual({ kind: "forbidden" });
-        await expect(service.create({ ...customer, grants: manager.grants }, {
+        await expect(service.create({ ...customer, grants: [{
+            roleCode: "CUSTOMER", scope: { type: "global" }, permissions: ["catalog.manage.global"],
+        }] }, {
             name: "Sale", status: "active",
         })).resolves.toEqual({ kind: "forbidden" });
         await expect(service.update(customer, "7", { name: "Sale" }))

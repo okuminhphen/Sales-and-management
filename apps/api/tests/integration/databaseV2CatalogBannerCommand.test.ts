@@ -12,7 +12,7 @@ import { SequelizeCatalogBannerV2Repository } from "../../src/modules/catalog/pe
 
 const runDatabaseV2Tests = process.env.RUN_DATABASE_V2_TESTS === "true";
 const manager: V2AccessContext = {
-    accountId: "1", customerId: null, employeeId: "2",
+    accountId: "1", customerId: null, employeeId: null,
     grants: [{ roleCode: "SUPER_ADMIN", scope: { type: "global" }, permissions: ["catalog.manage.global"] }],
 };
 
