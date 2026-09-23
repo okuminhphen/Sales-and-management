@@ -85,7 +85,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 - [x] T16 — `catalog` typed models/associations.
   - Acceptance: category/product/variant/size/review/banner khớp schema.
   - Verify: schema-model contract test.
-- [ ] T17 — `inventory-transfer` typed models/associations.
+- [x] T17 — `inventory-transfer` typed models/associations.
   - Acceptance: inventory/reservation/movement/stock/transfer model ownership rõ.
   - Verify: schema-model contract test.
 - [ ] T18 — `commerce` + `payment-fulfillment` typed models/associations.
