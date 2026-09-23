@@ -3,35 +3,15 @@ import {
     serializeDatabaseEntityId,
     serializeMoney,
 } from "../../../shared/contracts/database-scalars.js";
+import { toCatalogPublicImages } from "../application/catalog-public-media.js";
 import type {
     CatalogProduct,
-    CatalogProductImage,
     CatalogProductListQuery,
     CatalogProductPage,
     CatalogProductV2Repository,
 } from "../application/catalog-product-query-v2.service.js";
 import type { ProductAttributes } from "./catalog.models.js";
 import { getCatalogModel, type CatalogModel } from "./catalog.model-types.js";
-
-const isSafePublicImageUrl = (value: unknown): value is string => {
-    if (typeof value !== "string" || value.length === 0 || value.length > 2_000) return false;
-    try {
-        const url = new URL(value);
-        return url.protocol === "https:" || url.protocol === "http:";
-    } catch {
-        return false;
-    }
-};
-
-const toPublicImages = (images: ProductAttributes["images"]): readonly CatalogProductImage[] => {
-    if (!Array.isArray(images)) return [];
-    return images.flatMap((image) => {
-        if (!image || typeof image !== "object" || Array.isArray(image)) return [];
-        if (!Object.prototype.hasOwnProperty.call(image, "url")) return [];
-        const url = (image as Record<string, unknown>).url;
-        return isSafePublicImageUrl(url) ? [{ url }] : [];
-    });
-};
 
 const toCatalogProduct = (product: ProductAttributes): CatalogProduct => ({
     id: serializeDatabaseEntityId(product.id),
@@ -40,7 +20,7 @@ const toCatalogProduct = (product: ProductAttributes): CatalogProduct => ({
     slug: product.slug,
     description: product.description,
     basePrice: serializeMoney(product.basePrice),
-    images: toPublicImages(product.images),
+    images: toCatalogPublicImages(product.images),
 });
 
 /** MySQL adapter for public active product reads; inventory is intentionally not joined here. */

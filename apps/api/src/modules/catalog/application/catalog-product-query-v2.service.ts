@@ -3,10 +3,9 @@ import {
     type EntityId,
     type Money,
 } from "../../../shared/contracts/database-scalars.js";
+import type { CatalogPublicImage } from "./catalog-public-media.js";
 
-export type CatalogProductImage = {
-    url: string;
-};
+export type CatalogProductImage = CatalogPublicImage;
 
 export type CatalogProduct = {
     id: EntityId;

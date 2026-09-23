@@ -140,6 +140,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     SKU/stock. Mutation category/product/size/variant, DTO/route compatibility, policy chống
     cycle category và contract availability theo branch vẫn chưa chuyển.
 - [ ] T28 — Cart/review/banner endpoints V2.
+  - Tiến độ: banner directory public chỉ đọc `active`, có pagination deterministic (20/100),
+    serialize BIGINT, lọc JSON ảnh và target URL trước khi ra client; có unit/MySQL `_test`
+    integration. Banner write/xoá media, cart/review, DTO/route compatibility và audit chưa chuyển.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.

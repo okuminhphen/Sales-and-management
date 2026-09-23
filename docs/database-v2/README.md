@@ -179,6 +179,11 @@ Variant directory theo product cũng chỉ public read: chỉ parent product và
 stock hay availability; product không tồn tại/draft/inactive đều cho cùng kết quả không tìm thấy.
 Đây là lựa chọn variant để cart V2 tham chiếu đúng aggregate, không phải phép xác nhận giữ hàng.
 
+Banner directory V2 chỉ public các banner `active`, phân trang deterministic theo `created_at DESC`,
+rồi `id DESC` (20/100). JSON media được dùng chung helper với product: chỉ trả `{ url }` hợp lệ
+`http/https`; URL đích chỉ giữ lại đường dẫn nội bộ bắt đầu bằng `/` hoặc `http/https`, không nhận
+`//` hay protocol lạ. Banner write/xoá Cloudinary, DTO/route compatibility và audit chưa chuyển.
+
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
 có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt
