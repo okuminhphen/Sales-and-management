@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     mysql_host: str = Field(default="localhost", alias="MYSQL_HOST")
     mysql_port: int = Field(default=3306, alias="MYSQL_PORT")
-    mysql_database: str = Field(default="btl_tmdt", alias="MYSQL_DATABASE")
+    mysql_database: str = Field(default="sale_and_managements_db", alias="MYSQL_DATABASE")
     mysql_user: str = Field(default="root", alias="MYSQL_USER")
     mysql_password: str = Field(default="", alias="MYSQL_PASSWORD")
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")

@@ -4,6 +4,7 @@ import {
     connectRedis,
     disconnectRedis,
 } from "../../src/config/redis.js";
+import { env } from "../../src/config/env.js";
 import { sequelize } from "../../src/models/index.js";
 import { SequelizeSizeRepository } from "../../src/modules/size/sequelize-size.repository.js";
 
@@ -14,6 +15,11 @@ describe.skipIf(!runInfrastructureTests)("MySQL and Redis integration", () => {
     const queryInterface = sequelize.getQueryInterface();
 
     beforeAll(async () => {
+        if (!env.MYSQL_DATABASE.endsWith("_test")) {
+            throw new Error(
+                "Infrastructure tests require an isolated MYSQL_DATABASE ending in _test"
+            );
+        }
         await sequelize.authenticate();
         await queryInterface.dropTable("Size").catch(() => undefined);
         await queryInterface.createTable("Size", {

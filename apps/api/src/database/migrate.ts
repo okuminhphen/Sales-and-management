@@ -1,8 +1,10 @@
+import { readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Sequelize, type QueryInterface } from "sequelize";
 import { SequelizeStorage, Umzug } from "umzug";
 import { sequelize } from "../models/index.js";
+import { orderMigrationFileNames } from "./migration-order.js";
 
 interface MigrationModule {
     up: (queryInterface: QueryInterface, sequelizeLibrary: typeof Sequelize) => Promise<void>;
@@ -12,26 +14,32 @@ interface MigrationModule {
 const currentFile = fileURLToPath(import.meta.url);
 const runtimeExtension = path.extname(currentFile);
 const migrationsDirectory = fileURLToPath(new URL("../migrations", import.meta.url));
+const migrationFileNames = orderMigrationFileNames(
+    readdirSync(migrationsDirectory).filter(
+        (fileName) => path.extname(fileName) === runtimeExtension,
+    ),
+);
+
+const migrations = migrationFileNames.map((fileName) => {
+    const migrationPath = path.join(migrationsDirectory, fileName);
+    const storedName = `${path.parse(fileName).name}.cjs`;
+    const load = async (): Promise<MigrationModule> => {
+        const loaded = await import(pathToFileURL(migrationPath).href);
+        return loaded.default as MigrationModule;
+    };
+
+    return {
+        name: storedName,
+        path: migrationPath,
+        up: async ({ context }: { context: QueryInterface }) =>
+            (await load()).up(context, Sequelize),
+        down: async ({ context }: { context: QueryInterface }) =>
+            (await load()).down(context, Sequelize),
+    };
+});
 
 const migrator = new Umzug<QueryInterface>({
-    migrations: {
-        glob: path
-            .join(migrationsDirectory, `*${runtimeExtension}`)
-            .replaceAll("\\", "/"),
-        resolve: ({ name, path: migrationPath, context }) => {
-            if (!migrationPath) throw new Error(`Migration path missing for ${name}`);
-            const storedName = `${path.parse(name).name}.cjs`;
-            const load = async (): Promise<MigrationModule> => {
-                const loaded = await import(pathToFileURL(migrationPath).href);
-                return loaded.default as MigrationModule;
-            };
-            return {
-                name: storedName,
-                up: async () => (await load()).up(context, Sequelize),
-                down: async () => (await load()).down(context, Sequelize),
-            };
-        },
-    },
+    migrations,
     context: sequelize.getQueryInterface(),
     storage: new SequelizeStorage({ sequelize }),
     logger: console,
