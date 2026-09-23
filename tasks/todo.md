@@ -133,7 +133,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Tiến độ: category directory V2 public đã có pagination theo code (20/100), BIGINT-safe
     serialization và unit/MySQL `_test` integration. Size directory public đã có pagination
     deterministic theo `name`, rồi `id` (20/100), serialization BIGINT và unit/MySQL `_test`
-    integration; nó không trả hoặc suy diễn tồn kho. Mutation category/product/size/variant,
+    integration; nó không trả hoặc suy diễn tồn kho. Product directory/detail public hiện chỉ
+    đọc `active`, phân trang `created_at DESC`/`id DESC`, trả DECIMAL/ID an toàn và lọc image JSON
+    thành URL `http/https`; nó không join inventory. Mutation category/product/size/variant,
     DTO/route compatibility, policy chống cycle category và contract availability theo branch
     vẫn chưa chuyển.
 - [ ] T28 — Cart/review/banner endpoints V2.

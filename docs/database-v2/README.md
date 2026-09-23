@@ -167,6 +167,13 @@ Size directory V2 cũng chỉ-đọc public, phân trang deterministic theo `nam
 tồn kho: API này không suy diễn khả dụng của product variant hay số lượng theo chi nhánh. Tạo/sửa
 size và product/variant vẫn chờ DTO, write-policy và contract tồn kho V2 được duyệt.
 
+Product directory/detail V2 chỉ đọc các product `active`, phân trang deterministic theo
+`created_at DESC`, rồi `id DESC` (mặc định 20, tối đa 100). `base_price` DECIMAL được trả dưới
+dạng chuỗi canonical, không qua JavaScript `number`; ID cũng luôn là string. Image JSON cũ được
+lọc thành mảng `{ url }` chỉ chấp nhận URL `http/https`, không trả `publicId` hay JSON lỗi. Product
+read không join `inventories`: khả dụng/tồn kho là dữ liệu theo `(branch, product_variant)` và sẽ
+thuộc contract inventory riêng. Product write, variant, DTO/route compatibility vẫn chưa chuyển.
+
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
 có thể thay đổi và sẽ tạo rủi ro account takeover. Cần revision DBML/migration được phê duyệt
