@@ -38,6 +38,8 @@ Kế hoạch triển khai chi tiết được theo dõi tại [`tasks/plan.md`](
 - ID entity dùng `BIGINT`; role/permission ID dùng `INTEGER`.
 - Tiền dùng `DECIMAL(19,4)` và không đi qua JavaScript `Number`.
 - API serialize `BIGINT` thành string; contract public hiện tại được giữ tương thích khi có thể.
+- Public input vẫn cấm ID dạng `Number`. Adapter MySQL chỉ được phép đổi `Number` auto-increment
+  sang string khi nó là safe integer; ID không an toàn phải fail-closed để không mất precision.
 
 Không chỉnh trực tiếp schema đích mà không cập nhật revision, checksum/manifest, ADR liên quan và
 các test bảo vệ schema.
@@ -135,6 +137,12 @@ nhân viên, `BRANCH_MANAGER`, `SUPER_ADMIN`) là bất biến qua API; thay đ�
 revision seed/migration được review. Role custom luôn tạo với permission không trùng lặp và mapping
 được thay thế trong một transaction; role đã có `account_roles` không được xóa. Đây mới là core
 V2, chưa mount route vào runtime legacy để không trộn JWT/ID legacy với hợp đồng V2.
+
+Employee V2 dùng `BIGINT` string và tiền `DECIMAL(19,4)` string xuyên suốt service. Nhân viên
+được tạo/đọc/cập nhật/deactivate theo branch scope (`employee.*.branch`) hoặc global manager;
+không có hard-delete. `status`, account-linking và chuyển branch không nhận từ patch thường vì
+chúng ảnh hưởng authorization/audit; các thao tác đó sẽ là use-case riêng. Core đã có MySQL
+integration, còn HTTP route vẫn chờ V2 composition root thay vì gắn nhầm vào middleware legacy.
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim

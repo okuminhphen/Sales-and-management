@@ -60,6 +60,7 @@
     "tests/unit/customerProfileV2Service.test.ts",
     "tests/unit/backofficeAuthV2Service.test.ts",
     "tests/unit/roleManagementV2Service.test.ts",
+    "tests/unit/employeeV2Service.test.ts",
     "tests/unit/sizeService.test.ts",
     "tests/unit/v2AccessToken.test.ts",
     "tests/unit/v2Seed.test.ts",
@@ -78,6 +79,7 @@
     "tests/integration/databaseV2CustomerProfile.test.ts",
     "tests/integration/databaseV2BackofficeAuth.test.ts",
     "tests/integration/databaseV2RoleManagement.test.ts",
+    "tests/integration/databaseV2Employee.test.ts",
     "tests/integration/sizeRoutes.test.ts"
   ]
 }

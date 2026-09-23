@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     ScalarContractError,
+    serializeDatabaseEntityId,
     serializeEntityId,
     serializeMoney,
 } from "../../src/shared/contracts/database-scalars.js";
@@ -30,6 +31,13 @@ describe("Database V2 scalar contracts", () => {
         it("rejects values outside signed MySQL BIGINT range", () => {
             expect(() => serializeEntityId("9223372036854775808")).toThrowError(
                 expect.objectContaining({ code: "ENTITY_ID_OUT_OF_RANGE" }),
+            );
+        });
+
+        it("only permits a safe Number when it originated at the database adapter boundary", () => {
+            expect(serializeDatabaseEntityId(42)).toBe("42");
+            expect(() => serializeDatabaseEntityId(Number.MAX_SAFE_INTEGER + 1)).toThrow(
+                ScalarContractError,
             );
         });
     });

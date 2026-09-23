@@ -66,6 +66,24 @@ export function serializeEntityId(value: unknown): EntityId {
 }
 
 /**
+ * Adapter-only boundary for values returned by MySQL drivers. mysql2 may emit
+ * a safe BIGINT auto-increment value as a Number, while public inputs must
+ * still reject Number to prevent precision loss before this boundary.
+ */
+export function serializeDatabaseEntityId(value: unknown): EntityId {
+    if (typeof value === "number") {
+        if (!Number.isSafeInteger(value) || value <= 0) {
+            throw new ScalarContractError(
+                "ENTITY_ID_OUT_OF_RANGE",
+                "Database entity ID must be a positive safe integer or a decimal string.",
+            );
+        }
+        return serializeEntityId(BigInt(value));
+    }
+    return serializeEntityId(value);
+}
+
+/**
  * Serializes non-negative DECIMAL(19,4) money as a canonical string.
  * Numeric input is rejected so precision cannot be lost before this boundary.
  */
