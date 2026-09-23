@@ -131,8 +131,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     là slice tiếp theo vì có audit/scope semantics riêng; chưa mount vào legacy app.
 - [ ] T27 — Category/product/size/variant endpoints V2.
   - Tiến độ: category directory V2 public đã có pagination theo code (20/100), BIGINT-safe
-    serialization và unit/MySQL `_test` integration. Mutation category, product/size/variant,
-    DTO/route compatibility và policy chống cycle category vẫn chưa chuyển.
+    serialization và unit/MySQL `_test` integration. Size directory public đã có pagination
+    deterministic theo `name`, rồi `id` (20/100), serialization BIGINT và unit/MySQL `_test`
+    integration; nó không trả hoặc suy diễn tồn kho. Mutation category/product/size/variant,
+    DTO/route compatibility, policy chống cycle category và contract availability theo branch
+    vẫn chưa chuyển.
 - [ ] T28 — Cart/review/banner endpoints V2.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
 - [ ] T30 — Stock request service V2.
