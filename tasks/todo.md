@@ -239,7 +239,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     Cursor tránh bị payment chưa rõ ở đầu hàng đợi chặn hold khác; runner
     độc lập có explicit flag, chưa bật trên API legacy. Unit + MySQL `_test`
     kiểm chứng pending/processing/completed, failed, confirmed order, replay.
-  - [ ] Dispatch/receipt và movement typed transfer/return, HTTP compatibility
+  - [x] Dispatch nguồn nội bộ: T31 đổi receipt sang `in_transit` trong cùng
+    transaction rồi gọi primitive theo transfer item và actor đã xác thực.
+    Khóa request → receipt → item → inventory → holds; giảm stock, consume
+    hold và append movement typed `transfer_receipt_item_id` một lần. MySQL
+    `_test` kiểm chứng replay sau completed, key conflict, rollback và hai
+    dispatch đồng thời; chưa nối HTTP hoặc tăng kho đích.
+  - [ ] Receipt và movement typed transfer đích/return, HTTP compatibility
     và tích hợp atomic checkout còn chờ; T29 chưa hoàn tất.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.

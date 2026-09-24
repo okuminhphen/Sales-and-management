@@ -399,6 +399,12 @@ hold confirmed không expiry và không giảm stock. Repository nhận transact
 approval use-case; MySQL `_test` đã kiểm tra rollback, idempotency và cạnh tranh
 đơn vị cuối. Dispatch mới là lúc giảm kho nguồn và ghi movement; nhận hàng đủ
 điều kiện bán mới tăng kho đích, nên hai bước này còn chờ T31.
+Primitive dispatch nguồn đã có cho T31: sau khi use-case chủ quản chuyển
+receipt sang `in_transit` trong cùng transaction, nó consume hold đã confirm,
+giảm stock nguồn và ghi movement có FK `transfer_receipt_item_id`, actor và
+idempotency key. Replay sau khi receipt hoàn tất không trừ kho lần hai; MySQL
+`_test` đã kiểm tra rollback, key conflict và dispatch đồng thời. Chưa mount
+route hoặc tự chuyển receipt; phần nhận hàng/tăng kho đích vẫn chờ.
 
 Trong các primitive giữ hàng, retry deadlock chỉ bao trùm transaction do repository
 tự mở. Nếu checkout/approval cấp transaction, service trả lại lỗi deadlock/lock timeout
