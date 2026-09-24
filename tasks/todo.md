@@ -194,8 +194,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     read tính active holds, unique idempotency key và retry deadlock bounded.
     Test MySQL `_test` kiểm tra replay, key mismatch, order đã hủy và hai checkout
     tranh đơn vị cuối. Chưa nối vào T33 checkout transaction; không mount HTTP.
-  - [ ] Stock movement/ledger, release/consume/confirm reservation, transfer
-    reservation, HTTP compatibility và tích hợp atomic checkout còn chờ; T29 chưa hoàn tất.
+  - [x] Lát cắt manual stock adjustment nội bộ: quyền theo branch/global grant,
+    lock inventory và active holds, cập nhật stock + append-only movement cùng
+    transaction, idempotency replay/conflict; MySQL `_test` kiểm chứng mở tồn,
+    không giảm dưới hold và hai điều chỉnh cạnh tranh. Chưa mount HTTP.
+  - [ ] Release/consume/confirm reservation, transfer reservation, movement có
+    typed source cho order/transfer/return, HTTP compatibility và tích hợp
+    atomic checkout còn chờ; T29 chưa hoàn tất.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.
 - [ ] T32 — Voucher claim/release service V2.
