@@ -503,6 +503,13 @@ Nếu credit thất bại, toàn bộ bước duyệt rollback; `RECEIPT_RECORDE
 vẫn còn để xử lý tiếp. Test MySQL `_test` đã kiểm tra phân tách hai actor,
 duyệt đồng thời, mất toàn bộ và rollback khi stock đích vượt giới hạn.
 
+Read model T31 trả danh sách/chi tiết phiếu gồm branch, item, variant,
+product/size và history. Grant `transfer.read.branch` scoped theo branch nguồn
+hoặc đích được lọc ở SQL trước phân trang; grant global xem tất cả. Chi tiết
+ngoài scope trả not found, mọi BIGINT ID trong payload là string. Route V2 vẫn
+chưa mount; Web hiện còn giả định ID number và luồng complete không body, cần
+được cập nhật ở T39 trước cutover T40.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

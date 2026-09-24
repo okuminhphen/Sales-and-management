@@ -299,8 +299,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     chuyển `completed` và ghi history; hàng nhận bằng 0 không tạo movement 0.
     Concurrent approve chỉ một lần thành công; lỗi credit rollback toàn bộ bước
     duyệt nhưng vẫn giữ bản ghi chênh lệch để xử lý tiếp.
-  - [ ] Còn lại: query và route/DTO compatibility; chạy full regression trước
-    khi đóng T31. Runtime legacy chưa mount V2.
+  - [x] Query list/detail: lọc source/destination branch ngay trong SQL trước
+    khi phân trang theo grant `transfer.read.branch` DB-derived; global grant
+    xem tất cả. Trả BIGINT ID dạng string, nested item/variant/product/size,
+    lịch sử actor và thời gian. Detail ngoài scope ẩn như not found. Unit và
+    MySQL `_test` đã đạt.
+  - [ ] Còn lại: route/DTO compatibility và full regression trước khi đóng T31.
+    Runtime legacy chưa mount V2.
 - [ ] T32 — Voucher claim/release service V2.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
 - [ ] T34 — Payment method/payment/webhook V2.

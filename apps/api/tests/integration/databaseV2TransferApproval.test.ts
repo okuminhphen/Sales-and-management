@@ -11,6 +11,7 @@ import { TransferDispatchV2Service } from "../../src/modules/inventory-transfer/
 import { TransferClosureV2Service } from "../../src/modules/inventory-transfer/application/transfer-closure-v2.service.js";
 import { TransferReceiptV2Service } from "../../src/modules/inventory-transfer/application/transfer-receipt-v2.service.js";
 import { TransferDiscrepancyV2Service } from "../../src/modules/inventory-transfer/application/transfer-discrepancy-v2.service.js";
+import { TransferQueryV2Service } from "../../src/modules/inventory-transfer/application/transfer-query-v2.service.js";
 import { SequelizeStockRequestV2Repository } from "../../src/modules/inventory-transfer/persistence/stock-request-v2.repository.js";
 import { SequelizeStockRequestDecisionV2Repository } from "../../src/modules/inventory-transfer/persistence/stock-request-decision-v2.repository.js";
 import { SequelizeTransferApprovalV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-approval-v2.repository.js";
@@ -18,6 +19,7 @@ import { SequelizeTransferDispatchV2Repository } from "../../src/modules/invento
 import { SequelizeTransferClosureV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-closure-v2.repository.js";
 import { SequelizeTransferReceiptV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-receipt-v2.repository.js";
 import { SequelizeTransferDiscrepancyV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-discrepancy-v2.repository.js";
+import { SequelizeTransferQueryV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-query-v2.repository.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 transfer approval on MySQL", () => {
@@ -69,6 +71,37 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
             requesterId, transferId: approvedRequest.transferReceiptId,
             supplierId, variantId, productId, token };
     };
+
+    it("queries branch-visible transfers with BIGINT-safe nested items and audit history", async () => {
+        const data = await fixture(5);
+        const query = new TransferQueryV2Service({ repository: new SequelizeTransferQueryV2Repository(
+            createSalesV2Persistence(sequelize)) });
+        const requester: V2AccessContext = { ...data.admin, grants: [{ roleCode: "BRANCH_MANAGER",
+            scope: { type: "branch", branchId: data.requesterId }, permissions: ["transfer.read.branch"] }] };
+        const outsider: V2AccessContext = { ...data.admin, grants: [{ roleCode: "BRANCH_MANAGER",
+            scope: { type: "branch", branchId: "9223372036854775807" }, permissions: ["transfer.read.branch"] }] };
+        const listed = await query.list(requester, 1, 20);
+        expect(listed.kind).toBe("receipts");
+        if (listed.kind !== "receipts") return;
+        expect(listed.page.totalItems).toBe(1);
+        expect(listed.page.receipts.map((receipt) => receipt.id)).toEqual([data.transferId]);
+        expect(listed.page.receipts[0]).toMatchObject({
+            id: data.transferId, fromBranchId: data.supplierId, toBranchId: data.requesterId,
+            status: "pending", fromBranch: { name: "Supplier" }, toBranch: { name: "Requester" },
+            items: [{ productSizeId: data.variantId, quantity: 3, receivedQuantity: 0,
+                productSize: { product: { name: "Transfer" } } }],
+            histories: [{ action: "CREATED" }],
+        });
+        expect(await query.detail(outsider, data.transferId)).toEqual({ kind: "transfer_not_found" });
+        const hidden = await query.list(outsider, 1, 20);
+        expect(hidden.kind === "receipts" ? hidden.page.totalItems : -1).toBe(0);
+        const detail = await query.detail(requester, data.transferId);
+        expect(detail.kind).toBe("receipt");
+        if (detail.kind === "receipt") {
+            expect(detail.receipt.id).toBe(data.transferId);
+            expect(detail.receipt.histories[0]?.performedBy).toBe(data.admin.accountId);
+        }
+    });
 
     it("reserves stock on approval without debiting source or crediting destination, and rejects replay", async () => {
         const data = await fixture(5);
