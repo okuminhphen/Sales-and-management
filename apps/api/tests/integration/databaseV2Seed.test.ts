@@ -24,16 +24,16 @@ type SeedAuditRow = {
 const readSeedAuditState = async (sequelize: Sequelize): Promise<readonly (readonly SeedAuditRow[])[]> =>
     Promise.all([
         sequelize.query<SeedAuditRow>(
-            "SELECT code, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') AS updatedAt FROM roles ORDER BY code",
-            { type: QueryTypes.SELECT },
+            "SELECT code, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') AS updatedAt FROM roles WHERE code IN (?) ORDER BY code",
+            { replacements: [ROLE_SEEDS.map((role) => role.code)], type: QueryTypes.SELECT },
         ),
         sequelize.query<SeedAuditRow>(
-            "SELECT code, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') AS updatedAt FROM permissions ORDER BY code",
-            { type: QueryTypes.SELECT },
+            "SELECT code, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') AS updatedAt FROM permissions WHERE code IN (?) ORDER BY code",
+            { replacements: [PERMISSION_SEEDS.map((permission) => permission.code)], type: QueryTypes.SELECT },
         ),
         sequelize.query<SeedAuditRow>(
-            "SELECT code, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') AS updatedAt FROM payment_methods ORDER BY code",
-            { type: QueryTypes.SELECT },
+            "SELECT code, DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s.%f') AS updatedAt FROM payment_methods WHERE code IN (?) ORDER BY code",
+            { replacements: [PAYMENT_METHOD_SEEDS.map((method) => method.code)], type: QueryTypes.SELECT },
         ),
     ]);
 
@@ -65,9 +65,12 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 seed on MySQL", () => {
             { replacements: [superAdmin.email], type: QueryTypes.SELECT },
         );
         await Promise.all([
-            sequelize.query("UPDATE roles SET updated_at = '2000-01-01 00:00:00'"),
-            sequelize.query("UPDATE permissions SET updated_at = '2000-01-01 00:00:00'"),
-            sequelize.query("UPDATE payment_methods SET updated_at = '2000-01-01 00:00:00'"),
+            sequelize.query("UPDATE roles SET updated_at = '2000-01-01 00:00:00' WHERE code IN (?)",
+                { replacements: [ROLE_SEEDS.map((role) => role.code)] }),
+            sequelize.query("UPDATE permissions SET updated_at = '2000-01-01 00:00:00' WHERE code IN (?)",
+                { replacements: [PERMISSION_SEEDS.map((permission) => permission.code)] }),
+            sequelize.query("UPDATE payment_methods SET updated_at = '2000-01-01 00:00:00' WHERE code IN (?)",
+                { replacements: [PAYMENT_METHOD_SEEDS.map((method) => method.code)] }),
         ]);
         const firstSeedAuditState = await readSeedAuditState(sequelize);
         await seedV2Database(sequelize, superAdmin);
@@ -76,8 +79,12 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 seed on MySQL", () => {
             sequelize.query<{ total: number }>("SELECT COUNT(*) AS total FROM roles WHERE code IN (?)", {
                 replacements: [ROLE_SEEDS.map((role) => role.code)], type: QueryTypes.SELECT,
             }),
-            sequelize.query<{ total: number }>("SELECT COUNT(*) AS total FROM permissions", { type: QueryTypes.SELECT }),
-            sequelize.query<{ total: number }>("SELECT COUNT(*) AS total FROM payment_methods", { type: QueryTypes.SELECT }),
+            sequelize.query<{ total: number }>("SELECT COUNT(*) AS total FROM permissions WHERE code IN (?)", {
+                replacements: [PERMISSION_SEEDS.map((permission) => permission.code)], type: QueryTypes.SELECT,
+            }),
+            sequelize.query<{ total: number }>("SELECT COUNT(*) AS total FROM payment_methods WHERE code IN (?)", {
+                replacements: [PAYMENT_METHOD_SEEDS.map((method) => method.code)], type: QueryTypes.SELECT,
+            }),
             sequelize.query<{ total: number; passwordHash: string; status: string }>("SELECT COUNT(*) AS total, MAX(password_hash) AS passwordHash, MAX(status) AS status FROM accounts WHERE email = ?", {
                 replacements: [superAdmin.email], type: QueryTypes.SELECT,
             }),
