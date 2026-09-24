@@ -185,6 +185,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     với MySQL V2 bật đạt 334 tests; 6 skip thuộc Redis/infra follow-up, không thuộc T28.
     `git diff --check` đạt. Cloudinary thật chưa được gọi; test dùng fake provider.
 - [ ] T29 — Inventory balance/reservation/movement service V2.
+  - [x] Lát cắt balance read: MySQL V2 tính `available = stock - SUM(active holds)`;
+    hold đã quá hạn nhưng chưa được worker release vẫn bị trừ. Unit test và MySQL
+    `_test` integration test đã kiểm chứng; read model không dùng thay kiểm tra
+    dưới inventory row lock khi checkout/điều chuyển.
+  - [ ] Reservation, stock movement/ledger, idempotency, concurrency và HTTP
+    compatibility còn chờ các lát cắt kế tiếp; T29 chưa hoàn tất.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.
 - [ ] T32 — Voucher claim/release service V2.
