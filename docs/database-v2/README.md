@@ -479,7 +479,7 @@ kho đích vẫn không đổi. Nếu item sau không dispatch được, toàn b
 item trước rollback. Hủy/từ chối chỉ áp dụng trước dispatch; khi đã duyệt thì
 mọi hold được release cùng transaction với trạng thái và history, không cộng
 physical stock vì chưa trừ. Phiếu đang vận chuyển phải qua nhận/đối soát, không
-được dùng cancel/reject. Chưa mount runtime. Ghi nhận và duyệt chênh lệch,
+được dùng cancel/reject. Chưa mount runtime. Duyệt chênh lệch,
 receipt có chênh lệch, query và HTTP vẫn chờ; không coi T31 hoàn thành ở
 checkpoint này.
 
@@ -490,6 +490,12 @@ qua primitive T29 và history được commit. Không nhận đủ item, sai t�
 có mất/hỏng đều fail-closed; mất/hỏng phải qua luồng ghi nhận và duyệt hai
 người ở lát cắt kế tiếp. Endpoint legacy `complete` không có body **không thể**
 được xem là bằng chứng đã nhận đủ và chưa được mount sang V2.
+
+Với chênh lệch, bước ghi nhận riêng yêu cầu quantity của toàn bộ item và note
+bắt buộc. Một transaction lưu received/lost/non-sellable và history
+`RECEIPT_RECORDED` với account người ghi; state vẫn `in_transit`, đích chưa tăng
+stock. Row lock và history ngăn ghi nhận hai lần. Bước duyệt bởi người khác
+và nhập hàng đủ điều kiện vẫn còn chờ, nên phiếu này chưa thể hoàn tất.
 
 ## Giới hạn và kiểm thử chung còn lại
 

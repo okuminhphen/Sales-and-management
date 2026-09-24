@@ -10,12 +10,14 @@ import { TransferApprovalV2Service } from "../../src/modules/inventory-transfer/
 import { TransferDispatchV2Service } from "../../src/modules/inventory-transfer/application/transfer-dispatch-v2.service.js";
 import { TransferClosureV2Service } from "../../src/modules/inventory-transfer/application/transfer-closure-v2.service.js";
 import { TransferReceiptV2Service } from "../../src/modules/inventory-transfer/application/transfer-receipt-v2.service.js";
+import { TransferDiscrepancyV2Service } from "../../src/modules/inventory-transfer/application/transfer-discrepancy-v2.service.js";
 import { SequelizeStockRequestV2Repository } from "../../src/modules/inventory-transfer/persistence/stock-request-v2.repository.js";
 import { SequelizeStockRequestDecisionV2Repository } from "../../src/modules/inventory-transfer/persistence/stock-request-decision-v2.repository.js";
 import { SequelizeTransferApprovalV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-approval-v2.repository.js";
 import { SequelizeTransferDispatchV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-dispatch-v2.repository.js";
 import { SequelizeTransferClosureV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-closure-v2.repository.js";
 import { SequelizeTransferReceiptV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-receipt-v2.repository.js";
+import { SequelizeTransferDiscrepancyV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-discrepancy-v2.repository.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 transfer approval on MySQL", () => {
@@ -51,6 +53,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
         const dispatchService = new TransferDispatchV2Service({ repository: new SequelizeTransferDispatchV2Repository(persistence) });
         const closureService = new TransferClosureV2Service({ repository: new SequelizeTransferClosureV2Repository(persistence) });
         const receiptService = new TransferReceiptV2Service({ repository: new SequelizeTransferReceiptV2Repository(persistence) });
+        const discrepancyService = new TransferDiscrepancyV2Service({ repository: new SequelizeTransferDiscrepancyV2Repository(persistence) });
         const manager: V2AccessContext = { accountId, customerId: null, employeeId: null, grants: [{
             roleCode: "BRANCH_MANAGER", scope: { type: "branch", branchId: requesterId },
             permissions: ["stock_request.manage.branch"],
@@ -62,7 +65,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
         if (created.kind !== "created") throw Error("Request setup failed.");
         const approvedRequest = await decisionService.approve(admin, created.id);
         if (approvedRequest.kind !== "approved") throw Error("Transfer setup failed.");
-        return { admin, transferService, dispatchService, closureService, receiptService,
+        return { admin, transferService, dispatchService, closureService, receiptService, discrepancyService,
             requesterId, transferId: approvedRequest.transferReceiptId,
             supplierId, variantId, productId, token };
     };
@@ -288,5 +291,34 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
              FROM transfer_receipts tr WHERE tr.id = ?`,
             { replacements: [data.variantId, data.transferId], type: QueryTypes.SELECT });
         expect(state[0]).toEqual({ status: "in_transit", destinationCount: "0", movementCount: "0" });
+    });
+
+    it("records loss with actor/note but does not credit sellable stock before separate approval", async () => {
+        const data = await fixture(5);
+        expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
+        expect((await data.dispatchService.dispatch(data.admin, data.transferId)).kind).toBe("dispatched");
+        const items = await sequelize.query<{ id: string }>(
+            "SELECT id FROM transfer_receipt_items WHERE transfer_receipt_id = ?",
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        const input = [{ itemId: items[0].id, receivedQuantity: 2,
+            lostQuantity: 1, nonSellableQuantity: 0 }];
+        const destinationManager: V2AccessContext = { ...data.admin, grants: [{ roleCode: "BRANCH_MANAGER",
+            scope: { type: "branch", branchId: data.requesterId }, permissions: ["transfer.manage.branch"] }] };
+        expect(await data.discrepancyService.record(destinationManager, data.transferId, input, "One item missing"))
+            .toEqual({ kind: "recorded" });
+        expect(await data.discrepancyService.record(destinationManager, data.transferId, input, "Changed story"))
+            .toEqual({ kind: "already_recorded" });
+        const state = await sequelize.query<{ status: string; received: number; lost: number; note: string;
+            recordedBy: string; destinationCount: string }>(
+            `SELECT tr.status, ti.received_quantity AS received, ti.lost_quantity AS lost,
+                    h.note, h.performed_by_account_id AS recordedBy,
+                    (SELECT COUNT(*) FROM inventories i WHERE i.branch_id = tr.to_branch_id
+                     AND i.product_variant_id = ti.product_variant_id) AS destinationCount
+             FROM transfer_receipts tr JOIN transfer_receipt_items ti ON ti.transfer_receipt_id = tr.id
+             JOIN transfer_history h ON h.transfer_receipt_id = tr.id AND h.action = 'RECEIPT_RECORDED'
+             WHERE tr.id = ?`,
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        expect(state[0]).toEqual({ status: "in_transit", received: 2, lost: 1,
+            note: "One item missing", recordedBy: data.admin.accountId, destinationCount: "0" });
     });
 });

@@ -290,7 +290,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     mới chốt; caller khai báo đủ từng item, primitive T29 ghi movement tăng đích
     cùng trạng thái `completed` và history trong transaction. Sai tổng hoặc
     mất/hỏng fail-closed; item sau lỗi rollback toàn bộ credit trước.
-  - [ ] Còn lại: ghi nhận/duyệt chênh lệch và nhận hàng có chênh lệch,
+  - [x] Lát cắt ghi nhận chênh lệch: destination branch/global khai báo đủ
+    số lượng từng item kèm lý do bắt buộc; lưu `RECEIPT_RECORDED` với actor,
+    giữ `in_transit` và không cộng tồn đích. Chỉ ghi một lần dưới row lock.
+  - [ ] Còn lại: duyệt và nhận hàng có chênh lệch bằng actor khác người ghi,
     query và route/DTO compatibility.
 - [ ] T32 — Voucher claim/release service V2.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
