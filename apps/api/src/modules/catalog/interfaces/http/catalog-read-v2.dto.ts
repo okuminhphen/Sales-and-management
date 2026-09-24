@@ -20,3 +20,7 @@ export const categoryUpdateBodyV2 = categoryCreateBodyV2.partial().refine(
     (input) => Object.keys(input).length > 0,
     { message: "At least one field is required" },
 );
+
+export const sizeCreateBodyV2 = z.object({ name: z.string().trim().min(1).max(100) }).strict();
+export const sizeUpdateBodyV2 = sizeCreateBodyV2.extend({ id: entityId });
+export const sizeIdParamsV2 = z.object({ id: entityId });

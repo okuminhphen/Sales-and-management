@@ -273,7 +273,9 @@ không lộ SKU hay số lượng tồn. Dữ liệu ảnh product được lọ
 yêu cầu JWT V2 và grant nội bộ `catalog.manage.global` từ DB. `code`/`slug` tự tạo một lần, giữ
 ổn định khi đổi tên. Việc đổi cha khóa hierarchy trong transaction và từ chối cycle (409); xóa
 category có child/product cũng trả 409. T39 phải cập nhật Web đọc contract mới trước khi router
-này thay thế legacy. Mutation size/product/variant, media product và availability theo branch
+này thay thế legacy. Size mutation giữ legacy path `POST /size/create`, `PUT /size/update`,
+`DELETE /size/delete/:id` nhưng ID là BIGINT string, trả 409 khi trùng tên hoặc còn variant
+tham chiếu; không xóa cascade. Mutation product/variant, media product và availability theo branch
 vẫn là việc T27/T29 tiếp theo.
 
 Test MySQL thật chỉ dùng database `_test`:

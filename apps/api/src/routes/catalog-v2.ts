@@ -15,11 +15,15 @@ import { createCatalogCategoryCommandV2Router } from "../modules/catalog/interfa
 import { createV2AuthMiddleware } from "../modules/identity-access/interfaces/http/v2-auth.middleware.js";
 import { SequelizeV2AccessContextRepository } from "../modules/identity-access/persistence/v2-access-context.repository.js";
 import type { V2HttpAuditWriter } from "../observability/v2-http-audit.js";
+import { CatalogSizeCommandV2Service } from "../modules/catalog/application/catalog-size-command-v2.service.js";
+import { SequelizeCatalogSizeCommandV2Repository } from "../modules/catalog/persistence/catalog-size-command-v2.repository.js";
+import { createCatalogSizeCommandV2Router } from "../modules/catalog/interfaces/http/catalog-size-command-v2.routes.js";
 
 /** Standalone T27 composition; legacy app mounting waits for T38-T44 cutover. */
 export const createCatalogV2Router = (dependencies: { persistence: V2Persistence; audit?: V2HttpAuditWriter }): Router => {
     const { persistence } = dependencies;
     const router = Router();
+    const auth = createV2AuthMiddleware({ accessContexts: new SequelizeV2AccessContextRepository(persistence) });
     router.use(createCatalogReadV2Router({
         categories: new CatalogCategoryQueryV2Service({ repository: new SequelizeCatalogCategoryV2Repository(persistence) }),
         sizes: new CatalogSizeQueryV2Service({ repository: new SequelizeCatalogSizeV2Repository(persistence) }),
@@ -27,8 +31,13 @@ export const createCatalogV2Router = (dependencies: { persistence: V2Persistence
         variants: new CatalogProductVariantQueryV2Service({ repository: new SequelizeCatalogProductVariantV2Repository(persistence) }),
     }));
     router.use(createCatalogCategoryCommandV2Router({
-        auth: createV2AuthMiddleware({ accessContexts: new SequelizeV2AccessContextRepository(persistence) }),
+        auth,
         command: new CatalogCategoryCommandV2Service({ repository: new SequelizeCatalogCategoryCommandV2Repository(persistence) }),
+        audit: dependencies.audit,
+    }));
+    router.use(createCatalogSizeCommandV2Router({
+        auth,
+        command: new CatalogSizeCommandV2Service({ repository: new SequelizeCatalogSizeCommandV2Repository(persistence) }),
         audit: dependencies.audit,
     }));
     return router;

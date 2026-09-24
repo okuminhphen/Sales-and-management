@@ -131,7 +131,8 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     read models với DTO Zod, envelope `EM/EC/DT`, pagination, 400/404/503; test HTTP/MySQL `_test`
     và strict typecheck đạt. Category create/update/delete đã có quyền global từ DB,
     transaction khóa hierarchy chống cycle kể cả hai request đồng thời, cấm xóa khi có
-    child/product; unit/MySQL test. Router chưa mount vào app legacy; size/product/variant write còn thiếu.
+    child/product; unit/MySQL test. Size create/update/delete đã có duplicate-name 409 và
+    FK-in-use 409, unit/MySQL test. Router chưa mount vào app legacy; product/variant write còn thiếu.
     Category directory V2 public đã có pagination theo code (20/100), BIGINT-safe
     serialization và unit/MySQL `_test` integration. Size directory public đã có pagination
     deterministic theo `name`, rồi `id` (20/100), serialization BIGINT và unit/MySQL `_test`
@@ -139,7 +140,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     đọc `active`, phân trang `created_at DESC`/`id DESC`, trả DECIMAL/ID an toàn và lọc image JSON
     thành URL `http/https`; nó không join inventory. Variant directory theo product chỉ trả parent
     và variant `active`, định danh variant/size và tên size theo thứ tự deterministic, không lộ
-    SKU/stock. Mutation size/product/variant, product media và contract availability theo branch
+    SKU/stock. Mutation product/variant, product media và contract availability theo branch
     vẫn chưa chuyển.
 - [ ] T28 — Cart/review/banner endpoints V2.
   - [x] Core banner directory: chỉ đọc `active`, phân trang 20/100, serialize BIGINT,

@@ -147,4 +147,24 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
         );
         expect(rows.filter((row) => row.parentId !== null)).toHaveLength(1);
     });
+
+    it("manages sizes without deleting one referenced by a variant", async () => {
+        const name = `HTTP SIZE MUTATION ${crypto.randomUUID().slice(0, 8)}`;
+        await request(app).post("/api/v1/size/create").send({ name }).expect(401);
+        const created = await request(app).post("/api/v1/size/create")
+            .set("Authorization", adminBearer).send({ name }).expect(200);
+        const id: string = created.body.DT.id;
+        await request(app).post("/api/v1/size/create")
+            .set("Authorization", adminBearer).send({ name }).expect(409);
+        await request(app).put("/api/v1/size/update").set("Authorization", adminBearer)
+            .send({ id, name: `${name} UPDATED` }).expect(200);
+        await request(app).delete(`/api/v1/size/delete/${id}`)
+            .set("Authorization", adminBearer).expect(200);
+        const referenced = await sequelize.query<{ sizeId: string }>(
+            "SELECT size_id AS sizeId FROM product_variants WHERE id = ?",
+            { replacements: [variantId], type: QueryTypes.SELECT },
+        );
+        await request(app).delete(`/api/v1/size/delete/${referenced[0]!.sizeId}`)
+            .set("Authorization", adminBearer).expect(409);
+    });
 });
