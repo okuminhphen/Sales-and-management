@@ -9,14 +9,27 @@ import { SequelizeCatalogSizeV2Repository } from "../modules/catalog/persistence
 import { SequelizeCatalogProductV2Repository } from "../modules/catalog/persistence/catalog-product-query-v2.repository.js";
 import { SequelizeCatalogProductVariantV2Repository } from "../modules/catalog/persistence/catalog-product-variant-query-v2.repository.js";
 import { createCatalogReadV2Router } from "../modules/catalog/interfaces/http/catalog-read-v2.routes.js";
+import { CatalogCategoryCommandV2Service } from "../modules/catalog/application/catalog-category-command-v2.service.js";
+import { SequelizeCatalogCategoryCommandV2Repository } from "../modules/catalog/persistence/catalog-category-command-v2.repository.js";
+import { createCatalogCategoryCommandV2Router } from "../modules/catalog/interfaces/http/catalog-category-command-v2.routes.js";
+import { createV2AuthMiddleware } from "../modules/identity-access/interfaces/http/v2-auth.middleware.js";
+import { SequelizeV2AccessContextRepository } from "../modules/identity-access/persistence/v2-access-context.repository.js";
+import type { V2HttpAuditWriter } from "../observability/v2-http-audit.js";
 
 /** Standalone T27 composition; legacy app mounting waits for T38-T44 cutover. */
-export const createCatalogV2Router = (dependencies: { persistence: V2Persistence }): Router => {
+export const createCatalogV2Router = (dependencies: { persistence: V2Persistence; audit?: V2HttpAuditWriter }): Router => {
     const { persistence } = dependencies;
-    return createCatalogReadV2Router({
+    const router = Router();
+    router.use(createCatalogReadV2Router({
         categories: new CatalogCategoryQueryV2Service({ repository: new SequelizeCatalogCategoryV2Repository(persistence) }),
         sizes: new CatalogSizeQueryV2Service({ repository: new SequelizeCatalogSizeV2Repository(persistence) }),
         products: new CatalogProductQueryV2Service({ repository: new SequelizeCatalogProductV2Repository(persistence) }),
         variants: new CatalogProductVariantQueryV2Service({ repository: new SequelizeCatalogProductVariantV2Repository(persistence) }),
-    });
+    }));
+    router.use(createCatalogCategoryCommandV2Router({
+        auth: createV2AuthMiddleware({ accessContexts: new SequelizeV2AccessContextRepository(persistence) }),
+        command: new CatalogCategoryCommandV2Service({ repository: new SequelizeCatalogCategoryCommandV2Repository(persistence) }),
+        audit: dependencies.audit,
+    }));
+    return router;
 };

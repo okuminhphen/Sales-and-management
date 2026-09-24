@@ -6,7 +6,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { env } from "../../src/config/env.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
+import { seedV2Database } from "../../src/database/v2/seed.js";
 import { createCatalogV2Router } from "../../src/routes/catalog-v2.js";
+import { signV2AccessToken } from "../../src/security/v2-access-token.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP on MySQL", () => {
     let sequelize: Sequelize;
@@ -15,6 +17,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
     let productId: string;
     let inactiveProductId: string;
     let variantId: string;
+    let adminBearer: string;
 
     beforeAll(async () => {
         if (!env.V2_MIGRATIONS_TARGET_DATABASE?.endsWith("_test")) throw new Error("Explicit _test database required");
@@ -25,6 +28,13 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
         });
         await sequelize.authenticate();
         const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+        const adminEmail = `catalog-admin-${suffix}@example.test`;
+        await seedV2Database(sequelize, { email: adminEmail, password: "catalog-admin-password-123" });
+        const adminId = (await sequelize.query<{ id: string }>("SELECT id FROM accounts WHERE email = ?", {
+            replacements: [adminEmail], type: QueryTypes.SELECT,
+        }))[0]!.id;
+        adminBearer = `Bearer ${signV2AccessToken({ version: 2, accountId: adminId,
+            customerId: null, employeeId: null, roleGrants: [{ roleCode: "SUPER_ADMIN", scope: { type: "global" } }] })}`;
         const code = `HTTP_CAT_${suffix}`;
         const slug = `http-cat-${suffix}`;
         const productSlug = `http-product-${suffix}`;
@@ -58,6 +68,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
             replacements: [sku], type: QueryTypes.SELECT,
         }))[0]!.id;
         app = express();
+        app.use(express.json());
         app.use("/api/v1", createCatalogV2Router({ persistence: createSalesV2Persistence(sequelize) }));
     });
     afterAll(async () => { await sequelize?.close(); });
@@ -90,5 +101,50 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
         await request(app).get("/api/v1/product/read?limit=0").expect(400);
         await request(app).get("/api/v1/product/not-a-bigint").expect(400);
         await request(app).get("/api/v1/product/9223372036854775808/variants").expect(400);
+    });
+
+    it("requires a database-backed catalog grant for mutations and rejects hierarchy cycles", async () => {
+        await request(app).post("/api/v1/category/create").send({ name: "No auth" }).expect(401);
+        const root = await request(app).post("/api/v1/category/create")
+            .set("Authorization", adminBearer).send({ name: "HTTP root" }).expect(200);
+        const rootId: string = root.body.DT.id;
+        const child = await request(app).post("/api/v1/category/create")
+            .set("Authorization", adminBearer).send({ name: "HTTP child", parentId: rootId }).expect(200);
+        const childId: string = child.body.DT.id;
+        expect(typeof rootId).toBe("string");
+        await request(app).put(`/api/v1/category/update/${rootId}`).set("Authorization", adminBearer)
+            .send({ parentId: childId }).expect(409);
+        await request(app).put(`/api/v1/category/update/${childId}`).set("Authorization", adminBearer)
+            .send({ parentId: childId }).expect(409);
+        await request(app).delete(`/api/v1/category/delete/${rootId}`)
+            .set("Authorization", adminBearer).expect(409);
+        await request(app).put(`/api/v1/category/update/${childId}`).set("Authorization", adminBearer)
+            .send({ name: "Renamed child" }).expect(200);
+        await request(app).delete(`/api/v1/category/delete/${childId}`)
+            .set("Authorization", adminBearer).expect(200);
+        await request(app).delete(`/api/v1/category/delete/${rootId}`)
+            .set("Authorization", adminBearer).expect(200);
+    });
+
+    it("does not form a cycle when two reparenting requests race", async () => {
+        const left = await request(app).post("/api/v1/category/create")
+            .set("Authorization", adminBearer).send({ name: "Race left" }).expect(200);
+        const right = await request(app).post("/api/v1/category/create")
+            .set("Authorization", adminBearer).send({ name: "Race right" }).expect(200);
+        const leftId: string = left.body.DT.id;
+        const rightId: string = right.body.DT.id;
+        const results = await Promise.all([
+            request(app).put(`/api/v1/category/update/${leftId}`).set("Authorization", adminBearer)
+                .send({ parentId: rightId }),
+            request(app).put(`/api/v1/category/update/${rightId}`).set("Authorization", adminBearer)
+                .send({ parentId: leftId }),
+        ]);
+        expect(results.filter((result) => result.status === 200)).toHaveLength(1);
+        expect(results.map((result) => result.status).sort()).toEqual([200, 409]);
+        const rows = await sequelize.query<{ id: string; parentId: string | null }>(
+            "SELECT id, parent_id AS parentId FROM categories WHERE id IN (?, ?)",
+            { replacements: [leftId, rightId], type: QueryTypes.SELECT },
+        );
+        expect(rows.filter((row) => row.parentId !== null)).toHaveLength(1);
     });
 });

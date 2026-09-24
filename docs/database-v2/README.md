@@ -268,9 +268,13 @@ chứng qua JWT ký thật + MySQL `_test`; chưa mount vào legacy app.
 `GET /product/:productId` và `GET /product/:productId/variants` dưới `/api/v1` khi được mount.
 Directory dùng `page`/`limit` (mặc định 1/20, tối đa 100), trả `pagination` riêng; ID luôn
 là string và `basePrice` là DECIMAL string. Product/variant public chỉ hiện trạng thái `active`,
-không lộ SKU hay số lượng tồn. Dữ liệu ảnh product được lọc URL an toàn. T39 phải cập nhật Web
-đọc contract mới trước khi router này thay thế legacy. Mutation category/size/product/variant,
-chống vòng lặp category, media product và availability theo branch vẫn là việc T27/T29 tiếp theo.
+không lộ SKU hay số lượng tồn. Dữ liệu ảnh product được lọc URL an toàn. Category mutation
+`POST /category/create`, `PUT /category/update/:categoryId`, `DELETE /category/delete/:categoryId`
+yêu cầu JWT V2 và grant nội bộ `catalog.manage.global` từ DB. `code`/`slug` tự tạo một lần, giữ
+ổn định khi đổi tên. Việc đổi cha khóa hierarchy trong transaction và từ chối cycle (409); xóa
+category có child/product cũng trả 409. T39 phải cập nhật Web đọc contract mới trước khi router
+này thay thế legacy. Mutation size/product/variant, media product và availability theo branch
+vẫn là việc T27/T29 tiếp theo.
 
 Test MySQL thật chỉ dùng database `_test`:
 
