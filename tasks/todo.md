@@ -274,6 +274,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     DTO Zod, route/envelope V2 độc lập và HTTP/MySQL tests đã đạt. Giữ/xuất/nhận
     kho thuộc T31; runtime legacy chưa mount cho tới cutover T40.
 - [ ] T31 — Transfer receipt service V2; nối reserve/dispatch/receive/release T29 trong transaction chủ quản. Approval chênh lệch phải do người có quyền, khác người ghi nhận, có note/audit.
+  - [x] Lát cắt approve: chỉ global `transfer.manage.branch` được duyệt;
+    request/transfer đối chiếu chiều branch và tổng variant, khóa theo thứ tự;
+    chuyển `approved` + tạo các hold T29 + history trong một transaction.
+    Thiếu stock ở bất kỳ item nào rollback toàn bộ, không trừ/cộng kho.
+    Unit + MySQL `_test` cho concurrent approve và rollback đã đạt.
+  - [ ] Còn lại: dispatch, ghi nhận/duyệt chênh lệch, complete/receive,
+    reject/cancel/release, query và route/DTO compatibility.
 - [ ] T32 — Voucher claim/release service V2.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
 - [ ] T34 — Payment method/payment/webhook V2.

@@ -466,6 +466,17 @@ dạng string và hiển thị trạng thái `cancelled` thay cho giả định 
 Test MySQL `_test` đã kiểm tra atomic create/update/approve/reject, rollback
 khi variant sai, concurrent approve, auth scope và HTTP DTO.
 
+## Transfer receipt V2 — T31 đang triển khai
+
+Lát cắt duyệt transfer đã nối primitive reserve của T29 trong outer transaction:
+quyền global `transfer.manage.branch`, đối chiếu phiếu yêu cầu/chiều branch và
+tổng quantity theo variant, khóa `stock_request → transfer_receipt → item →
+inventory → reservation`. State `approved`, active hold và history cùng commit;
+thiếu hàng ở bất kỳ item nào rollback cả state lẫn mọi hold. Duyệt chưa làm
+giảm kho nguồn hay tăng kho đích. Chưa mount runtime. Dispatch, ghi nhận và
+duyệt chênh lệch, receipt, hủy/từ chối, query và HTTP sẽ làm ở các lát cắt T31
+tiếp theo; không coi T31 hoàn thành ở checkpoint này.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
