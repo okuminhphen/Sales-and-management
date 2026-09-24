@@ -441,6 +441,17 @@ $env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
 npm test --workspace @sales/api -- tests/integration/databaseV2InventoryBalanceQuery.test.ts tests/integration/databaseV2InventoryReservation.test.ts tests/integration/databaseV2TransferReservation.test.ts tests/integration/databaseV2InventoryAdjustment.test.ts tests/integration/inventoryV2Http.test.ts
 ```
 
+## Stock request V2 — T30 đang triển khai
+
+Primitive tạo yêu cầu đã dùng `stock_requests`, `stock_request_items` và
+`stock_request_history` V2. Branch yêu cầu/nhận là `from_branch_id`, branch
+cung cấp là `to_branch_id`; service lấy actor từ access context và kiểm tra
+quyền theo branch yêu cầu. Một transaction tạo request, item và history; code
+`RQ<ID>` sinh từ BIGINT ID đã insert, không dựa vào `COUNT(*)`. Tạo request
+không giữ hay di chuyển kho và chưa mount vào runtime legacy. Query,
+update/cancel, approve/reject và HTTP compatibility còn ở các lát cắt T30
+tiếp theo; điều phối transfer/inventory thuộc T31.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

@@ -260,6 +260,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     HTTP compatibility và atomic checkout không thuộc T29, theo xác nhận của
     người dùng: T31 nối transfer, T33 nối checkout, T35 nối return/fulfillment.
 - [ ] T30 — Stock request service V2.
+  - [x] Lát cắt tạo yêu cầu nội bộ: actor lấy từ V2 access context,
+    quyền `stock_request.manage.branch` theo branch người yêu cầu; kiểm tra
+    branch/variant hợp lệ, không trùng variant, không nhận ID dạng JS Number.
+    Ghi request + items + `REQUESTED` history cùng transaction, code từ BIGINT
+    ID sau insert, chưa tạo transfer/giữ/chuyển stock. Unit + MySQL `_test` đạt.
+  - [ ] Query, update/cancel và approve/reject theo route compatibility;
+    approval tạo transfer liên kết atomic nhưng giữ/xuất/nhận kho thuộc T31.
 - [ ] T31 — Transfer receipt service V2; nối reserve/dispatch/receive/release T29 trong transaction chủ quản. Approval chênh lệch phải do người có quyền, khác người ghi nhận, có note/audit.
 - [ ] T32 — Voucher claim/release service V2.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
