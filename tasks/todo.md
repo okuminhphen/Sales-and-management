@@ -282,8 +282,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [x] Lát cắt dispatch: quyền manager branch nguồn hoặc global, `approved`
     sang `in_transit`, consume hold và movement giảm nguồn trong cùng transaction.
     Retry/concurrent không trừ kho lặp; item sau lỗi rollback debit trước.
+  - [x] Lát cắt reject/cancel trước dispatch: quyền global mới được từ chối,
+    manager branch nguồn hoặc global được hủy; `pending`/`approved` đóng phiếu,
+    giải phóng hold T29 và ghi history cùng transaction. Không đổi physical
+    stock; phiếu `in_transit` không đi qua đường hủy/từ chối này.
   - [ ] Còn lại: ghi nhận/duyệt chênh lệch, complete/receive,
-    reject/cancel/release, query và route/DTO compatibility.
+    query và route/DTO compatibility.
 - [ ] T32 — Voucher claim/release service V2.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
 - [ ] T34 — Payment method/payment/webhook V2.

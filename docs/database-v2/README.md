@@ -476,8 +476,11 @@ thiếu hàng ở bất kỳ item nào rollback cả state lẫn mọi hold. Duy
 giảm kho nguồn hay tăng kho đích. Dispatch kế tiếp chuyển `approved` sang
 `in_transit`, consume hold và ghi movement giảm kho nguồn trong cùng transaction;
 kho đích vẫn không đổi. Nếu item sau không dispatch được, toàn bộ debit/movement
-item trước rollback. Chưa mount runtime. Ghi nhận và duyệt chênh lệch, receipt,
-hủy/từ chối, query và HTTP sẽ làm ở các lát cắt T31 tiếp theo; không coi T31
+item trước rollback. Hủy/từ chối chỉ áp dụng trước dispatch; khi đã duyệt thì
+mọi hold được release cùng transaction với trạng thái và history, không cộng
+physical stock vì chưa trừ. Phiếu đang vận chuyển phải qua nhận/đối soát, không
+được dùng cancel/reject. Chưa mount runtime. Ghi nhận và duyệt chênh lệch,
+receipt, query và HTTP sẽ làm ở các lát cắt T31 tiếp theo; không coi T31
 hoàn thành ở checkpoint này.
 
 ## Giới hạn và kiểm thử chung còn lại

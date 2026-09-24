@@ -8,10 +8,12 @@ import { StockRequestV2Service } from "../../src/modules/inventory-transfer/appl
 import { StockRequestDecisionV2Service } from "../../src/modules/inventory-transfer/application/stock-request-decision-v2.service.js";
 import { TransferApprovalV2Service } from "../../src/modules/inventory-transfer/application/transfer-approval-v2.service.js";
 import { TransferDispatchV2Service } from "../../src/modules/inventory-transfer/application/transfer-dispatch-v2.service.js";
+import { TransferClosureV2Service } from "../../src/modules/inventory-transfer/application/transfer-closure-v2.service.js";
 import { SequelizeStockRequestV2Repository } from "../../src/modules/inventory-transfer/persistence/stock-request-v2.repository.js";
 import { SequelizeStockRequestDecisionV2Repository } from "../../src/modules/inventory-transfer/persistence/stock-request-decision-v2.repository.js";
 import { SequelizeTransferApprovalV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-approval-v2.repository.js";
 import { SequelizeTransferDispatchV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-dispatch-v2.repository.js";
+import { SequelizeTransferClosureV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-closure-v2.repository.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 transfer approval on MySQL", () => {
@@ -45,6 +47,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
         const decisionService = new StockRequestDecisionV2Service({ repository: new SequelizeStockRequestDecisionV2Repository(persistence) });
         const transferService = new TransferApprovalV2Service({ repository: new SequelizeTransferApprovalV2Repository(persistence) });
         const dispatchService = new TransferDispatchV2Service({ repository: new SequelizeTransferDispatchV2Repository(persistence) });
+        const closureService = new TransferClosureV2Service({ repository: new SequelizeTransferClosureV2Repository(persistence) });
         const manager: V2AccessContext = { accountId, customerId: null, employeeId: null, grants: [{
             roleCode: "BRANCH_MANAGER", scope: { type: "branch", branchId: requesterId },
             permissions: ["stock_request.manage.branch"],
@@ -56,7 +59,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
         if (created.kind !== "created") throw Error("Request setup failed.");
         const approvedRequest = await decisionService.approve(admin, created.id);
         if (approvedRequest.kind !== "approved") throw Error("Transfer setup failed.");
-        return { admin, transferService, dispatchService, transferId: approvedRequest.transferReceiptId,
+        return { admin, transferService, dispatchService, closureService, transferId: approvedRequest.transferReceiptId,
             supplierId, variantId, productId, token };
     };
 
@@ -158,5 +161,50 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
              AND i.product_variant_id = ? WHERE tr.id = ?`,
             { replacements: [data.variantId, data.transferId], type: QueryTypes.SELECT });
         expect(rows[0]).toEqual({ status: "approved", stock: 5, movementCount: "0" });
+    });
+
+    it("cancels an approved transfer once and releases its hold without changing stock", async () => {
+        const data = await fixture(5);
+        expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
+        const sourceManager: V2AccessContext = { ...data.admin, grants: [{ roleCode: "BRANCH_MANAGER",
+            scope: { type: "branch", branchId: data.supplierId }, permissions: ["transfer.manage.branch"] }] };
+        const [first, second] = await Promise.all([
+            data.closureService.cancel(sourceManager, data.transferId),
+            data.closureService.cancel(sourceManager, data.transferId),
+        ]);
+        expect([first.kind, second.kind].sort()).toEqual(["cancelled", "transfer_already_processed"]);
+        const rows = await sequelize.query<{ status: string; holdStatus: string; stock: number;
+            movementCount: string; historyCount: string }>(
+            `SELECT tr.status, ir.status AS holdStatus, i.stock,
+                    (SELECT COUNT(*) FROM inventory_movements im JOIN transfer_receipt_items ti
+                     ON ti.id = im.transfer_receipt_item_id WHERE ti.transfer_receipt_id = tr.id) AS movementCount,
+                    (SELECT COUNT(*) FROM transfer_history h WHERE h.transfer_receipt_id = tr.id
+                     AND h.action = 'CANCELLED') AS historyCount
+             FROM transfer_receipts tr JOIN transfer_receipt_items ti ON ti.transfer_receipt_id = tr.id
+             JOIN inventory_reservations ir ON ir.transfer_receipt_item_id = ti.id
+             JOIN inventories i ON i.branch_id = tr.from_branch_id AND i.product_variant_id = ti.product_variant_id
+             WHERE tr.id = ?`,
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ status: "cancelled", holdStatus: "released", stock: 5,
+            movementCount: "0", historyCount: "1" });
+    });
+
+    it("rejects pending transfer with a reason and refuses rejection after dispatch", async () => {
+        const pending = await fixture(5);
+        expect(await pending.closureService.reject(pending.admin, pending.transferId, "Insufficient priority"))
+            .toEqual({ kind: "rejected" });
+        const rejected = await sequelize.query<{ status: string; note: string }>(
+            `SELECT tr.status, h.note FROM transfer_receipts tr JOIN transfer_history h
+             ON h.transfer_receipt_id = tr.id WHERE tr.id = ? AND h.action = 'REJECTED'`,
+            { replacements: [pending.transferId], type: QueryTypes.SELECT });
+        expect(rejected[0]).toEqual({ status: "rejected", note: "Insufficient priority" });
+
+        const dispatched = await fixture(5);
+        expect((await dispatched.transferService.approve(dispatched.admin, dispatched.transferId)).kind).toBe("approved");
+        expect((await dispatched.dispatchService.dispatch(dispatched.admin, dispatched.transferId)).kind).toBe("dispatched");
+        expect(await dispatched.closureService.reject(dispatched.admin, dispatched.transferId, "Too late"))
+            .toEqual({ kind: "transfer_already_processed" });
+        expect(await dispatched.closureService.cancel(dispatched.admin, dispatched.transferId))
+            .toEqual({ kind: "transfer_already_processed" });
     });
 });
