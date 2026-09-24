@@ -18,9 +18,27 @@ export type StockRequestCreateOutcome =
     | { kind: "created"; id: EntityId; code: string }
     | { kind: "forbidden" | "invalid_stock_request" | "branch_not_found" | "variant_not_found" | "stock_request_unavailable" };
 
+export type StockRequestSummary = {
+    id: EntityId; code: string; fromBranchId: EntityId; toBranchId: EntityId;
+    status: string; createdBy: EntityId; approvedBy: EntityId | null; createdAt: string;
+    fromBranch: { id: EntityId; name: string }; toBranch: { id: EntityId; name: string };
+    items: readonly { id: EntityId; productSizeId: EntityId; quantity: number; note: string | null;
+        productSize: { id: EntityId; product: { id: EntityId; name: string };
+            size: { id: EntityId; name: string } } }[];
+    histories: readonly { id: EntityId; action: string; performedBy: EntityId;
+        note: string | null; createdAt: string }[];
+};
+
+export type StockRequestPage = { requests: readonly StockRequestSummary[];
+    page: number; limit: number; totalItems: number };
+export type StockRequestListOutcome = { kind: "requests"; page: StockRequestPage }
+    | { kind: "forbidden" | "invalid_stock_request" | "stock_request_unavailable" };
+
 export interface StockRequestV2Repository {
     create: (input: StockRequestWrite) => Promise<Exclude<StockRequestCreateOutcome,
         { kind: "forbidden" | "invalid_stock_request" | "stock_request_unavailable" }>>;
+    list: (filter: { fromBranchId?: EntityId; status?: "pending" }, page: number,
+        limit: number) => Promise<StockRequestPage>;
 }
 
 const parseId = (value: unknown): EntityId | null => {
@@ -56,4 +74,25 @@ export class StockRequestV2Service {
         try { return await this.dependencies.repository.create({ fromBranchId, toBranchId, actorAccountId, items }); }
         catch { return { kind: "stock_request_unavailable" }; }
     }
+
+    async listByBranch(context: V2AccessContext, branchIdInput: unknown,
+        page: number, limit: number): Promise<StockRequestListOutcome> {
+        const fromBranchId = parseId(branchIdInput);
+        if (!fromBranchId || !validPage(page, limit)) return { kind: "invalid_stock_request" };
+        if (!canAccessBranch(context, fromBranchId, "stock_request.read.branch")
+            && !hasGlobalPermission(context, "stock_request.read.branch")) return { kind: "forbidden" };
+        try { return { kind: "requests", page: await this.dependencies.repository.list({ fromBranchId }, page, limit) }; }
+        catch { return { kind: "stock_request_unavailable" }; }
+    }
+
+    async listPending(context: V2AccessContext, page: number, limit: number): Promise<StockRequestListOutcome> {
+        if (!validPage(page, limit)) return { kind: "invalid_stock_request" };
+        if (!hasGlobalPermission(context, "stock_request.read.branch")) return { kind: "forbidden" };
+        try { return { kind: "requests", page: await this.dependencies.repository.list({ status: "pending" }, page, limit) }; }
+        catch { return { kind: "stock_request_unavailable" }; }
+    }
 }
+
+const validPage = (page: number, limit: number): boolean => Number.isSafeInteger(page)
+    && page > 0 && Number.isSafeInteger(limit) && limit >= 1 && limit <= 100
+    && Number.isSafeInteger((page - 1) * limit);

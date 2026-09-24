@@ -450,7 +450,9 @@ quyền theo branch yêu cầu. Một transaction tạo request, item và histor
 `RQ<ID>` sinh từ BIGINT ID đã insert, không dựa vào `COUNT(*)`. Tạo request
 không giữ hay di chuyển kho và chưa mount vào runtime legacy. Query,
 update/cancel, approve/reject và HTTP compatibility còn ở các lát cắt T30
-tiếp theo; điều phối transfer/inventory thuộc T31.
+tiếp theo; điều phối transfer/inventory thuộc T31. Query V2 đã phân trang
+theo branch yêu cầu hoặc status `pending`, kiểm tra quyền DB-derived,
+trả item/branch/history theo mapper tương thích Web cũ; chưa mount HTTP.
 
 ## Giới hạn và kiểm thử chung còn lại
 

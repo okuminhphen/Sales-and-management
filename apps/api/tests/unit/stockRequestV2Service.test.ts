@@ -32,3 +32,22 @@ describe("StockRequestV2Service.create", () => {
         expect(create).not.toHaveBeenCalled();
     });
 });
+
+describe("StockRequestV2Service.list", () => {
+    it("authorizes requester branch reads and requires a global grant for the pending queue", async () => {
+        const list = vi.fn().mockResolvedValue({ requests: [], page: 1, limit: 20, totalItems: 0 });
+        const repository = { list } as unknown as StockRequestV2Repository;
+        const service = new StockRequestV2Service({ repository });
+        expect((await service.listByBranch(context("1", "stock_request.read.branch"), "1", 1, 20)).kind)
+            .toBe("requests");
+        expect(await service.listByBranch(context("2", "stock_request.read.branch"), "1", 1, 20))
+            .toEqual({ kind: "forbidden" });
+        expect(await service.listPending(context("1", "stock_request.read.branch"), 1, 20))
+            .toEqual({ kind: "forbidden" });
+        const admin: V2AccessContext = { accountId: "10", customerId: null, employeeId: null, grants: [{
+            roleCode: "SUPER_ADMIN", scope: { type: "global" }, permissions: ["stock_request.read.branch"],
+        }] };
+        expect((await service.listPending(admin, 1, 20)).kind).toBe("requests");
+        expect(list).toHaveBeenCalledTimes(2);
+    });
+});

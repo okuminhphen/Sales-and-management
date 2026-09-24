@@ -72,4 +72,30 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 stock
             { replacements: [data.accountId, data.requesterId], type: QueryTypes.SELECT });
         expect(rows[0]?.count).toBe("0");
     });
+
+    it("returns branch-scoped and pending pages with legacy item/branch shapes", async () => {
+        const data = await fixture();
+        const created = await service.create(data.context, { fromBranchId: data.requesterId,
+            toBranchId: data.supplierId, items: [{ productSizeId: data.variantId, quantity: 2 }] });
+        expect(created.kind).toBe("created");
+        const branchPage = await service.listByBranch({ ...data.context, grants: [{
+            roleCode: "BRANCH_MANAGER", scope: { type: "branch", branchId: data.requesterId },
+            permissions: ["stock_request.read.branch"],
+        }] }, data.requesterId, 1, 20);
+        expect(branchPage.kind).toBe("requests");
+        if (branchPage.kind !== "requests" || created.kind !== "created") return;
+        expect(branchPage.page.requests.find((row) => row.id === created.id)).toMatchObject({
+            id: created.id, code: created.code, fromBranchId: data.requesterId,
+            toBranchId: data.supplierId, fromBranch: { name: "Requester" },
+            toBranch: { name: "Supplier" },
+            items: [{ productSizeId: data.variantId, quantity: 2,
+                productSize: { product: { name: "Request" } } }],
+            histories: [{ action: "REQUESTED", performedBy: data.accountId }],
+        });
+        const admin: V2AccessContext = { ...data.context, grants: [{ roleCode: "SUPER_ADMIN",
+            scope: { type: "global" }, permissions: ["stock_request.read.branch"] }] };
+        const pending = await service.listPending(admin, 1, 100);
+        expect(pending.kind).toBe("requests");
+        if (pending.kind === "requests") expect(pending.page.requests.some((row) => row.id === created.id)).toBe(true);
+    });
 });
