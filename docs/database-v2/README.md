@@ -405,12 +405,12 @@ giảm stock nguồn và ghi movement có FK `transfer_receipt_item_id`, actor v
 idempotency key. Replay sau khi receipt hoàn tất không trừ kho lần hai; MySQL
 `_test` đã kiểm tra rollback, key conflict và dispatch đồng thời. Chưa mount
 route hoặc tự chuyển receipt.
-Primitive nhận đủ hàng tốt tăng stock đích đúng `received_quantity` và ghi
+Primitive nhận hàng tốt tăng stock đích đúng `received_quantity` và ghi
 movement typed cho transfer item; kiểm tra movement dispatch nguồn, chỉ nhận
-receipt đã `completed`, replay/dedup và rollback cùng transaction. Trường hợp
-`lost_quantity`/`non_sellable_quantity` vẫn fail-closed: T31 phải xác minh
-người duyệt có `transfer.manage.branch`, khác người ghi nhận, lưu note/audit
-rồi mới mở đường hoàn tất chênh lệch. Hủy/reject trước dispatch chỉ release
+receipt đã `completed`, replay/dedup và rollback cùng transaction. Nhận một
+phần do `lost_quantity`/`non_sellable_quantity` chỉ mở sau khi T31 lưu lịch sử
+ghi nhận và duyệt độc lập có note; actor gọi primitive phải đúng người duyệt.
+Hàng nhận bằng 0 không tạo movement có delta 0. Hủy/reject trước dispatch chỉ release
 hold, không cộng kho. Return restock primitive chỉ cộng `restocked_quantity`
 của item đã inspected/completed và có movement bàn giao gốc; hàng không bán
 được không tự vào stock. T35 sở hữu eligibility/authorization và trạng thái
@@ -479,8 +479,7 @@ kho đích vẫn không đổi. Nếu item sau không dispatch được, toàn b
 item trước rollback. Hủy/từ chối chỉ áp dụng trước dispatch; khi đã duyệt thì
 mọi hold được release cùng transaction với trạng thái và history, không cộng
 physical stock vì chưa trừ. Phiếu đang vận chuyển phải qua nhận/đối soát, không
-được dùng cancel/reject. Chưa mount runtime. Duyệt chênh lệch,
-receipt có chênh lệch, query và HTTP vẫn chờ; không coi T31 hoàn thành ở
+được dùng cancel/reject. Chưa mount runtime. Query và HTTP vẫn chờ; không coi T31 hoàn thành ở
 checkpoint này.
 
 Lát cắt receipt không chênh lệch nhận danh sách quantity tường minh cho **mọi**
@@ -494,8 +493,15 @@ người ở lát cắt kế tiếp. Endpoint legacy `complete` không có body 
 Với chênh lệch, bước ghi nhận riêng yêu cầu quantity của toàn bộ item và note
 bắt buộc. Một transaction lưu received/lost/non-sellable và history
 `RECEIPT_RECORDED` với account người ghi; state vẫn `in_transit`, đích chưa tăng
-stock. Row lock và history ngăn ghi nhận hai lần. Bước duyệt bởi người khác
-và nhập hàng đủ điều kiện vẫn còn chờ, nên phiếu này chưa thể hoàn tất.
+stock. Row lock và history ngăn ghi nhận hai lần. Bước duyệt yêu cầu quyền
+global `transfer.manage.branch`, note riêng và account khác người ghi. Dưới
+row lock, T31 kiểm tra tổng từng item và bằng chứng dispatch nguồn, lưu
+`DISCREPANCY_APPROVED`, chuyển `completed`, gọi primitive T29 cộng chỉ lượng
+bán được ở đích và ghi `COMPLETED` trong cùng transaction. Item nhận bằng 0
+được xác minh dispatch/hold nhưng không tạo movement 0 hoặc inventory đích.
+Nếu credit thất bại, toàn bộ bước duyệt rollback; `RECEIPT_RECORDED` trước đó
+vẫn còn để xử lý tiếp. Test MySQL `_test` đã kiểm tra phân tách hai actor,
+duyệt đồng thời, mất toàn bộ và rollback khi stock đích vượt giới hạn.
 
 ## Giới hạn và kiểm thử chung còn lại
 

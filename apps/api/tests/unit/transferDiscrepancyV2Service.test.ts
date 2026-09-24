@@ -12,6 +12,7 @@ describe("TransferDiscrepancyV2Service", () => {
         const record = vi.fn().mockResolvedValue({ kind: "recorded" });
         const service = new TransferDiscrepancyV2Service({ repository: {
             findDestinationBranch: vi.fn().mockResolvedValue("32"), record,
+            approve: vi.fn(),
         } });
         expect(await service.record(context, "41", [item], "  ")).toEqual({ kind: "invalid_discrepancy" });
         expect(await service.record(context, "41", [{ ...item, receivedQuantity: 3, lostQuantity: 0 }], "Reason"))
@@ -24,8 +25,23 @@ describe("TransferDiscrepancyV2Service", () => {
         const record = vi.fn().mockResolvedValue({ kind: "recorded" });
         const service = new TransferDiscrepancyV2Service({ repository: {
             findDestinationBranch: vi.fn().mockResolvedValue("31"), record,
+            approve: vi.fn(),
         } });
         expect(await service.record(context, "41", [item], "  Missing  ")).toEqual({ kind: "recorded" });
         expect(record).toHaveBeenCalledExactlyOnceWith("41", "11", "31", [item], "Missing");
+    });
+
+    it("requires a global grant to approve and never takes an approver from the body", async () => {
+        const approve = vi.fn().mockResolvedValue({ kind: "completed", transferReceiptId: "41" });
+        const service = new TransferDiscrepancyV2Service({ repository: {
+            findDestinationBranch: vi.fn(), record: vi.fn(), approve,
+        } });
+        expect(await service.approve(context, "41", "Approved")).toEqual({ kind: "forbidden" });
+        const admin: V2AccessContext = { ...context, grants: [{ roleCode: "SUPER_ADMIN",
+            scope: { type: "global" }, permissions: ["transfer.manage.branch"] }] };
+        expect(await service.approve(admin, "41", "   ")).toEqual({ kind: "invalid_discrepancy" });
+        expect(await service.approve(admin, "41", "  Approved  "))
+            .toEqual({ kind: "completed", transferReceiptId: "41" });
+        expect(approve).toHaveBeenCalledExactlyOnceWith("41", "11", "Approved");
     });
 });

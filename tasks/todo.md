@@ -293,8 +293,14 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [x] Lát cắt ghi nhận chênh lệch: destination branch/global khai báo đủ
     số lượng từng item kèm lý do bắt buộc; lưu `RECEIPT_RECORDED` với actor,
     giữ `in_transit` và không cộng tồn đích. Chỉ ghi một lần dưới row lock.
-  - [ ] Còn lại: duyệt và nhận hàng có chênh lệch bằng actor khác người ghi,
-    query và route/DTO compatibility.
+  - [x] Lát cắt duyệt chênh lệch: chỉ global `transfer.manage.branch` và actor
+    khác người ghi nhận được duyệt, note bắt buộc. Trong cùng transaction, lưu
+    `DISCREPANCY_APPROVED`, tăng tồn đích đúng phần sellable qua primitive T29,
+    chuyển `completed` và ghi history; hàng nhận bằng 0 không tạo movement 0.
+    Concurrent approve chỉ một lần thành công; lỗi credit rollback toàn bộ bước
+    duyệt nhưng vẫn giữ bản ghi chênh lệch để xử lý tiếp.
+  - [ ] Còn lại: query và route/DTO compatibility; chạy full regression trước
+    khi đóng T31. Runtime legacy chưa mount V2.
 - [ ] T32 — Voucher claim/release service V2.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
 - [ ] T34 — Payment method/payment/webhook V2.

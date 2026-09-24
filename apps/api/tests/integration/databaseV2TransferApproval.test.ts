@@ -321,4 +321,117 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
         expect(state[0]).toEqual({ status: "in_transit", received: 2, lost: 1,
             note: "One item missing", recordedBy: data.admin.accountId, destinationCount: "0" });
     });
+
+    it("requires a different global approver and credits only sellable received quantity", async () => {
+        const data = await fixture(5);
+        expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
+        expect((await data.dispatchService.dispatch(data.admin, data.transferId)).kind).toBe("dispatched");
+        const items = await sequelize.query<{ id: string }>(
+            "SELECT id FROM transfer_receipt_items WHERE transfer_receipt_id = ?",
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        expect(await data.discrepancyService.record(data.admin, data.transferId,
+            [{ itemId: items[0].id, receivedQuantity: 2, lostQuantity: 1, nonSellableQuantity: 0 }],
+            "One unit missing")).toEqual({ kind: "recorded" });
+        expect(await data.discrepancyService.approve(data.admin, data.transferId, "Approved loss"))
+            .toEqual({ kind: "separation_of_duties" });
+        const approverId = await insert("INSERT INTO accounts (email, status, created_at, updated_at) VALUES (?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`approver-${data.token}@example.invalid`]);
+        const approver: V2AccessContext = { ...data.admin, accountId: approverId };
+        expect(await data.discrepancyService.approve(approver, data.transferId, "Approved loss"))
+            .toEqual({ kind: "completed", transferReceiptId: data.transferId });
+        expect(await data.discrepancyService.approve(approver, data.transferId, "Again"))
+            .toEqual({ kind: "transfer_already_processed" });
+        const state = await sequelize.query<{ status: string; sourceStock: number; destinationStock: number;
+            movementCount: string; approvedBy: string; note: string }>(
+            `SELECT tr.status, src.stock AS sourceStock, dst.stock AS destinationStock,
+                    (SELECT COUNT(*) FROM inventory_movements im WHERE im.transfer_receipt_item_id = ?
+                     AND im.reason = 'transfer_receive') AS movementCount,
+                    h.performed_by_account_id AS approvedBy, h.note
+             FROM transfer_receipts tr JOIN inventories src ON src.branch_id = tr.from_branch_id
+             AND src.product_variant_id = ? JOIN inventories dst ON dst.branch_id = tr.to_branch_id
+             AND dst.product_variant_id = ? JOIN transfer_history h ON h.transfer_receipt_id = tr.id
+             AND h.action = 'DISCREPANCY_APPROVED' WHERE tr.id = ?`,
+            { replacements: [items[0].id, data.variantId, data.variantId, data.transferId], type: QueryTypes.SELECT });
+        expect(state[0]).toEqual({ status: "completed", sourceStock: 2, destinationStock: 2,
+            movementCount: "1", approvedBy: approverId, note: "Approved loss" });
+    });
+
+    it("completes an all-lost receipt only after independent approval without a zero-delta movement", async () => {
+        const data = await fixture(5);
+        expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
+        expect((await data.dispatchService.dispatch(data.admin, data.transferId)).kind).toBe("dispatched");
+        const items = await sequelize.query<{ id: string }>(
+            "SELECT id FROM transfer_receipt_items WHERE transfer_receipt_id = ?",
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        expect(await data.discrepancyService.record(data.admin, data.transferId,
+            [{ itemId: items[0].id, receivedQuantity: 0, lostQuantity: 3, nonSellableQuantity: 0 }],
+            "Entire parcel lost")).toEqual({ kind: "recorded" });
+        const approverId = await insert("INSERT INTO accounts (email, status, created_at, updated_at) VALUES (?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`approver-zero-${data.token}@example.invalid`]);
+        expect(await data.discrepancyService.approve({ ...data.admin, accountId: approverId },
+            data.transferId, "Loss confirmed")).toEqual({ kind: "completed", transferReceiptId: data.transferId });
+        const rows = await sequelize.query<{ status: string; destinationCount: string; receiveMovementCount: string }>(
+            `SELECT tr.status, (SELECT COUNT(*) FROM inventories i WHERE i.branch_id = tr.to_branch_id
+                AND i.product_variant_id = ?) AS destinationCount,
+                (SELECT COUNT(*) FROM inventory_movements im WHERE im.transfer_receipt_item_id = ?
+                 AND im.reason = 'transfer_receive') AS receiveMovementCount
+             FROM transfer_receipts tr WHERE tr.id = ?`,
+            { replacements: [data.variantId, items[0].id, data.transferId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ status: "completed", destinationCount: "0", receiveMovementCount: "0" });
+    });
+
+    it("allows only one of two concurrent independent discrepancy approvals", async () => {
+        const data = await fixture(5);
+        expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
+        expect((await data.dispatchService.dispatch(data.admin, data.transferId)).kind).toBe("dispatched");
+        const items = await sequelize.query<{ id: string }>(
+            "SELECT id FROM transfer_receipt_items WHERE transfer_receipt_id = ?",
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        expect(await data.discrepancyService.record(data.admin, data.transferId,
+            [{ itemId: items[0].id, receivedQuantity: 2, lostQuantity: 0, nonSellableQuantity: 1 }],
+            "Damaged unit")).toEqual({ kind: "recorded" });
+        const firstId = await insert("INSERT INTO accounts (email, status, created_at, updated_at) VALUES (?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`first-${data.token}@example.invalid`]);
+        const secondId = await insert("INSERT INTO accounts (email, status, created_at, updated_at) VALUES (?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`second-${data.token}@example.invalid`]);
+        const outcomes = await Promise.all([
+            data.discrepancyService.approve({ ...data.admin, accountId: firstId }, data.transferId, "Approved"),
+            data.discrepancyService.approve({ ...data.admin, accountId: secondId }, data.transferId, "Approved"),
+        ]);
+        expect(outcomes.map((result) => result.kind).sort()).toEqual(["completed", "transfer_already_processed"]);
+        const state = await sequelize.query<{ stock: number; movementCount: string; approvalCount: string }>(
+            `SELECT i.stock,
+                    (SELECT COUNT(*) FROM inventory_movements im WHERE im.transfer_receipt_item_id = ?
+                     AND im.reason = 'transfer_receive') AS movementCount,
+                    (SELECT COUNT(*) FROM transfer_history h WHERE h.transfer_receipt_id = ?
+                     AND h.action = 'DISCREPANCY_APPROVED') AS approvalCount
+             FROM inventories i WHERE i.branch_id = ? AND i.product_variant_id = ?`,
+            { replacements: [items[0].id, data.transferId, data.requesterId, data.variantId], type: QueryTypes.SELECT });
+        expect(state[0]).toEqual({ stock: 2, movementCount: "1", approvalCount: "1" });
+    });
+
+    it("keeps the recorded discrepancy pending if destination credit cannot commit", async () => {
+        const data = await fixture(5);
+        await insert("INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, 2147483647, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [data.requesterId, data.variantId]);
+        expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
+        expect((await data.dispatchService.dispatch(data.admin, data.transferId)).kind).toBe("dispatched");
+        const items = await sequelize.query<{ id: string }>(
+            "SELECT id FROM transfer_receipt_items WHERE transfer_receipt_id = ?",
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        expect(await data.discrepancyService.record(data.admin, data.transferId,
+            [{ itemId: items[0].id, receivedQuantity: 2, lostQuantity: 1, nonSellableQuantity: 0 }],
+            "One missing")).toEqual({ kind: "recorded" });
+        const approverId = await insert("INSERT INTO accounts (email, status, created_at, updated_at) VALUES (?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`overflow-${data.token}@example.invalid`]);
+        expect(await data.discrepancyService.approve({ ...data.admin, accountId: approverId },
+            data.transferId, "Approved")).toEqual({ kind: "transfer_unavailable" });
+        const state = await sequelize.query<{ status: string; recordedCount: string;
+            approvedCount: string; receiveMovementCount: string }>(
+            `SELECT tr.status,
+                    (SELECT COUNT(*) FROM transfer_history h WHERE h.transfer_receipt_id = tr.id
+                     AND h.action = 'RECEIPT_RECORDED') AS recordedCount,
+                    (SELECT COUNT(*) FROM transfer_history h WHERE h.transfer_receipt_id = tr.id
+                     AND h.action = 'DISCREPANCY_APPROVED') AS approvedCount,
+                    (SELECT COUNT(*) FROM inventory_movements im WHERE im.transfer_receipt_item_id = ?
+                     AND im.reason = 'transfer_receive') AS receiveMovementCount
+             FROM transfer_receipts tr WHERE tr.id = ?`,
+            { replacements: [items[0].id, data.transferId], type: QueryTypes.SELECT });
+        expect(state[0]).toEqual({ status: "in_transit", recordedCount: "1",
+            approvedCount: "0", receiveMovementCount: "0" });
+    });
 });

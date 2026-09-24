@@ -22,7 +22,7 @@ const nonnegativeInt = (value: unknown): number | null => {
     return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 };
 
-/** Sellable destination receipt; discrepancy approval remains with T31. */
+/** Sellable destination receipt; partial quantity requires durable two-person approval history. */
 export class SequelizeInventoryTransferReceiptV2Repository {
     constructor(private readonly persistence: V2Persistence, private readonly transaction?: Transaction) {}
 
@@ -77,12 +77,30 @@ export class SequelizeInventoryTransferReceiptV2Repository {
         ))[0];
         const total = nonnegativeInt(item?.quantity);
         const received = nonnegativeInt(item?.receivedQuantity);
-        if (!item || item.variantId === null || total === null || total === 0 || received === null) {
+        const lost = nonnegativeInt(item?.lostQuantity);
+        const nonSellable = nonnegativeInt(item?.nonSellableQuantity);
+        if (!item || item.variantId === null || total === null || total === 0 || received === null
+            || lost === null || nonSellable === null) {
             throw new Error("Invalid transfer receipt item in database.");
         }
-        if (received !== total || nonnegativeInt(item.lostQuantity) !== 0
-            || nonnegativeInt(item.nonSellableQuantity) !== 0) {
+        if (received === 0 || received + lost + nonSellable !== total) {
             return { kind: "discrepancy_requires_approval" };
+        }
+        if (lost > 0 || nonSellable > 0) {
+            const histories = await this.persistence.sequelize.query<{
+                action: string; performedBy: unknown; note: string | null }>(
+                `SELECT action, performed_by_account_id AS performedBy, note FROM transfer_history
+                 WHERE transfer_receipt_id = ? AND action IN ('RECEIPT_RECORDED', 'DISCREPANCY_APPROVED')
+                 ORDER BY id ASC FOR UPDATE`,
+                { replacements: [receiptId], transaction, type: QueryTypes.SELECT });
+            const recorded = histories.filter((row) => row.action === "RECEIPT_RECORDED");
+            const approved = histories.filter((row) => row.action === "DISCREPANCY_APPROVED");
+            if (recorded.length !== 1 || approved.length !== 1
+                || !recorded[0].note?.trim() || !approved[0].note?.trim()
+                || serializeDatabaseEntityId(recorded[0].performedBy) === serializeDatabaseEntityId(approved[0].performedBy)
+                || serializeDatabaseEntityId(approved[0].performedBy) !== actorAccountId) {
+                return { kind: "discrepancy_requires_approval" };
+            }
         }
         const movements = await this.persistence.sequelize.query<MovementRow>(
             `SELECT transfer_receipt_item_id AS transferItemId, branch_id AS branchId,
