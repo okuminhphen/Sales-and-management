@@ -279,11 +279,16 @@ tham chiếu; không xóa cascade. Mutation variant, media product và availabil
 vẫn là việc T27/T29 tiếp theo.
 
 Product metadata V2 đã có `POST /product/create`, `PUT /product/update/:id` và
-`DELETE /product/delete` (chuyển `inactive`, không hard-delete). Giá đầu vào `price` bắt buộc
+`DELETE /product/delete` (chuyển `inactive`, không hard-delete). Variant có
+`POST /product/:productId/variants`, `PUT /product/:productId/variants/:variantId` và
+`DELETE /product/:productId/variants/:variantId` (cũng chuyển `inactive`). SKU và cặp
+product/size được bảo vệ bởi unique DB; `sizeId` không đổi sau khi tạo. Route variant không
+nhận `stock`: tồn kho theo variant và branch thuộc T29. Giá đầu vào `price` bắt buộc
 là decimal string, category ID là BIGINT string; create mặc định `draft`. Metadata route dùng
 JSON và **chưa nhận ảnh/multipart**; image lifecycle sẽ nối riêng sau khi có cùng mức bảo đảm
 cleanup/retry như banner. Mỗi thay đổi product và outbox event catalog commit cùng transaction.
-Event payload V2 giữ giá dưới dạng string và có `status`; T40 phải cập nhật AI consumer để bỏ qua
+Event payload V2 giữ giá dưới dạng string và có `status`; mọi variant mutation cũng tạo product
+upsert event cùng transaction để consumer có thể rehydrate product. T40 phải cập nhật AI consumer để bỏ qua
 draft/inactive và query schema V2 trước khi mount router runtime. Chưa dùng số tồn từ product.
 
 Test MySQL thật chỉ dùng database `_test`:

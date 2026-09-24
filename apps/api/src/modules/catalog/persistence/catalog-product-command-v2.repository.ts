@@ -15,7 +15,7 @@ const slugFor = (name: string): string => {
     return `${prefix}-${randomUUID().replace(/-/g, "")}`;
 };
 
-const appendEvent = async (
+export const appendCatalogProductEvent = async (
     persistence: V2Persistence, transaction: Transaction, product: ProductAttributes,
     eventType: "catalog.product.upserted" | "catalog.product.deleted",
 ): Promise<void> => {
@@ -54,7 +54,7 @@ export class SequelizeCatalogProductCommandV2Repository implements CatalogProduc
                 ...input, slug: slugFor(input.name), images: null,
                 createdAt: now, updatedAt: now,
             }, { transaction });
-            await appendEvent(this.persistence, transaction, product.dataValues, "catalog.product.upserted");
+            await appendCatalogProductEvent(this.persistence, transaction, product.dataValues, "catalog.product.upserted");
             return { kind: "created", id: serializeDatabaseEntityId(product.dataValues.id) };
         });
     }
@@ -68,7 +68,7 @@ export class SequelizeCatalogProductCommandV2Repository implements CatalogProduc
                 if (!category) return { kind: "category_not_found" };
             }
             await product.update({ ...patch, updatedAt: new Date() }, { transaction });
-            await appendEvent(this.persistence, transaction, product.dataValues, "catalog.product.upserted");
+            await appendCatalogProductEvent(this.persistence, transaction, product.dataValues, "catalog.product.upserted");
             return { kind: "updated", id };
         });
     }
@@ -79,7 +79,7 @@ export class SequelizeCatalogProductCommandV2Repository implements CatalogProduc
             if (!product) return { kind: "product_not_found" };
             if (product.dataValues.status !== "inactive") {
                 await product.update({ status: "inactive", updatedAt: new Date() }, { transaction });
-                await appendEvent(this.persistence, transaction, product.dataValues, "catalog.product.deleted");
+                await appendCatalogProductEvent(this.persistence, transaction, product.dataValues, "catalog.product.deleted");
             }
             return { kind: "deactivated" };
         });

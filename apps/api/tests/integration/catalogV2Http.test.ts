@@ -213,4 +213,40 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
             "catalog.product.upserted", "catalog.product.upserted", "catalog.product.deleted",
         ]);
     });
+
+    it("manages product variants without accepting stock or hard-deleting references", async () => {
+        const size = await request(app).post("/api/v1/size/create").set("Authorization", adminBearer)
+            .send({ name: `VARIANT SIZE ${crypto.randomUUID().slice(0, 8)}` }).expect(200);
+        const sizeId: string = size.body.DT.id;
+        const sku = `V2-HTTP-${crypto.randomUUID().slice(0, 12)}`;
+        await request(app).post(`/api/v1/product/${productId}/variants`).send({ sizeId, sku }).expect(401);
+        await request(app).post(`/api/v1/product/${productId}/variants`).set("Authorization", adminBearer)
+            .send({ sizeId, sku, stock: 10 }).expect(400);
+        const created = await request(app).post(`/api/v1/product/${productId}/variants`)
+            .set("Authorization", adminBearer).send({ sizeId, sku }).expect(200);
+        const id: string = created.body.DT.id;
+        await request(app).put(`/api/v1/product/${inactiveProductId}/variants/${id}`)
+            .set("Authorization", adminBearer).send({ status: "draft" }).expect(404);
+        await request(app).post(`/api/v1/product/${productId}/variants`)
+            .set("Authorization", adminBearer).send({ sizeId, sku: `${sku}-2` }).expect(409);
+        const listed = await request(app).get(`/api/v1/product/${productId}/variants`).expect(200);
+        expect(listed.body.DT).toEqual(expect.arrayContaining([expect.objectContaining({ id, sizeId })]));
+        await request(app).put(`/api/v1/product/${productId}/variants/${id}`)
+            .set("Authorization", adminBearer).send({ status: "inactive" }).expect(200);
+        const hidden = await request(app).get(`/api/v1/product/${productId}/variants`).expect(200);
+        expect(hidden.body.DT.some((variant: { id: string }) => variant.id === id)).toBe(false);
+        await request(app).delete(`/api/v1/product/${productId}/variants/${id}`)
+            .set("Authorization", adminBearer).expect(200);
+        const persisted = await sequelize.query<{ status: string }>(
+            "SELECT status FROM product_variants WHERE id = ?", { replacements: [id], type: QueryTypes.SELECT },
+        );
+        expect(persisted[0]?.status).toBe("inactive");
+        const events = await sequelize.query<{ eventType: string }>(
+            "SELECT event_type AS eventType FROM outbox_events WHERE aggregate_type = 'product' AND aggregate_id = ? ORDER BY id",
+            { replacements: [productId], type: QueryTypes.SELECT },
+        );
+        expect(events.map((event) => event.eventType)).toEqual([
+            "catalog.product.upserted", "catalog.product.upserted",
+        ]);
+    });
 });

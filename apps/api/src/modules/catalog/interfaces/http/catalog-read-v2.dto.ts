@@ -38,3 +38,14 @@ export const productUpdateBodyV2 = productCreateBodyV2.partial().extend({
 }).refine((input) => Object.keys(input).length > 0, { message: "At least one field is required" });
 export const productUpdateParamsV2 = z.object({ id: entityId });
 export const productDeleteBodyV2 = z.object({ id: entityId }).strict();
+
+export const variantCreateBodyV2 = z.object({
+    sizeId: entityId,
+    sku: z.string().trim().min(1).max(100),
+    status: z.enum(["draft", "active", "inactive"]).optional(),
+}).strict();
+export const variantUpdateBodyV2 = z.object({
+    sku: z.string().trim().min(1).max(100).optional(),
+    status: z.enum(["draft", "active", "inactive"]).optional(),
+}).strict().refine((input) => Object.keys(input).length > 0, { message: "At least one field is required" });
+export const variantParamsV2 = z.object({ productId: entityId, variantId: entityId });

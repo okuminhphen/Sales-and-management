@@ -21,6 +21,9 @@ import { createCatalogSizeCommandV2Router } from "../modules/catalog/interfaces/
 import { CatalogProductCommandV2Service } from "../modules/catalog/application/catalog-product-command-v2.service.js";
 import { SequelizeCatalogProductCommandV2Repository } from "../modules/catalog/persistence/catalog-product-command-v2.repository.js";
 import { createCatalogProductCommandV2Router } from "../modules/catalog/interfaces/http/catalog-product-command-v2.routes.js";
+import { CatalogVariantCommandV2Service } from "../modules/catalog/application/catalog-variant-command-v2.service.js";
+import { SequelizeCatalogVariantCommandV2Repository } from "../modules/catalog/persistence/catalog-variant-command-v2.repository.js";
+import { createCatalogVariantCommandV2Router } from "../modules/catalog/interfaces/http/catalog-variant-command-v2.routes.js";
 
 /** Standalone T27 composition; legacy app mounting waits for T38-T44 cutover. */
 export const createCatalogV2Router = (dependencies: { persistence: V2Persistence; audit?: V2HttpAuditWriter }): Router => {
@@ -46,6 +49,11 @@ export const createCatalogV2Router = (dependencies: { persistence: V2Persistence
     router.use(createCatalogProductCommandV2Router({
         auth,
         command: new CatalogProductCommandV2Service({ repository: new SequelizeCatalogProductCommandV2Repository(persistence) }),
+        audit: dependencies.audit,
+    }));
+    router.use(createCatalogVariantCommandV2Router({
+        auth,
+        command: new CatalogVariantCommandV2Service({ repository: new SequelizeCatalogVariantCommandV2Repository(persistence) }),
         audit: dependencies.audit,
     }));
     return router;
