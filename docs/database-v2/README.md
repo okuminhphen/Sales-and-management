@@ -275,8 +275,16 @@ yêu cầu JWT V2 và grant nội bộ `catalog.manage.global` từ DB. `code`/`
 category có child/product cũng trả 409. T39 phải cập nhật Web đọc contract mới trước khi router
 này thay thế legacy. Size mutation giữ legacy path `POST /size/create`, `PUT /size/update`,
 `DELETE /size/delete/:id` nhưng ID là BIGINT string, trả 409 khi trùng tên hoặc còn variant
-tham chiếu; không xóa cascade. Mutation product/variant, media product và availability theo branch
+tham chiếu; không xóa cascade. Mutation variant, media product và availability theo branch
 vẫn là việc T27/T29 tiếp theo.
+
+Product metadata V2 đã có `POST /product/create`, `PUT /product/update/:id` và
+`DELETE /product/delete` (chuyển `inactive`, không hard-delete). Giá đầu vào `price` bắt buộc
+là decimal string, category ID là BIGINT string; create mặc định `draft`. Metadata route dùng
+JSON và **chưa nhận ảnh/multipart**; image lifecycle sẽ nối riêng sau khi có cùng mức bảo đảm
+cleanup/retry như banner. Mỗi thay đổi product và outbox event catalog commit cùng transaction.
+Event payload V2 giữ giá dưới dạng string và có `status`; T40 phải cập nhật AI consumer để bỏ qua
+draft/inactive và query schema V2 trước khi mount router runtime. Chưa dùng số tồn từ product.
 
 Test MySQL thật chỉ dùng database `_test`:
 

@@ -24,3 +24,17 @@ export const categoryUpdateBodyV2 = categoryCreateBodyV2.partial().refine(
 export const sizeCreateBodyV2 = z.object({ name: z.string().trim().min(1).max(100) }).strict();
 export const sizeUpdateBodyV2 = sizeCreateBodyV2.extend({ id: entityId });
 export const sizeIdParamsV2 = z.object({ id: entityId });
+
+const money = z.string().regex(/^\d+(?:\.\d{1,4})?$/)
+    .refine((value) => value.replace(/^0+(?=\d)/, "").split(".")[0]!.length <= 15);
+export const productCreateBodyV2 = z.object({
+    name: z.string().trim().min(1).max(255),
+    description: z.string().max(5000).nullable().optional(),
+    price: money,
+    categoryId: entityId,
+}).strict();
+export const productUpdateBodyV2 = productCreateBodyV2.partial().extend({
+    status: z.enum(["draft", "active", "inactive"]).optional(),
+}).refine((input) => Object.keys(input).length > 0, { message: "At least one field is required" });
+export const productUpdateParamsV2 = z.object({ id: entityId });
+export const productDeleteBodyV2 = z.object({ id: entityId }).strict();

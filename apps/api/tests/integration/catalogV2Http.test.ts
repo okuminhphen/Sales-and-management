@@ -167,4 +167,50 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
         await request(app).delete(`/api/v1/size/delete/${referenced[0]!.sizeId}`)
             .set("Authorization", adminBearer).expect(409);
     });
+
+    it("writes product metadata and an outbox event atomically, then deactivates instead of deleting", async () => {
+        await request(app).post("/api/v1/product/create").send({ name: "No auth" }).expect(401);
+        await request(app).post("/api/v1/product/create").set("Authorization", adminBearer)
+            .send({ name: "Wrong price", price: 12.5, categoryId }).expect(400);
+        const created = await request(app).post("/api/v1/product/create").set("Authorization", adminBearer)
+            .send({ name: "HTTP metadata", description: "Item description", price: "123.4500", categoryId })
+            .expect(200);
+        const id: string = created.body.DT.id;
+        expect(id).toMatch(/^[1-9]\d*$/);
+        const draft = await sequelize.query<{ status: string; basePrice: string }>(
+            "SELECT status, base_price AS basePrice FROM products WHERE id = ?",
+            { replacements: [id], type: QueryTypes.SELECT },
+        );
+        expect(draft[0]).toMatchObject({ status: "draft", basePrice: "123.4500" });
+        await request(app).get(`/api/v1/product/${id}`).expect(404);
+        await request(app).put(`/api/v1/product/update/${id}`).set("Authorization", adminBearer)
+            .send({ status: "active", price: "999.0000" }).expect(200);
+        const active = await request(app).get(`/api/v1/product/${id}`).expect(200);
+        expect(active.body.DT).toMatchObject({ id, basePrice: "999.0000" });
+        const events = await sequelize.query<{ eventType: string }>(
+            "SELECT event_type AS eventType FROM outbox_events WHERE aggregate_type = 'product' AND aggregate_id = ? ORDER BY id",
+            { replacements: [id], type: QueryTypes.SELECT },
+        );
+        expect(events.map((event) => event.eventType)).toEqual([
+            "catalog.product.upserted", "catalog.product.upserted",
+        ]);
+        await request(app).put(`/api/v1/product/update/${id}`).set("Authorization", adminBearer)
+            .send({ categoryId: "9223372036854775807" }).expect(404);
+        const afterFailedUpdate = await request(app).get(`/api/v1/product/${id}`).expect(200);
+        expect(afterFailedUpdate.body.DT.categoryId).toBe(categoryId);
+        await request(app).delete("/api/v1/product/delete").set("Authorization", adminBearer)
+            .send({ id }).expect(200);
+        await request(app).get(`/api/v1/product/${id}`).expect(404);
+        const inactive = await sequelize.query<{ status: string }>("SELECT status FROM products WHERE id = ?", {
+            replacements: [id], type: QueryTypes.SELECT,
+        });
+        expect(inactive[0]?.status).toBe("inactive");
+        const finalEvents = await sequelize.query<{ eventType: string }>(
+            "SELECT event_type AS eventType FROM outbox_events WHERE aggregate_type = 'product' AND aggregate_id = ? ORDER BY id",
+            { replacements: [id], type: QueryTypes.SELECT },
+        );
+        expect(finalEvents.map((event) => event.eventType)).toEqual([
+            "catalog.product.upserted", "catalog.product.upserted", "catalog.product.deleted",
+        ]);
+    });
 });
