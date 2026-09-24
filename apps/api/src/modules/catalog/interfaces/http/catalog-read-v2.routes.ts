@@ -4,7 +4,7 @@ import type { CatalogCategoryQueryV2Service } from "../../application/catalog-ca
 import type { CatalogSizeQueryV2Service } from "../../application/catalog-size-query-v2.service.js";
 import type { CatalogProductQueryV2Service } from "../../application/catalog-product-query-v2.service.js";
 import type { CatalogProductVariantQueryV2Service } from "../../application/catalog-product-variant-query-v2.service.js";
-import { catalogListQueryV2, catalogProductIdParamsV2 } from "./catalog-read-v2.dto.js";
+import { catalogListQueryV2, catalogProductIdParamsV2, catalogProductsByCategoryQueryV2 } from "./catalog-read-v2.dto.js";
 
 type Dependencies = {
     categories: CatalogCategoryQueryV2Service;
@@ -39,6 +39,13 @@ export const createCatalogReadV2Router = (services: Dependencies): Router => {
         if (result.kind === "catalog_unavailable") { unavailable(response); return; }
         if (result.kind === "invalid_product_query") { response.status(400).json({ EM: "Invalid product query", EC: 1, DT: null }); return; }
         if (result.kind !== "products") { unavailable(response); return; }
+        const { products, ...pagination } = result.page;
+        response.status(200).json({ EM: "Get products successfully", EC: 0, DT: products, pagination });
+    });
+    router.get("/product-by-category/read", validateRequest({ query: catalogProductsByCategoryQueryV2 }), async (request, response) => {
+        const result = await services.products.listByCategoryId(request.query.categoryId, request.query);
+        if (result.kind === "catalog_unavailable") { unavailable(response); return; }
+        if (result.kind !== "products") { response.status(400).json({ EM: "Invalid product query", EC: 1, DT: null }); return; }
         const { products, ...pagination } = result.page;
         response.status(200).json({ EM: "Get products successfully", EC: 0, DT: products, pagination });
     });

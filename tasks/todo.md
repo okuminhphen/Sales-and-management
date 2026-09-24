@@ -139,7 +139,8 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     cùng mutation. Product media replace/clear 1–5 ảnh đã có pre-auth trước buffering,
     chữ ký file, 5 MiB/file, reservation/cleanup outbox bền vững và worker đối chiếu
     reference banner/product. MySQL test có rollback và mất commit acknowledgement;
-    Cloudinary thật chưa gọi. Router chưa mount vào app legacy; route compatibility còn thiếu.
+    Cloudinary thật chưa gọi. Product-by-category public V2 đã có pagination/MySQL test.
+    Core catalog V2 hoàn tất; router chưa mount vào app legacy (T38–T44).
     Category directory V2 public đã có pagination theo code (20/100), BIGINT-safe
     serialization và unit/MySQL `_test` integration. Size directory public đã có pagination
     deterministic theo `name`, rồi `id` (20/100), serialization BIGINT và unit/MySQL `_test`
@@ -147,8 +148,8 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     đọc `active`, phân trang `created_at DESC`/`id DESC`, trả DECIMAL/ID an toàn và lọc image JSON
     thành URL `http/https`; nó không join inventory. Variant directory theo product chỉ trả parent
     và variant `active`, định danh variant/size và tên size theo thứ tự deterministic, không lộ
-    SKU/stock. Legacy `/category/check`, `/product-by-category/read`, recommendation và
-    contract Web vẫn chưa chuyển; availability theo branch thuộc T29.
+    SKU/stock. Legacy `/category/check` vốn handler rỗng, Web không dùng; recommendation
+    phụ thuộc AI/MySQL sẽ chuyển T40. Contract Web thuộc T39; availability theo branch T29.
 - [ ] T28 — Cart/review/banner endpoints V2.
   - [x] Core banner directory: chỉ đọc `active`, phân trang 20/100, serialize BIGINT,
     lọc JSON ảnh và target URL trước khi ra client; unit/MySQL `_test` integration.

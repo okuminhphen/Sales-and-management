@@ -9,6 +9,7 @@ export const catalogListQueryV2 = z.object({
 });
 
 export const catalogProductIdParamsV2 = z.object({ productId: entityId });
+export const catalogProductsByCategoryQueryV2 = catalogListQueryV2.extend({ categoryId: entityId });
 export const catalogCategoryIdParamsV2 = z.object({ categoryId: entityId });
 
 export const categoryCreateBodyV2 = z.object({

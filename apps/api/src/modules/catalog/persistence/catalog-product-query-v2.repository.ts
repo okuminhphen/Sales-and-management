@@ -38,7 +38,7 @@ export class SequelizeCatalogProductV2Repository implements CatalogProductV2Repo
 
     async listActive(query: CatalogProductListQuery): Promise<CatalogProductPage> {
         const { count, rows } = await this.product.findAndCountAll({
-            where: { status: "active" },
+            where: { status: "active", ...(query.categoryId === undefined ? {} : { categoryId: query.categoryId }) },
             offset: (query.page - 1) * query.limit,
             limit: query.limit,
             order: [["createdAt", "DESC"], ["id", "DESC"]],

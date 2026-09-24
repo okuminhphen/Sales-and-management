@@ -265,7 +265,8 @@ chứng qua JWT ký thật + MySQL `_test`; chưa mount vào legacy app.
 
 `apps/api/src/routes/catalog-v2.ts` là composition độc lập trên Database V2, chưa mount vào
 `routes/api.ts`. Nó cung cấp `GET /category/read`, `GET /size/read`, `GET /product/read`,
-`GET /product/:productId` và `GET /product/:productId/variants` dưới `/api/v1` khi được mount.
+`GET /product-by-category/read?categoryId=...`, `GET /product/:productId` và
+`GET /product/:productId/variants` dưới `/api/v1` khi được mount.
 Directory dùng `page`/`limit` (mặc định 1/20, tối đa 100), trả `pagination` riêng; ID luôn
 là string và `basePrice` là DECIMAL string. Product/variant public chỉ hiện trạng thái `active`,
 không lộ SKU hay số lượng tồn. Dữ liệu ảnh product được lọc URL an toàn. Category mutation
@@ -275,8 +276,9 @@ yêu cầu JWT V2 và grant nội bộ `catalog.manage.global` từ DB. `code`/`
 category có child/product cũng trả 409. T39 phải cập nhật Web đọc contract mới trước khi router
 này thay thế legacy. Size mutation giữ legacy path `POST /size/create`, `PUT /size/update`,
 `DELETE /size/delete/:id` nhưng ID là BIGINT string, trả 409 khi trùng tên hoặc còn variant
-tham chiếu; không xóa cascade. Availability theo branch là việc T29; các route legacy
-`/category/check`, `/product-by-category/read` và recommendation còn cần map/đối chiếu Web.
+tham chiếu; không xóa cascade. Availability theo branch là việc T29. Hai route recommendation
+legacy phụ thuộc AI service/MySQL cũ sẽ chuyển cùng AI consumer tại T40. `/category/check`
+legacy là handler rỗng và Web không gọi; chưa có contract nghiệp vụ để chuyển thành API V2.
 
 Product metadata V2 đã có `POST /product/create`, `PUT /product/update/:id` và
 `DELETE /product/delete` (chuyển `inactive`, không hard-delete). Variant có

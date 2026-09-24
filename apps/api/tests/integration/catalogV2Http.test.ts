@@ -96,6 +96,15 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
         expect(products.body.DT.some((product: { id: string }) => product.id === inactiveProductId)).toBe(false);
     });
 
+    it("filters the public product directory by category with pagination", async () => {
+        const listed = await request(app).get(`/api/v1/product-by-category/read?categoryId=${categoryId}&page=1&limit=20`)
+            .expect(200);
+        expect(listed.body.DT).toEqual(expect.arrayContaining([expect.objectContaining({ id: productId })]));
+        expect(listed.body.DT.some((product: { id: string }) => product.id === inactiveProductId)).toBe(false);
+        expect(listed.body.pagination).toMatchObject({ page: 1, limit: 20 });
+        await request(app).get("/api/v1/product-by-category/read?categoryId=not-an-id").expect(400);
+    });
+
     it("returns active detail and variants without leaking SKU or inventory", async () => {
         const detail = await request(app).get(`/api/v1/product/${productId}`).expect(200);
         expect(detail.body.DT).toMatchObject({ id: productId, categoryId, basePrice: "123.4500" });

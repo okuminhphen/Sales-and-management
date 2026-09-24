@@ -25,6 +25,7 @@ export type CatalogProductListInput = {
 export type CatalogProductListQuery = {
     page: number;
     limit: number;
+    categoryId?: EntityId;
 };
 
 export type CatalogProductPage = {
@@ -86,6 +87,17 @@ export class CatalogProductQueryV2Service {
         if (!query) return { kind: "invalid_product_query" };
         try {
             return { kind: "products", page: await this.dependencies.repository.listActive(query) };
+        } catch {
+            return { kind: "catalog_unavailable" };
+        }
+    }
+
+    async listByCategoryId(categoryIdInput: unknown, input?: CatalogProductListInput): Promise<CatalogProductQueryResult> {
+        const categoryId = parseProductId(categoryIdInput);
+        const query = normalizeListQuery(input);
+        if (!categoryId || !query) return { kind: "invalid_product_query" };
+        try {
+            return { kind: "products", page: await this.dependencies.repository.listActive({ ...query, categoryId }) };
         } catch {
             return { kind: "catalog_unavailable" };
         }
