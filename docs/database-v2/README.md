@@ -181,14 +181,15 @@ duyệt.
 Size directory V2 cũng chỉ-đọc public, phân trang deterministic theo `name`, rồi `id` (mặc định
 20, tối đa 100) và serialize BIGINT thành string. Size là dữ liệu tham chiếu catalog, không phải
 tồn kho: API này không suy diễn khả dụng của product variant hay số lượng theo chi nhánh. Tạo/sửa
-size và product/variant vẫn chờ DTO, write-policy và contract tồn kho V2 được duyệt.
+size và product/variant đã có HTTP V2 riêng (T27), nhưng chưa cutover vào app chính.
 
 Product directory/detail V2 chỉ đọc các product `active`, phân trang deterministic theo
 `created_at DESC`, rồi `id DESC` (mặc định 20, tối đa 100). `base_price` DECIMAL được trả dưới
 dạng chuỗi canonical, không qua JavaScript `number`; ID cũng luôn là string. Image JSON cũ được
 lọc thành mảng `{ url }` chỉ chấp nhận URL `http/https`, không trả `publicId` hay JSON lỗi. Product
 read không join `inventories`: khả dụng/tồn kho là dữ liệu theo `(branch, product_variant)` và sẽ
-thuộc contract inventory riêng. Product write, variant, DTO/route compatibility vẫn chưa chuyển.
+thuộc contract inventory riêng. Product/variant write và DTO/route compatibility đã có trong
+composition V2 độc lập ở T27; Web chưa chuyển sang contract ID/DECIMAL mới.
 
 Variant directory theo product cũng chỉ public read: chỉ parent product và variant `active`, trả
 `variant id`, `size id`, `size name`, theo thứ tự `size.name`, rồi `variant.id`. Không trả SKU,
@@ -356,6 +357,41 @@ npm test --workspace @sales/api -- tests/integration/databaseV2T28Http.test.ts
 Suite kiểm tra create/replace/delete ảnh, transaction rollback, mất commit acknowledgement,
 quyền DB thắng JWT hints, cart ownership, review uniqueness, tài khoản khóa và audit không chứa
 request data nhạy cảm. Test này không thay thế smoke Web/AI/runtime chính tại T42–T44.
+
+## Inventory V2 — T29 đang triển khai
+
+`stock` trong `inventories` là số hàng vật lý bán được tại chi nhánh, **bao gồm** hàng đang giữ.
+`reserved` là tổng reservation `active`, kể cả hold đã quá `expires_at` nhưng worker chưa chuyển
+trạng thái. `available = stock - reserved`; read model chỉ để hiển thị. Checkout/điều chuyển phải
+tính lại sau khi khóa inventory row. Test MySQL `_test` đã kiểm chứng công thức, idempotency và
+hai request tranh đơn vị hàng cuối.
+
+Core nội bộ hiện có: giữ hàng cho order item dựa trên branch/variant/quantity lấy từ DB, với
+thứ tự khóa order → order item → inventory → reservation; manual stock adjustment kiểm tra grant
+`inventory.manage.branch`, active holds, rồi ghi `inventory_movements` cùng transaction thay đổi
+stock. Adjustment chỉ ghi `reference_type=manual_adjustment`; mutation từ order/transfer/return
+phải có typed FK và flow riêng. Đây chưa phải checkout hoàn chỉnh: order creation + reservation
+chưa được ghép cùng một transaction T33; confirm/consume/release còn phụ thuộc payment,
+fulfillment và transfer policy. Không gọi core này như API bán hàng đã sẵn sàng.
+
+`apps/api/src/routes/inventory-v2.ts` là router standalone cho `GET /inventory/:branchId` dưới
+`/api/v1` khi mount. JWT V2 được kiểm tra, quyền hiện tại lấy từ MySQL: nhân viên chỉ xem branch
+được cấp `inventory.read.branch`, global nội bộ có thể xem mọi branch, customer không được xem.
+Response giữ `EM/EC/DT` và nhóm product/sizes cũ, nhưng entity ID và giá là string; mỗi size
+có `stock`, `reserved`, `available`. Web hiện còn dùng `stock` như số lượng bán được nên T39 phải
+chuyển sang `available`. Endpoint chưa phân trang để giữ contract cũ; cần đánh giá khi dữ liệu
+chi nhánh lớn. Router chưa mount vào `routes/api.ts`, không thay thế runtime legacy trước cutover.
+
+Kiểm chứng lát cắt T29 trên database test (không dùng database chính):
+
+```powershell
+$env:RUN_DATABASE_V2_TESTS = "true"
+$env:V2_MIGRATIONS_ENABLED = "true"
+$env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
+npm test --workspace @sales/api -- tests/integration/databaseV2InventoryBalanceQuery.test.ts tests/integration/databaseV2InventoryReservation.test.ts tests/integration/databaseV2InventoryAdjustment.test.ts tests/integration/inventoryV2Http.test.ts
+```
+
+## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
 `sub`) và issuer/provider constraint. Không được ghép account chỉ theo email, vì email là claim
