@@ -198,6 +198,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     lock inventory và active holds, cập nhật stock + append-only movement cùng
     transaction, idempotency replay/conflict; MySQL `_test` kiểm chứng mở tồn,
     không giảm dưới hold và hai điều chỉnh cạnh tranh. Chưa mount HTTP.
+  - [x] Standalone V2 `GET /inventory/:branchId` giữ envelope/grouping legacy,
+    trả ID/money dạng string và `stock` (vật lý), `reserved`, `available` theo
+    variant; auth lấy grants từ DB, scope branch/global, Zod ID, MySQL HTTP test.
+    App chính chưa mount; Web hiện còn dùng `stock` nên phải dùng `available`
+    cho quyết định có thể bán ở T39. Danh sách chưa phân trang để giữ contract
+    legacy, cần xem lại khi dữ liệu chi nhánh lớn.
   - [ ] Release/consume/confirm reservation, transfer reservation, movement có
     typed source cho order/transfer/return, HTTP compatibility và tích hợp
     atomic checkout còn chờ; T29 chưa hoàn tất.
