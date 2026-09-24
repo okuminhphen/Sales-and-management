@@ -7,9 +7,11 @@ import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { StockRequestV2Service } from "../../src/modules/inventory-transfer/application/stock-request-v2.service.js";
 import { StockRequestDecisionV2Service } from "../../src/modules/inventory-transfer/application/stock-request-decision-v2.service.js";
 import { TransferApprovalV2Service } from "../../src/modules/inventory-transfer/application/transfer-approval-v2.service.js";
+import { TransferDispatchV2Service } from "../../src/modules/inventory-transfer/application/transfer-dispatch-v2.service.js";
 import { SequelizeStockRequestV2Repository } from "../../src/modules/inventory-transfer/persistence/stock-request-v2.repository.js";
 import { SequelizeStockRequestDecisionV2Repository } from "../../src/modules/inventory-transfer/persistence/stock-request-decision-v2.repository.js";
 import { SequelizeTransferApprovalV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-approval-v2.repository.js";
+import { SequelizeTransferDispatchV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-dispatch-v2.repository.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 transfer approval on MySQL", () => {
@@ -42,6 +44,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
         const requestService = new StockRequestV2Service({ repository: new SequelizeStockRequestV2Repository(persistence) });
         const decisionService = new StockRequestDecisionV2Service({ repository: new SequelizeStockRequestDecisionV2Repository(persistence) });
         const transferService = new TransferApprovalV2Service({ repository: new SequelizeTransferApprovalV2Repository(persistence) });
+        const dispatchService = new TransferDispatchV2Service({ repository: new SequelizeTransferDispatchV2Repository(persistence) });
         const manager: V2AccessContext = { accountId, customerId: null, employeeId: null, grants: [{
             roleCode: "BRANCH_MANAGER", scope: { type: "branch", branchId: requesterId },
             permissions: ["stock_request.manage.branch"],
@@ -53,7 +56,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
         if (created.kind !== "created") throw Error("Request setup failed.");
         const approvedRequest = await decisionService.approve(admin, created.id);
         if (approvedRequest.kind !== "approved") throw Error("Transfer setup failed.");
-        return { admin, transferService, transferId: approvedRequest.transferReceiptId,
+        return { admin, transferService, dispatchService, transferId: approvedRequest.transferReceiptId,
             supplierId, variantId, productId, token };
     };
 
@@ -105,5 +108,55 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
              FROM transfer_receipts tr WHERE tr.id = ?`,
             { replacements: [data.transferId], type: QueryTypes.SELECT });
         expect(rows[0]).toEqual({ status: "pending", holdCount: "0" });
+    });
+
+    it("dispatches approved stock once, debits only the source and records a movement", async () => {
+        const data = await fixture(5);
+        expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
+        const [first, second] = await Promise.all([
+            data.dispatchService.dispatch(data.admin, data.transferId),
+            data.dispatchService.dispatch(data.admin, data.transferId),
+        ]);
+        expect([first.kind, second.kind].sort()).toEqual(["dispatched", "transfer_already_processed"]);
+        const rows = await sequelize.query<{ status: string; sourceStock: number; destCount: string;
+            consumedCount: string; movementCount: string }>(
+            `SELECT tr.status, src.stock AS sourceStock,
+                    (SELECT COUNT(*) FROM inventories dst WHERE dst.branch_id = tr.to_branch_id
+                     AND dst.product_variant_id = ?) AS destCount,
+                    (SELECT COUNT(*) FROM inventory_reservations ir JOIN transfer_receipt_items ti
+                     ON ti.id = ir.transfer_receipt_item_id WHERE ti.transfer_receipt_id = tr.id
+                     AND ir.status = 'consumed') AS consumedCount,
+                    (SELECT COUNT(*) FROM inventory_movements im JOIN transfer_receipt_items ti
+                     ON ti.id = im.transfer_receipt_item_id WHERE ti.transfer_receipt_id = tr.id
+                     AND im.reason = 'transfer_dispatch') AS movementCount
+             FROM transfer_receipts tr JOIN inventories src ON src.branch_id = tr.from_branch_id
+             AND src.product_variant_id = ? WHERE tr.id = ?`,
+            { replacements: [data.variantId, data.variantId, data.transferId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ status: "in_transit", sourceStock: 2, destCount: "0",
+            consumedCount: "1", movementCount: "1" });
+    });
+
+    it("rolls back earlier source debits when a later transfer item cannot dispatch", async () => {
+        const data = await fixture(5);
+        const sizeId = await insert("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`TA-Z3-${data.token}`]);
+        const secondVariantId = await insert("INSERT INTO product_variants (product_id, size_id, sku, created_at, updated_at) VALUES (?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [data.productId, sizeId, `TA-V3-${data.token}`]);
+        const requestRows = await sequelize.query<{ requestId: string }>(
+            "SELECT stock_request_id AS requestId FROM transfer_receipts WHERE id = ?",
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        await insert("INSERT INTO stock_request_items (stock_request_id, product_variant_id, quantity, created_at, updated_at) VALUES (?, ?, 3, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [requestRows[0].requestId, secondVariantId]);
+        const secondItemId = await insert("INSERT INTO transfer_receipt_items (transfer_receipt_id, product_variant_id, quantity, created_at, updated_at) VALUES (?, ?, 3, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [data.transferId, secondVariantId]);
+        await insert("INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, 5, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [data.supplierId, secondVariantId]);
+        expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
+        await sequelize.query("UPDATE inventory_reservations SET status = 'released', released_at = UTC_TIMESTAMP(3) WHERE transfer_receipt_item_id = ?", {
+            replacements: [secondItemId] });
+        expect(await data.dispatchService.dispatch(data.admin, data.transferId)).toEqual({ kind: "transfer_conflict" });
+        const rows = await sequelize.query<{ status: string; stock: number; movementCount: string }>(
+            `SELECT tr.status, i.stock,
+                    (SELECT COUNT(*) FROM inventory_movements im JOIN transfer_receipt_items ti
+                     ON ti.id = im.transfer_receipt_item_id WHERE ti.transfer_receipt_id = tr.id) AS movementCount
+             FROM transfer_receipts tr JOIN inventories i ON i.branch_id = tr.from_branch_id
+             AND i.product_variant_id = ? WHERE tr.id = ?`,
+            { replacements: [data.variantId, data.transferId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ status: "approved", stock: 5, movementCount: "0" });
     });
 });

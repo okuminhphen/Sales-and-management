@@ -473,9 +473,12 @@ quyền global `transfer.manage.branch`, đối chiếu phiếu yêu cầu/chi�
 tổng quantity theo variant, khóa `stock_request → transfer_receipt → item →
 inventory → reservation`. State `approved`, active hold và history cùng commit;
 thiếu hàng ở bất kỳ item nào rollback cả state lẫn mọi hold. Duyệt chưa làm
-giảm kho nguồn hay tăng kho đích. Chưa mount runtime. Dispatch, ghi nhận và
-duyệt chênh lệch, receipt, hủy/từ chối, query và HTTP sẽ làm ở các lát cắt T31
-tiếp theo; không coi T31 hoàn thành ở checkpoint này.
+giảm kho nguồn hay tăng kho đích. Dispatch kế tiếp chuyển `approved` sang
+`in_transit`, consume hold và ghi movement giảm kho nguồn trong cùng transaction;
+kho đích vẫn không đổi. Nếu item sau không dispatch được, toàn bộ debit/movement
+item trước rollback. Chưa mount runtime. Ghi nhận và duyệt chênh lệch, receipt,
+hủy/từ chối, query và HTTP sẽ làm ở các lát cắt T31 tiếp theo; không coi T31
+hoàn thành ở checkpoint này.
 
 ## Giới hạn và kiểm thử chung còn lại
 
