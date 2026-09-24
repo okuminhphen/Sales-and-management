@@ -43,6 +43,7 @@
     "src/modules/transfer-receipt/transfer-receipt.dto.ts",
     "src/security/**/*.ts",
     "src/routes/catalog-commerce-v2.ts",
+    "src/routes/catalog-v2.ts",
     "src/routes/identity-v2.ts",
     "src/shared/contracts/**/*.ts",
     "src/socket.ts",

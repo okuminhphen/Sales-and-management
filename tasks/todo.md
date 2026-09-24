@@ -127,7 +127,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     hard-delete hay tự tạo inventory cũ.
     HTTP V2 có tạo/đọc/sửa branch và tạo/đọc/sửa/deactivate employee; gán manager chỉ nhận employee active cùng branch. Account-linking và transfer yêu cầu grant global, không tự cấp role mới; transfer thu hồi grant branch nguồn trong transaction và clear manager cũ. Deactivate cũng clear manager. Test MySQL/JWT đã có; runtime chưa mount. Legacy `/employee/read` toàn hệ thống, admin/account management và quyết định hợp đồng Web vẫn cần chuyển.
 - [ ] T27 — Category/product/size/variant endpoints V2.
-  - Tiến độ: category directory V2 public đã có pagination theo code (20/100), BIGINT-safe
+  - Tiến độ: standalone HTTP router `catalog-v2.ts` đã nối public category/size/product/variant
+    read models với DTO Zod, envelope `EM/EC/DT`, pagination, 400/404/503; test HTTP/MySQL `_test`
+    và strict typecheck đạt. Router chưa mount vào app legacy; các write endpoint vẫn thiếu.
+    Category directory V2 public đã có pagination theo code (20/100), BIGINT-safe
     serialization và unit/MySQL `_test` integration. Size directory public đã có pagination
     deterministic theo `name`, rồi `id` (20/100), serialization BIGINT và unit/MySQL `_test`
     integration; nó không trả hoặc suy diễn tồn kho. Product directory/detail public hiện chỉ
