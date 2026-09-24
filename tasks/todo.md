@@ -222,7 +222,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     chuyển hold `consumed`, ghi movement typed `order_item_id` cùng transaction.
     Test MySQL rollback, replay và không xuất kho trước bàn giao. Caller T33/T35
     vẫn phải xác minh payment/COD và cập nhật fulfillment cùng transaction.
-  - [ ] Expire worker an toàn với payment chưa rõ, transfer reservation và
+  - [x] Giữ kho nguồn khi duyệt transfer item: kiểm tra receipt/request `approved`,
+    đối chiếu chiều branch requester/supplier và variant, khóa request → receipt
+    → item → inventory → active holds, không trừ stock khi duyệt. Repository nhận
+    outer transaction của T31; MySQL test replay/conflict, rollback và hai phiếu
+    tranh đơn vị cuối. Chưa dispatch/receive hoặc mount HTTP.
+  - [ ] Expire worker an toàn với payment chưa rõ, dispatch/receipt và
     movement typed transfer/return, HTTP compatibility và tích hợp atomic
     checkout còn chờ; T29 chưa hoàn tất.
 - [ ] T30 — Stock request service V2.

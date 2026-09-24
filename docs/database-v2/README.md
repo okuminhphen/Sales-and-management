@@ -380,8 +380,15 @@ processing hoặc completed đều giữ hold để đối soát. Release không
 Primitive `consume` yêu cầu fulfillment đã `shipping`/`fulfilled` và hold đã confirm; nó giảm
 stock, chuyển hold `consumed` và ghi movement có FK `order_item_id` trong cùng transaction.
 Caller T33/T35 vẫn phải kiểm tra payment/COD và đổi fulfillment trong transaction đó. Expire
-worker và transfer reservation còn phụ thuộc payment/transfer policy; chưa có runtime bán hàng
-V2 hoàn chỉnh.
+worker còn phụ thuộc payment/order policy; chưa có runtime bán hàng V2 hoàn chỉnh.
+
+Primitive `reserveTransferItem` dành cho T31 giữ hàng tại branch cung cấp khi phiếu
+điều chuyển đã được duyệt. Nó đối chiếu request (nếu có) và receipt theo chiều
+requester/supplier, khóa request → receipt → item → inventory → reservation, tạo
+hold confirmed không expiry và không giảm stock. Repository nhận transaction của
+approval use-case; MySQL `_test` đã kiểm tra rollback, idempotency và cạnh tranh
+đơn vị cuối. Dispatch mới là lúc giảm kho nguồn và ghi movement; nhận hàng đủ
+điều kiện bán mới tăng kho đích, nên hai bước này còn chờ T31.
 
 `apps/api/src/routes/inventory-v2.ts` là router standalone cho `GET /inventory/:branchId` dưới
 `/api/v1` khi mount. JWT V2 được kiểm tra, quyền hiện tại lấy từ MySQL: nhân viên chỉ xem branch
@@ -397,7 +404,7 @@ Kiểm chứng lát cắt T29 trên database test (không dùng database chính)
 $env:RUN_DATABASE_V2_TESTS = "true"
 $env:V2_MIGRATIONS_ENABLED = "true"
 $env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
-npm test --workspace @sales/api -- tests/integration/databaseV2InventoryBalanceQuery.test.ts tests/integration/databaseV2InventoryReservation.test.ts tests/integration/databaseV2InventoryAdjustment.test.ts tests/integration/inventoryV2Http.test.ts
+npm test --workspace @sales/api -- tests/integration/databaseV2InventoryBalanceQuery.test.ts tests/integration/databaseV2InventoryReservation.test.ts tests/integration/databaseV2TransferReservation.test.ts tests/integration/databaseV2InventoryAdjustment.test.ts tests/integration/inventoryV2Http.test.ts
 ```
 
 ## Giới hạn và kiểm thử chung còn lại
