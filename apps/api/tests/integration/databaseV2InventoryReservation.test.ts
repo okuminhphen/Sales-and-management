@@ -39,11 +39,14 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 inven
         const sizeId = await insert("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`RESSIZE-${token}`]);
         const variantId = await insert("INSERT INTO product_variants (product_id, size_id, sku, created_at, updated_at) VALUES (?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [productId, sizeId, `RESSKU-${token}`]);
         const inventoryId = await insert("INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [branchId, variantId, stock]);
-        const createItem = async (number: number): Promise<string> => {
+        const createItem = async (number: number): Promise<{ orderId: string; itemId: string }> => {
             const orderId = await insert("INSERT INTO orders (code, checkout_key, fulfillment_branch_id, created_by_account_id, channel, fulfillment_type, subtotal_amount, total_amount, placed_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'in_store', 'carry_out', '100.0000', '100.0000', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`RESORD-${number}-${token}`, `rescheckout-${number}-${token}`, branchId, accountId]);
-            return insert("INSERT INTO order_items (order_id, product_variant_id, sku_snapshot, product_name_snapshot, size_name_snapshot, unit_price, quantity, line_total, created_at) VALUES (?, ?, 'SKU', 'Product', 'M', '100.0000', 1, '100.0000', UTC_TIMESTAMP(3))", [orderId, variantId]);
+            const itemId = await insert("INSERT INTO order_items (order_id, product_variant_id, sku_snapshot, product_name_snapshot, size_name_snapshot, unit_price, quantity, line_total, created_at) VALUES (?, ?, 'SKU', 'Product', 'M', '100.0000', 1, '100.0000', UTC_TIMESTAMP(3))", [orderId, variantId]);
+            return { orderId, itemId };
         };
-        return { token, inventoryId, firstItemId: await createItem(1), secondItemId: await createItem(2) };
+        const first = await createItem(1);
+        const second = await createItem(2);
+        return { token, inventoryId, firstOrderId: first.orderId, firstItemId: first.itemId, secondItemId: second.itemId };
     };
 
     it("reserves once, replays the exact key and never changes physical stock", async () => {
@@ -107,5 +110,127 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 inven
             { replacements: [`atomic-${data.token}`], type: QueryTypes.SELECT },
         );
         expect(rows[0]?.count).toBe("0");
+    });
+
+    it("confirms a paid/confirmed order hold without reducing stock, and rolls back with its caller", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `confirm-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        const persistence = createSalesV2Persistence(sequelize);
+        const repository = new SequelizeInventoryReservationV2Repository(persistence);
+        expect(await repository.confirmOrderReservation(reserved.reservationId)).toEqual({ kind: "order_not_confirmed" });
+        const marker = new Error("rollback confirmation fixture");
+        await expect(sequelize.transaction(async (transaction) => {
+            await sequelize.query("UPDATE orders SET status = 'confirmed', updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+                { replacements: [data.firstOrderId], transaction });
+            const scoped = new SequelizeInventoryReservationV2Repository(persistence, transaction);
+            expect(await scoped.confirmOrderReservation(reserved.reservationId)).toEqual({ kind: "confirmed" });
+            throw marker;
+        })).rejects.toBe(marker);
+        const before = await sequelize.query<{ status: string; confirmedAt: Date | null; expiresAt: Date | null; stock: number }>(
+            "SELECT r.status, r.confirmed_at AS confirmedAt, r.expires_at AS expiresAt, i.stock FROM inventory_reservations r JOIN inventories i ON i.id = r.inventory_id WHERE r.id = ?",
+            { replacements: [reserved.reservationId], type: QueryTypes.SELECT },
+        );
+        expect(before[0]).toMatchObject({ status: "active", confirmedAt: null, stock: 1 });
+        expect(before[0]?.expiresAt).not.toBeNull();
+        await sequelize.query("UPDATE orders SET status = 'confirmed', updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        expect(await repository.confirmOrderReservation(reserved.reservationId)).toEqual({ kind: "confirmed" });
+        expect(await repository.confirmOrderReservation(reserved.reservationId)).toEqual({ kind: "replayed" });
+        const after = await sequelize.query<{ confirmedAt: Date | null; expiresAt: Date | null; stock: number }>(
+            "SELECT r.confirmed_at AS confirmedAt, r.expires_at AS expiresAt, i.stock FROM inventory_reservations r JOIN inventories i ON i.id = r.inventory_id WHERE r.id = ?",
+            { replacements: [reserved.reservationId], type: QueryTypes.SELECT },
+        );
+        expect(after[0]?.confirmedAt).not.toBeNull();
+        expect(after[0]).toMatchObject({ expiresAt: null, stock: 1 });
+    });
+
+    it("refuses to confirm a hold whose deadline passed before the payment confirmation", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `late-confirm-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        await sequelize.query("UPDATE orders SET status = 'confirmed', updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        await sequelize.query("UPDATE inventory_reservations SET expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 SECOND WHERE id = ?",
+            { replacements: [reserved.reservationId] });
+        const repository = new SequelizeInventoryReservationV2Repository(createSalesV2Persistence(sequelize));
+        expect(await repository.confirmOrderReservation(reserved.reservationId)).toEqual({ kind: "reservation_expired" });
+        const rows = await sequelize.query<{ confirmedAt: Date | null; expiresAt: Date | null }>(
+            "SELECT confirmed_at AS confirmedAt, expires_at AS expiresAt FROM inventory_reservations WHERE id = ?",
+            { replacements: [reserved.reservationId], type: QueryTypes.SELECT },
+        );
+        expect(rows[0]?.confirmedAt).toBeNull();
+        expect(rows[0]?.expiresAt).not.toBeNull();
+    });
+
+    it("releases only a cancelled pre-handover order with no unresolved payment", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `release-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        await sequelize.query("UPDATE orders SET status = 'cancelled', fulfillment_status = 'cancelled', cancelled_at = UTC_TIMESTAMP(3), updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        const methodId = await insert("INSERT INTO payment_methods (code, name, is_active, created_at, updated_at) VALUES (?, 'Test', TRUE, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`RELPAY-${data.token}`]);
+        const paymentId = await insert("INSERT INTO payments (order_id, payment_method_id, provider, merchant_reference, amount, status, created_at, updated_at) VALUES (?, ?, 'test', ?, '100.0000', 'processing', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [data.firstOrderId, methodId, `release-payment-${data.token}`]);
+        const persistence = createSalesV2Persistence(sequelize);
+        const repository = new SequelizeInventoryReservationV2Repository(persistence);
+        expect(await repository.releaseCancelledOrderReservation(reserved.reservationId)).toEqual({ kind: "payment_unresolved" });
+        await sequelize.query("UPDATE payments SET status = 'failed', updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            { replacements: [paymentId] });
+        const marker = new Error("rollback release fixture");
+        await expect(sequelize.transaction(async (transaction) => {
+            const scoped = new SequelizeInventoryReservationV2Repository(persistence, transaction);
+            expect(await scoped.releaseCancelledOrderReservation(reserved.reservationId)).toEqual({ kind: "released" });
+            throw marker;
+        })).rejects.toBe(marker);
+        expect(await repository.releaseCancelledOrderReservation(reserved.reservationId)).toEqual({ kind: "released" });
+        expect(await repository.releaseCancelledOrderReservation(reserved.reservationId)).toEqual({ kind: "replayed" });
+        const rows = await sequelize.query<{ status: string; releasedAt: Date | null; stock: number }>(
+            "SELECT r.status, r.released_at AS releasedAt, i.stock FROM inventory_reservations r JOIN inventories i ON i.id = r.inventory_id WHERE r.id = ?",
+            { replacements: [reserved.reservationId], type: QueryTypes.SELECT },
+        );
+        expect(rows[0]).toMatchObject({ status: "released", stock: 1 });
+        expect(rows[0]?.releasedAt).not.toBeNull();
+    });
+
+    it("consumes a confirmed hold at handover with one typed movement and no partial commit", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `consume-hold-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        const persistence = createSalesV2Persistence(sequelize);
+        const repository = new SequelizeInventoryReservationV2Repository(persistence);
+        const key = `consume-${data.token}`;
+        expect(await repository.consumeOrderReservation(reserved.reservationId, key)).toEqual({ kind: "order_not_ready" });
+        await sequelize.query("UPDATE orders SET status = 'confirmed', updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        expect(await repository.consumeOrderReservation(reserved.reservationId, key)).toEqual({ kind: "order_not_ready" });
+        expect(await repository.confirmOrderReservation(reserved.reservationId)).toEqual({ kind: "confirmed" });
+        const marker = new Error("rollback handover fixture");
+        await expect(sequelize.transaction(async (transaction) => {
+            await sequelize.query("UPDATE orders SET status = 'completed', fulfillment_status = 'fulfilled', fulfilled_at = UTC_TIMESTAMP(3), updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+                { replacements: [data.firstOrderId], transaction });
+            const scoped = new SequelizeInventoryReservationV2Repository(persistence, transaction);
+            expect(await scoped.consumeOrderReservation(reserved.reservationId, key)).toEqual({ kind: "consumed", balanceAfter: 0 });
+            throw marker;
+        })).rejects.toBe(marker);
+        const before = await sequelize.query<{ stock: number; status: string; movements: string }>(
+            "SELECT i.stock, r.status, (SELECT COUNT(*) FROM inventory_movements m WHERE m.idempotency_key = ?) AS movements FROM inventory_reservations r JOIN inventories i ON i.id = r.inventory_id WHERE r.id = ?",
+            { replacements: [key, reserved.reservationId], type: QueryTypes.SELECT },
+        );
+        expect(before[0]).toEqual({ stock: 1, status: "active", movements: "0" });
+        await sequelize.query("UPDATE orders SET status = 'completed', fulfillment_status = 'fulfilled', fulfilled_at = UTC_TIMESTAMP(3), updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        expect(await repository.consumeOrderReservation(reserved.reservationId, key)).toEqual({ kind: "consumed", balanceAfter: 0 });
+        expect(await repository.consumeOrderReservation(reserved.reservationId, key)).toEqual({ kind: "replayed", balanceAfter: 0 });
+        expect(await repository.consumeOrderReservation(reserved.reservationId, `other-${data.token}`)).toEqual({ kind: "reservation_finalized" });
+        const after = await sequelize.query<{ stock: number; status: string; quantityDelta: number; balanceAfter: number; orderItemId: string; movements: string }>(
+            "SELECT i.stock, r.status, m.quantity_delta AS quantityDelta, m.balance_after AS balanceAfter, m.order_item_id AS orderItemId, (SELECT COUNT(*) FROM inventory_movements mm WHERE mm.idempotency_key = ?) AS movements FROM inventory_reservations r JOIN inventories i ON i.id = r.inventory_id JOIN inventory_movements m ON m.idempotency_key = ? WHERE r.id = ?",
+            { replacements: [key, key, reserved.reservationId], type: QueryTypes.SELECT },
+        );
+        expect(after[0]).toEqual({ stock: 0, status: "consumed", quantityDelta: -1,
+            balanceAfter: 0, orderItemId: data.firstItemId, movements: "1" });
     });
 });

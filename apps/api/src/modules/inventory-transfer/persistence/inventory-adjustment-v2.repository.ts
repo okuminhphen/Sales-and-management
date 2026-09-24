@@ -50,7 +50,7 @@ export class SequelizeInventoryAdjustmentV2Repository implements InventoryAdjust
         const stock = quantity(inventory.stock);
         if (stock < 0 || stock > 2_147_483_647) throw new Error("Invalid stock in database.");
         const activeHolds = await this.persistence.sequelize.query<{ quantity: unknown }>(
-            "SELECT quantity FROM inventory_reservations WHERE inventory_id = ? AND status = 'active' FOR UPDATE",
+            "SELECT quantity FROM inventory_reservations WHERE inventory_id = ? AND status = 'active' ORDER BY id ASC FOR UPDATE",
             { replacements: [inventoryId], transaction, type: QueryTypes.SELECT },
         );
         const reserved = activeHolds.reduce((sum, hold) => {

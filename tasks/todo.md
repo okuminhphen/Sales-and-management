@@ -206,9 +206,25 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     App chính chưa mount; Web hiện còn dùng `stock` nên phải dùng `available`
     cho quyết định có thể bán ở T39. Danh sách chưa phân trang để giữ contract
     legacy, cần xem lại khi dữ liệu chi nhánh lớn.
-  - [ ] Release/consume/confirm reservation, transfer reservation, movement có
-    typed source cho order/transfer/return, HTTP compatibility và tích hợp
-    atomic checkout còn chờ; T29 chưa hoàn tất.
+  - [x] Confirm order reservation nội bộ chỉ khi order đã `confirmed`:
+    lock order → item → inventory → reservation; đặt `confirmed_at`, xóa
+    `expires_at`, không trừ stock; từ chối hold đã hết hạn ngay cả khi worker
+    chưa release. MySQL test rollback outer transaction, expired hold và
+    idempotent replay. T34/T35 vẫn phải xác minh payment/COD policy trong cùng
+    transaction trước khi gọi; chưa expose HTTP.
+  - [x] Release order hold khi order và fulfillment cùng `cancelled`, payment
+    không có attempt pending/processing/completed. Lock order → payment → item
+    → inventory → reservation; chỉ đổi hold sang `released`, không cộng stock.
+    MySQL test chặn payment chưa rõ, rollback transaction và idempotent replay.
+    Chưa có expire worker; refund/partial-payment policy thuộc T34/T35.
+  - [x] Consume order hold nội bộ khi fulfillment `shipping`/`fulfilled` và
+    hold đã confirm: lock order → item → inventory → reservation; giảm stock,
+    chuyển hold `consumed`, ghi movement typed `order_item_id` cùng transaction.
+    Test MySQL rollback, replay và không xuất kho trước bàn giao. Caller T33/T35
+    vẫn phải xác minh payment/COD và cập nhật fulfillment cùng transaction.
+  - [ ] Expire worker an toàn với payment chưa rõ, transfer reservation và
+    movement typed transfer/return, HTTP compatibility và tích hợp atomic
+    checkout còn chờ; T29 chưa hoàn tất.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.
 - [ ] T32 — Voucher claim/release service V2.

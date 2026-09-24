@@ -372,8 +372,16 @@ thứ tự khóa order → order item → inventory → reservation; manual stoc
 stock. Adjustment chỉ ghi `reference_type=manual_adjustment`; mutation từ order/transfer/return
 phải có typed FK và flow riêng. Repository reservation có thể dùng transaction do checkout
 truyền vào; MySQL test xác nhận rollback của outer transaction xóa hold. Đây chưa phải checkout
-hoàn chỉnh: use-case tạo order + reservation T33 chưa được nối; confirm/consume/release còn phụ thuộc payment,
-fulfillment và transfer policy. Không gọi core này như API bán hàng đã sẵn sàng.
+hoàn chỉnh: use-case tạo order + reservation T33 chưa được nối. Primitive `confirm` có thể
+được gọi trong transaction đổi order sang `confirmed`: nó xóa expiry và giữ nguyên stock,
+nhưng payment/COD policy phải được xác minh bởi use-case gọi nó. Primitive `release` chỉ nhả
+hold khi order và fulfillment đều `cancelled` và mọi payment đã `failed`/`cancelled`; pending,
+processing hoặc completed đều giữ hold để đối soát. Release không cộng stock vì chưa xuất kho.
+Primitive `consume` yêu cầu fulfillment đã `shipping`/`fulfilled` và hold đã confirm; nó giảm
+stock, chuyển hold `consumed` và ghi movement có FK `order_item_id` trong cùng transaction.
+Caller T33/T35 vẫn phải kiểm tra payment/COD và đổi fulfillment trong transaction đó. Expire
+worker và transfer reservation còn phụ thuộc payment/transfer policy; chưa có runtime bán hàng
+V2 hoàn chỉnh.
 
 `apps/api/src/routes/inventory-v2.ts` là router standalone cho `GET /inventory/:branchId` dưới
 `/api/v1` khi mount. JWT V2 được kiểm tra, quyền hiện tại lấy từ MySQL: nhân viên chỉ xem branch
