@@ -6,6 +6,7 @@ import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { InventoryReservationV2Service } from "../../src/modules/inventory-transfer/application/inventory-reservation-v2.service.js";
 import { SequelizeInventoryReservationV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-reservation-v2.repository.js";
+import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 inventory reservation on MySQL", () => {
     let sequelize: Sequelize;
@@ -89,5 +90,22 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 inven
             { replacements: [data.firstItemId] });
         expect(await service.reserveOrderItem({ orderItemId: data.firstItemId,
             idempotencyKey: `cancelled-${data.token}`, expiresAt: expiry() })).toEqual({ kind: "order_item_not_reservable" });
+    });
+
+    it("joins the caller's checkout transaction so rollback removes the hold", async () => {
+        const data = await fixture(1);
+        const marker = new Error("rollback checkout fixture");
+        await expect(sequelize.transaction(async (transaction) => {
+            const scoped = new SequelizeInventoryReservationV2Repository(createSalesV2Persistence(sequelize), transaction);
+            const result = await scoped.reserveOrderItem({ orderItemId: serializeEntityId(data.firstItemId),
+                idempotencyKey: `atomic-${data.token}`, expiresAt: expiry() });
+            expect(result.kind).toBe("reserved");
+            throw marker;
+        })).rejects.toBe(marker);
+        const rows = await sequelize.query<{ count: string }>(
+            "SELECT COUNT(*) AS count FROM inventory_reservations WHERE idempotency_key = ?",
+            { replacements: [`atomic-${data.token}`], type: QueryTypes.SELECT },
+        );
+        expect(rows[0]?.count).toBe("0");
     });
 });

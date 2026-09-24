@@ -193,7 +193,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     order/item trong DB, khóa order → item → inventory → reservation, dùng locking
     read tính active holds, unique idempotency key và retry deadlock bounded.
     Test MySQL `_test` kiểm tra replay, key mismatch, order đã hủy và hai checkout
-    tranh đơn vị cuối. Chưa nối vào T33 checkout transaction; không mount HTTP.
+    tranh đơn vị cuối. Repository nhận transaction của checkout; rollback của
+    outer transaction đã được kiểm chứng trên MySQL. Chưa nối use-case T33;
+    không mount HTTP.
   - [x] Lát cắt manual stock adjustment nội bộ: quyền theo branch/global grant,
     lock inventory và active holds, cập nhật stock + append-only movement cùng
     transaction, idempotency replay/conflict; MySQL `_test` kiểm chứng mở tồn,

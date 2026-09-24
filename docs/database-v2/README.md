@@ -370,8 +370,9 @@ Core nội bộ hiện có: giữ hàng cho order item dựa trên branch/varian
 thứ tự khóa order → order item → inventory → reservation; manual stock adjustment kiểm tra grant
 `inventory.manage.branch`, active holds, rồi ghi `inventory_movements` cùng transaction thay đổi
 stock. Adjustment chỉ ghi `reference_type=manual_adjustment`; mutation từ order/transfer/return
-phải có typed FK và flow riêng. Đây chưa phải checkout hoàn chỉnh: order creation + reservation
-chưa được ghép cùng một transaction T33; confirm/consume/release còn phụ thuộc payment,
+phải có typed FK và flow riêng. Repository reservation có thể dùng transaction do checkout
+truyền vào; MySQL test xác nhận rollback của outer transaction xóa hold. Đây chưa phải checkout
+hoàn chỉnh: use-case tạo order + reservation T33 chưa được nối; confirm/consume/release còn phụ thuộc payment,
 fulfillment và transfer policy. Không gọi core này như API bán hàng đã sẵn sàng.
 
 `apps/api/src/routes/inventory-v2.ts` là router standalone cho `GET /inventory/:branchId` dưới

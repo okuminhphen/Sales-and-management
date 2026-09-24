@@ -21,11 +21,17 @@ const nonnegativeInt = (value: unknown): number | null => {
 
 /** Checkout lock order: order -> order item -> inventory -> reservation. */
 export class SequelizeInventoryReservationV2Repository implements InventoryReservationV2Repository {
-    constructor(private readonly persistence: V2Persistence) {}
+    constructor(private readonly persistence: V2Persistence, private readonly transaction?: Transaction) {}
 
     async reserveOrderItem(input: ReserveOrderItemInput): Promise<ReserveOrderItemResult> {
         try {
-            return await this.persistence.inTransaction((transaction) => this.reserveLocked(input, transaction));
+            // Checkout injects its existing transaction: creating the order and
+            // its hold must commit or roll back together. Standalone callers
+            // get a private transaction. Retry the whole checkout, not this
+            // sub-operation, when a scoped transaction hits a deadlock.
+            return this.transaction
+                ? await this.reserveLocked(input, this.transaction)
+                : await this.persistence.inTransaction((transaction) => this.reserveLocked(input, transaction));
         } catch (error) {
             const code = (error as { parent?: { code?: string } })?.parent?.code;
             if (code === "ER_DUP_ENTRY") return { kind: "idempotency_conflict" };
