@@ -480,8 +480,16 @@ item trước rollback. Hủy/từ chối chỉ áp dụng trước dispatch; kh
 mọi hold được release cùng transaction với trạng thái và history, không cộng
 physical stock vì chưa trừ. Phiếu đang vận chuyển phải qua nhận/đối soát, không
 được dùng cancel/reject. Chưa mount runtime. Ghi nhận và duyệt chênh lệch,
-receipt, query và HTTP sẽ làm ở các lát cắt T31 tiếp theo; không coi T31
-hoàn thành ở checkpoint này.
+receipt có chênh lệch, query và HTTP vẫn chờ; không coi T31 hoàn thành ở
+checkpoint này.
+
+Lát cắt receipt không chênh lệch nhận danh sách quantity tường minh cho **mọi**
+item; chỉ destination branch hoặc global có quyền mới hoàn tất. Trong cùng
+transaction, state `completed`, `received_quantity`, movement tăng tồn đích
+qua primitive T29 và history được commit. Không nhận đủ item, sai tổng hoặc
+có mất/hỏng đều fail-closed; mất/hỏng phải qua luồng ghi nhận và duyệt hai
+người ở lát cắt kế tiếp. Endpoint legacy `complete` không có body **không thể**
+được xem là bằng chứng đã nhận đủ và chưa được mount sang V2.
 
 ## Giới hạn và kiểm thử chung còn lại
 
