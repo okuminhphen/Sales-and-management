@@ -137,6 +137,11 @@ export class SequelizeEmployeeV2Repository implements EmployeeV2Repository {
 
     async deactivateEmployee(employeeId: string, expectedBranchId: string): Promise<EmployeeMutationResult> {
         return this.persistence.inTransaction(async (transaction) => {
+            // Match manager assignment's lock order (branch, then employee).
+            const branch = await this.branch.findByPk(expectedBranchId, {
+                transaction, lock: transaction.LOCK.UPDATE,
+            });
+            if (!branch) return { kind: "branch_not_found" };
             const employee = await this.employee.findOne({
                 where: { id: employeeId, branchId: expectedBranchId },
                 transaction,
@@ -144,6 +149,10 @@ export class SequelizeEmployeeV2Repository implements EmployeeV2Repository {
             });
             if (!employee) return { kind: "employee_not_found" };
             await employee.update({ status: "inactive", updatedAt: new Date() }, { transaction });
+            if (branch.dataValues.managerEmployeeId !== null
+                && serializeDatabaseEntityId(branch.dataValues.managerEmployeeId) === employeeId) {
+                await branch.update({ managerEmployeeId: null, updatedAt: new Date() }, { transaction });
+            }
             return toEmployeeProfile(employee.dataValues);
         });
     }

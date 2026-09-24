@@ -144,26 +144,33 @@ Role/permission V2 có application service và MySQL repository riêng. Đọc d
 branch không bao giờ có thể quản trị RBAC toàn hệ thống. Role nền do seed (`CUSTOMER`, các role
 nhân viên, `BRANCH_MANAGER`, `SUPER_ADMIN`) là bất biến qua API; thay đổi baseline phải đi qua
 revision seed/migration được review. Role custom luôn tạo với permission không trùng lặp và mapping
-được thay thế trong một transaction; role đã có `account_roles` không được xóa. Đây mới là core
-V2, chưa mount route vào runtime legacy để không trộn JWT/ID legacy với hợp đồng V2.
+được thay thế trong một transaction; role đã có `account_roles` không được xóa. HTTP V2 riêng đã
+có `/role/read`, `/role/permissions`, `/role/create`, `/role/update/:roleId`,
+`/role/delete/:roleId`. Role `CUSTOMER` không thể mang quyền quản trị toàn hệ thống kể cả khi
+mapping permission bị cấu hình sai. Route chưa mount runtime legacy.
 
 Employee V2 dùng `BIGINT` string và tiền `DECIMAL(19,4)` string xuyên suốt service. Nhân viên
 được tạo/đọc/cập nhật/deactivate theo branch scope (`employee.*.branch`) hoặc global manager;
 không có hard-delete. Mọi update/deactivate khóa row và đối chiếu lại branch đã được authorize
 trong transaction để không bị TOCTOU khi sau này có employee transfer. `status`, account-linking
 và chuyển branch không nhận từ patch thường vì chúng ảnh hưởng authorization/audit; các thao tác
-đó sẽ là use-case riêng. Directory theo branch phân trang stable bằng `code` (mặc định 20, tối đa
-100) để không trả PII không giới hạn. Core đã có MySQL
-integration, còn HTTP route vẫn chờ V2 composition root thay vì gắn nhầm vào middleware legacy.
+đó có endpoint riêng. Directory theo branch phân trang stable bằng `code` (mặc định 20, tối đa
+100) để không trả PII không giới hạn. HTTP V2 riêng có `/employee/read/:branchId`,
+`/employee/create`, `/employee/update/:employeeId`, `/employee/delete/:employeeId` (deactivate),
+`/employee/:employeeId/account` và `/employee/:employeeId/transfer`. Liên kết account chỉ cho
+global HR manager, từ chối account đã có role nội bộ cần xét lại; thao tác không tự cấp role.
+Chuyển branch thu hồi grant gắn với branch nguồn trong cùng transaction, không tự cấp grant mới.
+Deactivation và transfer xóa manager pointer cũ nếu employee đang làm manager. Test MySQL có cả
+trường hợp account trùng, manager sai branch và quyền cũ sau transfer; route chưa mount runtime.
 
 Branch V2 hiện có core tạo/đọc/cập nhật với `BIGINT` string, mã branch bất biến và quyền ghi
 chỉ từ grant global `branch.manage.global`; grant theo branch không thể tự tạo hay thay cấu hình
 toàn hệ thống. Đọc directory loại trừ role `CUSTOMER` dù có mapping permission sai và luôn phân
 trang deterministic theo `code` (mặc định 20, tối đa 100). Generic patch không nhận `code` hoặc
-`manager_employee_id`; không có hard-delete và không tự tạo inventory cũ. Gán manager, liên kết
-account và điều chuyển nhân viên là use-case riêng vì chúng thay đổi phạm vi quyền hoặc quan hệ
-audit. Core có unit test và integration test MySQL `_test`; HTTP route vẫn chờ composition root
-V2 để không trộn contract định danh legacy.
+`manager_employee_id`; không có hard-delete và không tự tạo inventory cũ. Endpoint
+`PUT /branch/:branchId/manager` chỉ nhận employee active thuộc chính branch đó hoặc `null` để bỏ
+gán; manager pointer phục vụ nghiệp vụ/hiển thị, không tự cấp quyền. Core/HTTP có unit và
+integration test MySQL `_test`; route chưa mount runtime legacy.
 
 Catalog category V2 hiện có directory chỉ-đọc public, phân trang deterministic theo `code`
 (mặc định 20, tối đa 100) và serialize `id`/`parent_id` BIGINT thành string. Đây tương thích với

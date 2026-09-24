@@ -64,6 +64,7 @@ export type BranchPage = {
 export type BranchMutationResult =
     | BranchProfile
     | { kind: "branch_not_found" }
+    | { kind: "manager_not_eligible" }
     | { kind: "branch_code_conflict" };
 
 /** Persistence port for the branch aggregate. Manager assignment is a separate use-case. */
@@ -72,6 +73,7 @@ export interface BranchV2Repository {
     listBranches: (query: BranchListQuery) => Promise<BranchPage>;
     createBranch: (input: NewBranch) => Promise<BranchMutationResult>;
     updateBranch: (branchId: EntityId, patch: BranchPatch) => Promise<BranchMutationResult>;
+    assignManager: (branchId: EntityId, employeeId: EntityId | null) => Promise<BranchMutationResult>;
 }
 
 export type BranchResult =
@@ -82,6 +84,7 @@ export type BranchResult =
     | { kind: "created"; branch: BranchProfile }
     | { kind: "updated"; branch: BranchProfile }
     | { kind: "branch_not_found" }
+    | { kind: "manager_not_eligible" }
     | { kind: "branch_code_conflict" }
     | { kind: "branch_unavailable" };
 
@@ -189,6 +192,14 @@ export class BranchV2Service {
         const patch = this.normalizePatch(input);
         if (!branchId || !patch) return { kind: "invalid_branch_input" };
         return this.mapMutation(() => this.dependencies.repository.updateBranch(branchId, patch), "updated");
+    }
+
+    async assignManager(context: V2AccessContext, rawBranchId: string, rawEmployeeId: string | null): Promise<BranchResult> {
+        if (!hasGlobalPermission(context, branchManagePermission)) return { kind: "forbidden" };
+        const branchId = parseEntityId(rawBranchId);
+        const employeeId = rawEmployeeId === null ? null : parseEntityId(rawEmployeeId);
+        if (!branchId || (rawEmployeeId !== null && !employeeId)) return { kind: "invalid_branch_input" };
+        return this.mapMutation(() => this.dependencies.repository.assignManager(branchId, employeeId), "updated");
     }
 
     private canReadBranches(context: V2AccessContext): boolean {

@@ -124,4 +124,140 @@ describe.skipIf(!run)("Identity V2 HTTP on MySQL", () => {
         await request(app).post("/api/v1/admin/login")
             .send({ username: `customer_${suffix}`, password }).expect(401);
     });
+
+    it("manages custom roles and permission mappings through global V2 grants", async () => {
+        const admin = await request(app).post("/api/v1/admin/login")
+            .send({ username: adminEmail, password: "http-test-admin-password-123" }).expect(200);
+        const bearer = `Bearer ${admin.body.DT.token}`;
+        await request(app).get("/api/v1/role/read").expect(401);
+        const code = `HTTP_ROLE_${suffix.toUpperCase()}`;
+        const created = await request(app).post("/api/v1/role/create").set("Authorization", bearer)
+            .send({ code, name: "HTTP role", permissionCodes: ["audit.read.global"] }).expect(200);
+        const id: number = created.body.DT.id;
+        expect(created.body.DT).toMatchObject({ code, permissionCodes: ["audit.read.global"] });
+        const listed = await request(app).get("/api/v1/role/read").set("Authorization", bearer).expect(200);
+        expect(listed.body.DT).toEqual(expect.arrayContaining([expect.objectContaining({ id, code })]));
+        const updated = await request(app).put(`/api/v1/role/update/${id}`).set("Authorization", bearer)
+            .send({ permissionCodes: ["audit.read.global", "behavior.read.global"] }).expect(200);
+        expect(updated.body.DT.permissionCodes).toEqual(["audit.read.global", "behavior.read.global"]);
+        await request(app).put(`/api/v1/role/update/${id}`).set("Authorization", bearer)
+            .send({ permissionCodes: ["missing.permission"] }).expect(404);
+        await request(app).delete(`/api/v1/role/delete/${id}`).set("Authorization", bearer).expect(200);
+    });
+
+    it("creates and updates branches with BIGINT string IDs and global authorization", async () => {
+        const admin = await request(app).post("/api/v1/admin/login")
+            .send({ username: adminEmail, password: "http-test-admin-password-123" }).expect(200);
+        const bearer = `Bearer ${admin.body.DT.token}`;
+        await request(app).post("/api/v1/branch/create").send({
+            code: `HTTP_${suffix.toUpperCase()}`, name: "Branch", address: "A",
+        }).expect(401);
+        const code = `HTTP_${suffix.toUpperCase()}`;
+        const created = await request(app).post("/api/v1/branch/create").set("Authorization", bearer)
+            .send({ code, name: "Branch", address: "A" }).expect(200);
+        const id: string = created.body.DT.id;
+        expect(id).toMatch(/^\d+$/);
+        await request(app).post("/api/v1/branch/create").set("Authorization", bearer)
+            .send({ code, name: "Duplicate", address: "A" }).expect(409);
+        const updated = await request(app).put(`/api/v1/branch/update/${id}`).set("Authorization", bearer)
+            .send({ name: "Updated branch" }).expect(200);
+        expect(updated.body.DT).toMatchObject({ id, code, name: "Updated branch" });
+        await request(app).get(`/api/v1/branch/${id}`).set("Authorization", bearer).expect(200);
+        await request(app).get("/api/v1/branch/read?page=1&limit=10")
+            .set("Authorization", bearer).expect(200);
+        await request(app).put(`/api/v1/branch/update/${id}`).set("Authorization", bearer)
+            .send({ code: "MUTABLE" }).expect(400);
+    });
+
+    it("creates, lists and deactivates employees within a branch without floating-point salary", async () => {
+        const admin = await request(app).post("/api/v1/admin/login")
+            .send({ username: adminEmail, password: "http-test-admin-password-123" }).expect(200);
+        const bearer = `Bearer ${admin.body.DT.token}`;
+        const branch = await request(app).post("/api/v1/branch/create").set("Authorization", bearer)
+            .send({ code: `EMPBR_${suffix.toUpperCase()}`, name: "Employee branch", address: "B" }).expect(200);
+        const branchId: string = branch.body.DT.id;
+        const code = `HTTP_EMP_${suffix.toUpperCase()}`;
+        await request(app).post("/api/v1/employee/create")
+            .send({ branchId, code, fullName: "Employee" }).expect(401);
+        const created = await request(app).post("/api/v1/employee/create").set("Authorization", bearer)
+            .send({ branchId, code, fullName: "Employee", salary: "12345.6700" }).expect(200);
+        const employeeId: string = created.body.DT.id;
+        expect(created.body.DT).toMatchObject({ branchId, salary: "12345.6700", status: "active" });
+        const managed = await request(app).put(`/api/v1/branch/${branchId}/manager`)
+            .set("Authorization", bearer).send({ employeeId }).expect(200);
+        expect(managed.body.DT.managerEmployeeId).toBe(employeeId);
+        const listed = await request(app).get(`/api/v1/employee/read/${branchId}?page=1&limit=100`)
+            .set("Authorization", bearer).expect(200);
+        expect(listed.body.DT).toEqual(expect.arrayContaining([expect.objectContaining({ id: employeeId })]));
+        await request(app).put(`/api/v1/employee/update/${employeeId}`).set("Authorization", bearer)
+            .send({ fullName: "Renamed" }).expect(200);
+        const deactivated = await request(app).delete(`/api/v1/employee/delete/${employeeId}`)
+            .set("Authorization", bearer).expect(200);
+        expect(deactivated.body.DT).toMatchObject({ id: employeeId, status: "inactive" });
+        const branchAfter = await request(app).get(`/api/v1/branch/${branchId}`)
+            .set("Authorization", bearer).expect(200);
+        expect(branchAfter.body.DT.managerEmployeeId).toBeNull();
+    });
+
+    it("links an active account and transfers an employee without retaining old branch grants", async () => {
+        const admin = await request(app).post("/api/v1/admin/login")
+            .send({ username: adminEmail, password: "http-test-admin-password-123" }).expect(200);
+        const bearer = `Bearer ${admin.body.DT.token}`;
+        const first = await request(app).post("/api/v1/branch/create").set("Authorization", bearer)
+            .send({ code: `FROM_${suffix.toUpperCase()}`, name: "From", address: "A" }).expect(200);
+        const second = await request(app).post("/api/v1/branch/create").set("Authorization", bearer)
+            .send({ code: `TO_${suffix.toUpperCase()}`, name: "To", address: "B" }).expect(200);
+        const employee = await request(app).post("/api/v1/employee/create").set("Authorization", bearer)
+            .send({ branchId: first.body.DT.id, code: `MOVE_${suffix.toUpperCase()}`,
+                fullName: "Transfer candidate" }).expect(200);
+        const accountEmail = `transfer-${suffix}@example.test`;
+        await sequelize.query("INSERT INTO accounts (email, status, created_at, updated_at) VALUES (?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [accountEmail] });
+        const account = await sequelize.query<{ id: string }>("SELECT id FROM accounts WHERE email = ?", {
+            replacements: [accountEmail], type: QueryTypes.SELECT,
+        });
+        const accountId = account[0]!.id;
+        const linked = await request(app).put(`/api/v1/employee/${employee.body.DT.id}/account`)
+            .set("Authorization", bearer).send({ accountId }).expect(200);
+        expect(linked.body.DT.accountId).toBe(accountId);
+        await sequelize.query(`INSERT INTO account_roles
+            (account_id, role_id, scope_type, scope_key, branch_id, assigned_at)
+            SELECT ?, id, 'branch', ?, ?, UTC_TIMESTAMP(3) FROM roles WHERE code = 'BRANCH_MANAGER'`,
+        { replacements: [accountId, `BRANCH:${first.body.DT.id}`, first.body.DT.id] });
+        await request(app).put(`/api/v1/employee/${employee.body.DT.id}/account`)
+            .set("Authorization", bearer).send({ accountId }).expect(200);
+        const otherEmployee = await request(app).post("/api/v1/employee/create")
+            .set("Authorization", bearer).send({ branchId: second.body.DT.id,
+                code: `OTHER_${suffix.toUpperCase()}`, fullName: "Other candidate" }).expect(200);
+        await request(app).put(`/api/v1/employee/${otherEmployee.body.DT.id}/account`)
+            .set("Authorization", bearer).send({ accountId }).expect(409);
+        const staleEmail = `stale-role-${suffix}@example.test`;
+        await sequelize.query("INSERT INTO accounts (email, status, created_at, updated_at) VALUES (?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [staleEmail] });
+        const stale = await sequelize.query<{ id: string }>("SELECT id FROM accounts WHERE email = ?", {
+            replacements: [staleEmail], type: QueryTypes.SELECT,
+        });
+        await sequelize.query(`INSERT INTO account_roles
+            (account_id, role_id, scope_type, scope_key, branch_id, assigned_at)
+            SELECT ?, id, 'global', 'GLOBAL', NULL, UTC_TIMESTAMP(3) FROM roles WHERE code = 'BRANCH_MANAGER'`,
+        { replacements: [stale[0]!.id] });
+        await request(app).put(`/api/v1/employee/${otherEmployee.body.DT.id}/account`)
+            .set("Authorization", bearer).send({ accountId: stale[0]!.id }).expect(409);
+        await request(app).put(`/api/v1/branch/${second.body.DT.id}/manager`)
+            .set("Authorization", bearer).send({ employeeId: employee.body.DT.id }).expect(409);
+        await request(app).put(`/api/v1/branch/${first.body.DT.id}/manager`).set("Authorization", bearer)
+            .send({ employeeId: employee.body.DT.id }).expect(200);
+        const transferred = await request(app).put(`/api/v1/employee/${employee.body.DT.id}/transfer`)
+            .set("Authorization", bearer).send({ branchId: second.body.DT.id }).expect(200);
+        expect(transferred.body.DT.branchId).toBe(second.body.DT.id);
+        await request(app).put(`/api/v1/employee/${employee.body.DT.id}/transfer`)
+            .set("Authorization", bearer).send({ branchId: second.body.DT.id }).expect(409);
+        const oldBranch = await request(app).get(`/api/v1/branch/${first.body.DT.id}`)
+            .set("Authorization", bearer).expect(200);
+        expect(oldBranch.body.DT.managerEmployeeId).toBeNull();
+        const grants = await sequelize.query<{ total: string }>(
+            "SELECT COUNT(*) AS total FROM account_roles WHERE account_id = ? AND branch_id = ?",
+            { replacements: [accountId, first.body.DT.id], type: QueryTypes.SELECT });
+        expect(grants[0]!.total).toBe("0");
+    });
 });

@@ -39,7 +39,8 @@ export const hasPermission = (context: V2AccessContext, permission: string): boo
 /** Global operations must never be authorized by a branch-scoped grant. */
 export const hasGlobalPermission = (context: V2AccessContext, permission: string): boolean =>
     context.grants.some(
-        (grant) => grant.scope.type === "global" && grant.permissions.includes(permission),
+        (grant) => grant.roleCode !== "CUSTOMER"
+            && grant.scope.type === "global" && grant.permissions.includes(permission),
     );
 
 /** A customer role is ownership-scoped, even when its role assignment is GLOBAL. */

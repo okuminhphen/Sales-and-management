@@ -43,6 +43,7 @@ const createRepository = (): BranchV2Repository => ({
     listBranches: vi.fn(async () => branchPage),
     createBranch: vi.fn(async () => branch),
     updateBranch: vi.fn(async () => branch),
+    assignManager: vi.fn(async () => branch),
 });
 
 describe("BranchV2Service", () => {

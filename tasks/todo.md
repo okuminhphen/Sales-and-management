@@ -118,16 +118,14 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     DB-derived access context, username uniqueness mapping và MySQL integration. HTTP V2 riêng có GET `/user/:id`, PUT `/user/update/:userId` (chỉ own profile) và test MySQL; runtime legacy chưa mount.
 - [ ] T25 — Role/permission/admin management endpoints V2.
   - Tiến độ: core Role/Permission V2 đã có global-scope authorization, immutable seeded roles,
-    atomic replace permission mapping, chặn xóa role đang được gán và MySQL integration; HTTP
-    route vẫn chờ composition runtime V2, không mount vào legacy app.
+    atomic replace permission mapping, chặn xóa role đang được gán và MySQL integration; HTTP V2 riêng đã có `/role/read`, `/role/permissions`, `/role/create`, `/role/update/:roleId`, `/role/delete/:roleId` và MySQL test. Account/admin management legacy chưa chuyển; runtime chưa mount.
 - [ ] T26 — Employee và branch endpoints V2.
-  - Tiến độ: employee core đã có branch/global authorization, DECIMAL/ID serialization,
+  - Tiến độ: employee core và HTTP V2 riêng đã có branch/global authorization, DECIMAL/ID serialization,
     duplicate code mapping, deactivate thay hard-delete, directory phân trang theo code (20/100)
     và MySQL integration. Branch core đã có create/read/update, mã bất biến, global-only write,
     mapping duplicate code và test MySQL `_test`; directory phân trang theo code (20/100), không
     hard-delete hay tự tạo inventory cũ.
-    Gán manager, account-linking, employee transfer, audit cho production HTTP và route V2 vẫn
-    là slice tiếp theo vì có audit/scope semantics riêng; chưa mount vào legacy app.
+    HTTP V2 có tạo/đọc/sửa branch và tạo/đọc/sửa/deactivate employee; gán manager chỉ nhận employee active cùng branch. Account-linking và transfer yêu cầu grant global, không tự cấp role mới; transfer thu hồi grant branch nguồn trong transaction và clear manager cũ. Deactivate cũng clear manager. Test MySQL/JWT đã có; runtime chưa mount. Legacy `/employee/read` toàn hệ thống, admin/account management và quyết định hợp đồng Web vẫn cần chuyển.
 - [ ] T27 — Category/product/size/variant endpoints V2.
   - Tiến độ: category directory V2 public đã có pagination theo code (20/100), BIGINT-safe
     serialization và unit/MySQL `_test` integration. Size directory public đã có pagination

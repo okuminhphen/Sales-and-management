@@ -58,7 +58,7 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 seed on MySQL", () => {
         await sequelize?.close();
     });
 
-    it("is idempotent and grants all seeded permissions only to SUPER_ADMIN", async () => {
+    it("is idempotent and grants seeded permissions only to seeded SUPER_ADMIN", async () => {
         await seedV2Database(sequelize, superAdmin);
         const firstPasswordHash = await sequelize.query<{ passwordHash: string }>(
             "SELECT password_hash AS passwordHash FROM accounts WHERE email = ?",
@@ -73,7 +73,9 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 seed on MySQL", () => {
         await seedV2Database(sequelize, superAdmin);
 
         const [roles, permissions, paymentMethods, accounts, assignments, grants, nonSuperAdminGrants] = await Promise.all([
-            sequelize.query<{ total: number }>("SELECT COUNT(*) AS total FROM roles", { type: QueryTypes.SELECT }),
+            sequelize.query<{ total: number }>("SELECT COUNT(*) AS total FROM roles WHERE code IN (?)", {
+                replacements: [ROLE_SEEDS.map((role) => role.code)], type: QueryTypes.SELECT,
+            }),
             sequelize.query<{ total: number }>("SELECT COUNT(*) AS total FROM permissions", { type: QueryTypes.SELECT }),
             sequelize.query<{ total: number }>("SELECT COUNT(*) AS total FROM payment_methods", { type: QueryTypes.SELECT }),
             sequelize.query<{ total: number; passwordHash: string; status: string }>("SELECT COUNT(*) AS total, MAX(password_hash) AS passwordHash, MAX(status) AS status FROM accounts WHERE email = ?", {
@@ -88,8 +90,9 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 seed on MySQL", () => {
                 { type: QueryTypes.SELECT },
             ),
             sequelize.query<{ total: number }>(
-                "SELECT COUNT(*) AS total FROM role_permissions rp INNER JOIN roles r ON r.id = rp.role_id WHERE r.code <> 'SUPER_ADMIN'",
-                { type: QueryTypes.SELECT },
+                "SELECT COUNT(*) AS total FROM role_permissions rp INNER JOIN roles r ON r.id = rp.role_id WHERE r.code IN (?)",
+                { replacements: [ROLE_SEEDS.filter((role) => role.code !== "SUPER_ADMIN").map((role) => role.code)],
+                    type: QueryTypes.SELECT },
             ),
         ]);
 

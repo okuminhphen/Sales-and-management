@@ -10,7 +10,7 @@ import type {
     BranchV2Repository,
     NewBranch,
 } from "../application/branch-v2.service.js";
-import type { BranchAttributes } from "./identity-access.models.js";
+import type { BranchAttributes, EmployeeAttributes } from "./identity-access.models.js";
 import { getIdentityAccessModel, type IdentityAccessModel } from "./identity-access.model-types.js";
 
 const isBranchCodeConflict = (error: unknown): boolean => {
@@ -49,9 +49,11 @@ const toBranchProfile = (branch: BranchAttributes): BranchProfile => ({
 /** MySQL adapter for branch data; cross-domain manager/inventory work stays outside this aggregate. */
 export class SequelizeBranchV2Repository implements BranchV2Repository {
     private readonly branch: IdentityAccessModel<BranchAttributes>;
+    private readonly employee: IdentityAccessModel<EmployeeAttributes>;
 
     constructor(private readonly persistence: V2Persistence) {
         this.branch = getIdentityAccessModel<BranchAttributes>(persistence, "Branch");
+        this.employee = getIdentityAccessModel<EmployeeAttributes>(persistence, "Employee");
     }
 
     async findById(branchId: string): Promise<BranchProfile | null> {
@@ -97,6 +99,22 @@ export class SequelizeBranchV2Repository implements BranchV2Repository {
             const branch = await this.branch.findByPk(branchId, { transaction, lock: transaction.LOCK.UPDATE });
             if (!branch) return { kind: "branch_not_found" };
             await branch.update({ ...patch, updatedAt: new Date() }, { transaction });
+            return toBranchProfile(branch.dataValues);
+        });
+    }
+
+    async assignManager(branchId: string, employeeId: string | null): Promise<BranchMutationResult> {
+        return this.persistence.inTransaction(async (transaction) => {
+            const branch = await this.branch.findByPk(branchId, { transaction, lock: transaction.LOCK.UPDATE });
+            if (!branch) return { kind: "branch_not_found" };
+            if (employeeId !== null) {
+                const employee = await this.employee.findByPk(employeeId, { transaction, lock: transaction.LOCK.UPDATE });
+                if (!employee || employee.dataValues.status !== "active"
+                    || serializeDatabaseEntityId(employee.dataValues.branchId) !== branchId) {
+                    return { kind: "manager_not_eligible" };
+                }
+            }
+            await branch.update({ managerEmployeeId: employeeId, updatedAt: new Date() }, { transaction });
             return toBranchProfile(branch.dataValues);
         });
     }

@@ -77,6 +77,11 @@ describe("V2 access tokens and authorization helpers", () => {
         expect(hasGlobalPermission(branchOnlyContext, "role.manage.global")).toBe(false);
         expect(hasGlobalPermission({
             ...branchOnlyContext,
+            grants: [{ roleCode: "CUSTOMER", scope: { type: "global" },
+                permissions: ["role.manage.global"] }],
+        }, "role.manage.global")).toBe(false);
+        expect(hasGlobalPermission({
+            ...branchOnlyContext,
             grants: [{
                 ...branchOnlyContext.grants[0]!,
                 scope: { type: "global" },
