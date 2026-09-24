@@ -4,7 +4,8 @@ import type { V2Persistence } from "../../../database/v2/persistence.js";
 import { retryV2Transaction } from "../../../database/v2/transaction-retry.js";
 import { serializeDatabaseEntityId, type EntityId } from "../../../shared/contracts/database-scalars.js";
 import type { StockRequestCreateOutcome, StockRequestPage, StockRequestSummary,
-    StockRequestV2Repository, StockRequestWrite } from "../application/stock-request-v2.service.js";
+    StockRequestV2Repository, StockRequestWrite, StockRequestPatch,
+    PersistenceMutationOutcome } from "../application/stock-request-v2.service.js";
 
 type CreateResult = Exclude<StockRequestCreateOutcome,
     { kind: "forbidden" | "invalid_stock_request" | "stock_request_unavailable" }>;
@@ -15,6 +16,7 @@ type ItemRow = { id: unknown; requestId: unknown; variantId: unknown; quantity: 
     note: string | null; productId: unknown; productName: string; sizeId: unknown; sizeName: string };
 type HistoryRow = { id: unknown; requestId: unknown; action: string; performedBy: unknown;
     note: string | null; createdAt: Date | string };
+type OwnerRow = { fromBranchId: unknown; createdBy: unknown; status: string };
 
 const timestamp = (value: Date | string): string => new Date(value).toISOString();
 
@@ -96,6 +98,100 @@ export class SequelizeStockRequestV2Repository implements StockRequestV2Reposito
                 toBranch: { id: toBranchId, name: row.toBranchName },
                 items: itemsByRequest.get(id) ?? [], histories: historiesByRequest.get(id) ?? [] };
         }) };
+    }
+
+    async findOwner(id: EntityId): Promise<{ fromBranchId: EntityId; createdBy: EntityId } | null> {
+        const rows = await this.persistence.sequelize.query<OwnerRow>(
+            "SELECT from_branch_id AS fromBranchId, created_by_account_id AS createdBy, status FROM stock_requests WHERE id = ?",
+            { replacements: [id], type: QueryTypes.SELECT },
+        );
+        const row = rows[0];
+        return row ? { fromBranchId: serializeDatabaseEntityId(row.fromBranchId),
+            createdBy: serializeDatabaseEntityId(row.createdBy) } : null;
+    }
+
+    async update(id: EntityId, actorAccountId: EntityId, fromBranchId: EntityId,
+        patch: StockRequestPatch): Promise<PersistenceMutationOutcome> {
+        return retryV2Transaction(() => this.persistence.inTransaction(async (transaction) => {
+            const request = await this.lockOwned(id, actorAccountId, fromBranchId, transaction);
+            if ("kind" in request) return request;
+            if (request.status !== "pending") return { kind: "request_already_processed" };
+            if (patch.toBranchId) {
+                const branches = await this.persistence.sequelize.query<{ id: unknown }>(
+                    "SELECT id FROM branches WHERE id = ? FOR SHARE",
+                    { replacements: [patch.toBranchId], transaction, type: QueryTypes.SELECT },
+                );
+                if (branches.length !== 1) return { kind: "branch_not_found" };
+            }
+            if (patch.items) {
+                const variantIds = patch.items.map((item) => item.variantId);
+                const placeholders = variantIds.map(() => "?").join(", ");
+                const variants = await this.persistence.sequelize.query<{ id: unknown }>(
+                    `SELECT v.id FROM product_variants v JOIN products p ON p.id = v.product_id
+                     WHERE v.id IN (${placeholders}) AND v.status = 'active' AND p.status = 'active'
+                     ORDER BY v.id ASC FOR SHARE`,
+                    { replacements: variantIds, transaction, type: QueryTypes.SELECT },
+                );
+                if (variants.length !== variantIds.length) return { kind: "variant_not_found" };
+            }
+            // Validation outcomes must be decided before the first write: returning from a managed transaction commits it.
+            if (patch.toBranchId) {
+                await this.persistence.sequelize.query(
+                    "UPDATE stock_requests SET to_branch_id = ?, updated_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
+                    { replacements: [patch.toBranchId, id], transaction },
+                );
+            }
+            if (patch.items) {
+                await this.persistence.sequelize.query("DELETE FROM stock_request_items WHERE stock_request_id = ?",
+                    { replacements: [id], transaction });
+                for (const item of patch.items) {
+                    await this.persistence.sequelize.query(
+                        `INSERT INTO stock_request_items (stock_request_id, product_variant_id, quantity, note, created_at, updated_at)
+                         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))`,
+                        { replacements: [id, item.variantId, item.quantity, item.note], transaction },
+                    );
+                }
+            }
+            await this.persistence.sequelize.query(
+                `INSERT INTO stock_request_history (stock_request_id, action, performed_by_account_id, note, created_at)
+                 VALUES (?, 'UPDATED', ?, NULL, CURRENT_TIMESTAMP(3))`,
+                { replacements: [id, actorAccountId], transaction },
+            );
+            return { kind: "updated" };
+        }));
+    }
+
+    async cancel(id: EntityId, actorAccountId: EntityId,
+        fromBranchId: EntityId): Promise<PersistenceMutationOutcome> {
+        return retryV2Transaction(() => this.persistence.inTransaction(async (transaction) => {
+            const request = await this.lockOwned(id, actorAccountId, fromBranchId, transaction);
+            if ("kind" in request) return request;
+            if (request.status !== "pending") return { kind: "request_already_processed" };
+            await this.persistence.sequelize.query(
+                "UPDATE stock_requests SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
+                { replacements: [id], transaction },
+            );
+            await this.persistence.sequelize.query(
+                `INSERT INTO stock_request_history (stock_request_id, action, performed_by_account_id, note, created_at)
+                 VALUES (?, 'CANCELLED', ?, NULL, CURRENT_TIMESTAMP(3))`,
+                { replacements: [id, actorAccountId], transaction },
+            );
+            return { kind: "cancelled" };
+        }));
+    }
+
+    private async lockOwned(id: EntityId, actorAccountId: EntityId, fromBranchId: EntityId,
+        transaction: Transaction): Promise<{ status: string } | PersistenceMutationOutcome> {
+        const rows = await this.persistence.sequelize.query<OwnerRow>(
+            `SELECT from_branch_id AS fromBranchId, created_by_account_id AS createdBy, status
+             FROM stock_requests WHERE id = ? FOR UPDATE`,
+            { replacements: [id], transaction, type: QueryTypes.SELECT },
+        );
+        const row = rows[0];
+        if (!row) return { kind: "request_not_found" };
+        if (serializeDatabaseEntityId(row.fromBranchId) !== fromBranchId
+            || serializeDatabaseEntityId(row.createdBy) !== actorAccountId) return { kind: "forbidden" };
+        return { status: row.status };
     }
 
     private async createLocked(input: StockRequestWrite, transaction: Transaction): Promise<CreateResult> {

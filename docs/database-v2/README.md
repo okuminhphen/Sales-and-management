@@ -441,18 +441,30 @@ $env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db_test"
 npm test --workspace @sales/api -- tests/integration/databaseV2InventoryBalanceQuery.test.ts tests/integration/databaseV2InventoryReservation.test.ts tests/integration/databaseV2TransferReservation.test.ts tests/integration/databaseV2InventoryAdjustment.test.ts tests/integration/inventoryV2Http.test.ts
 ```
 
-## Stock request V2 — T30 đang triển khai
+## Stock request V2 — T30 hoàn thành, chưa cutover
 
 Primitive tạo yêu cầu đã dùng `stock_requests`, `stock_request_items` và
 `stock_request_history` V2. Branch yêu cầu/nhận là `from_branch_id`, branch
 cung cấp là `to_branch_id`; service lấy actor từ access context và kiểm tra
 quyền theo branch yêu cầu. Một transaction tạo request, item và history; code
 `RQ<ID>` sinh từ BIGINT ID đã insert, không dựa vào `COUNT(*)`. Tạo request
-không giữ hay di chuyển kho và chưa mount vào runtime legacy. Query,
-update/cancel, approve/reject và HTTP compatibility còn ở các lát cắt T30
-tiếp theo; điều phối transfer/inventory thuộc T31. Query V2 đã phân trang
-theo branch yêu cầu hoặc status `pending`, kiểm tra quyền DB-derived,
-trả item/branch/history theo mapper tương thích Web cũ; chưa mount HTTP.
+không giữ hay di chuyển kho và chưa mount vào runtime legacy. Query V2 phân
+trang theo branch yêu cầu hoặc status `pending`, kiểm tra quyền DB-derived,
+trả item/branch/history theo mapper tương thích Web cũ. Người tạo chỉ sửa/hủy
+phiếu còn `pending` khi vẫn có quyền trên branch yêu cầu; hủy giữ lại row và
+history `CANCELLED`, không hard-delete. Quyền global `stock_request.manage.branch`
+duyệt/từ chối; duyệt tạo một `transfer_receipts` trạng thái `pending` liên
+kết với phiếu, đảo chiều branch (nguồn là branch cung cấp), ghi cả hai history
+trong một transaction. Hai lần duyệt đồng thời chỉ một lần thành công. T30
+không giữ/xuất/nhận kho: transaction điều chuyển thuộc T31.
+
+Router/DTO V2 giữ đường dẫn `/stock-requests*` và `/admin/stock-requests*`,
+envelope `EM/EC/DT`, phân trang cho danh sách. HTTP từ chối ID dạng JS Number,
+kiểm tra body strict và lấy actor từ V2 access context. Router còn **độc lập,
+chưa mount**; T40 thực hiện cutover, T39 phải cập nhật Web để dùng BIGINT ID
+dạng string và hiển thị trạng thái `cancelled` thay cho giả định hard-delete.
+Test MySQL `_test` đã kiểm tra atomic create/update/approve/reject, rollback
+khi variant sai, concurrent approve, auth scope và HTTP DTO.
 
 ## Giới hạn và kiểm thử chung còn lại
 

@@ -51,3 +51,21 @@ describe("StockRequestV2Service.list", () => {
         expect(list).toHaveBeenCalledTimes(2);
     });
 });
+
+describe("StockRequestV2Service.update/cancel", () => {
+    it("requires creator and current branch grant before updating or cancelling", async () => {
+        const findOwner = vi.fn().mockResolvedValue({ fromBranchId: serializeEntityId("1"),
+            createdBy: serializeEntityId("10") });
+        const update = vi.fn().mockResolvedValue({ kind: "updated" });
+        const cancel = vi.fn().mockResolvedValue({ kind: "cancelled" });
+        const service = new StockRequestV2Service({ repository: { findOwner, update, cancel } as unknown as StockRequestV2Repository });
+        expect(await service.update(context("1"), "7", { items: [{ productSizeId: "3", quantity: 2 }] }))
+            .toEqual({ kind: "updated" });
+        expect(await service.cancel(context("1"), "7")).toEqual({ kind: "cancelled" });
+        expect(update).toHaveBeenCalledWith(serializeEntityId("7"), serializeEntityId("10"),
+            serializeEntityId("1"), { items: [{ variantId: "3", quantity: 2, note: null }] });
+        expect(cancel).toHaveBeenCalledWith(serializeEntityId("7"), serializeEntityId("10"), serializeEntityId("1"));
+        expect(await service.cancel(context("2"), "7")).toEqual({ kind: "forbidden" });
+        expect(cancel).toHaveBeenCalledTimes(1);
+    });
+});
