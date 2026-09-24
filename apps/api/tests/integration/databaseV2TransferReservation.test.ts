@@ -6,6 +6,8 @@ import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { InventoryTransferReservationV2Service } from "../../src/modules/inventory-transfer/application/inventory-transfer-reservation-v2.service.js";
 import { SequelizeInventoryTransferDispatchV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-transfer-dispatch-v2.repository.js";
+import { SequelizeInventoryTransferReceiptV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-transfer-receipt-v2.repository.js";
+import { SequelizeInventoryTransferReleaseV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-transfer-release-v2.repository.js";
 import { SequelizeInventoryTransferReservationV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-transfer-reservation-v2.repository.js";
 import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 
@@ -48,7 +50,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
         const firstItemId = await createTransferItem(1);
         const secondItemId = await createTransferItem(2);
         const pendingItemId = await createTransferItem(3, "pending");
-        return { token, accountId, inventoryId, firstItemId, secondItemId, pendingItemId };
+        return { token, accountId, supplierId, recipientId, variantId, inventoryId, firstItemId, secondItemId, pendingItemId };
     };
 
     it("holds supplier stock without dispatching it, and replays only the matching key", async () => {
@@ -186,5 +188,166 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
              FROM inventories WHERE id = ?`,
             { replacements: [key, data.inventoryId], type: QueryTypes.SELECT });
         expect(rows[0]).toEqual({ stock: 0, movements: "1" });
+    });
+
+    it("receives dispatched sellable stock at the destination exactly once", async () => {
+        const data = await fixture(1);
+        const hold = await service.reserveTransferItem({ transferItemId: data.firstItemId,
+            idempotencyKey: `receive-hold-${data.token}` });
+        if (hold.kind !== "reserved") throw Error("Transfer hold fixture failed.");
+        const id = serializeEntityId(data.firstItemId);
+        const actor = serializeEntityId(data.accountId);
+        const receiver = new SequelizeInventoryTransferReceiptV2Repository(createSalesV2Persistence(sequelize));
+        expect(await receiver.receiveTransferItem(id, `receive-${data.token}`, actor))
+            .toEqual({ kind: "transfer_item_not_receivable" });
+        await sequelize.query("UPDATE transfer_receipts SET status = 'in_transit', dispatched_at = CURRENT_TIMESTAMP(3) WHERE id = (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?)",
+            { replacements: [data.firstItemId] });
+        const dispatcher = new SequelizeInventoryTransferDispatchV2Repository(createSalesV2Persistence(sequelize));
+        expect((await dispatcher.dispatchTransferItem(id, `receive-dispatch-${data.token}`, actor)).kind).toBe("dispatched");
+        await sequelize.query("UPDATE transfer_receipt_items SET received_quantity = quantity WHERE id = ?",
+            { replacements: [data.firstItemId] });
+        await sequelize.query("UPDATE transfer_receipts SET status = 'completed', completed_at = CURRENT_TIMESTAMP(3) WHERE id = (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?)",
+            { replacements: [data.firstItemId] });
+        const key = `receive-${data.token}`;
+        expect(await receiver.receiveTransferItem(id, key, actor)).toEqual({ kind: "received", balanceAfter: 1 });
+        expect(await receiver.receiveTransferItem(id, key, actor)).toEqual({ kind: "replayed", balanceAfter: 1 });
+        expect(await receiver.receiveTransferItem(id, `receive-again-${data.token}`, actor)).toEqual({ kind: "already_received" });
+        const rows = await sequelize.query<{ stock: number; movements: string }>(
+            `SELECT stock, (SELECT COUNT(*) FROM inventory_movements m WHERE m.transfer_receipt_item_id = ?
+                AND m.quantity_delta = 1 AND m.branch_id = ? AND m.reference_type = 'transfer_receipt') AS movements
+             FROM inventories WHERE branch_id = ? AND product_variant_id = ?`,
+            { replacements: [data.firstItemId, data.recipientId, data.recipientId, data.variantId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ stock: 1, movements: "1" });
+    });
+
+    it("does not credit the destination without dispatch or with unresolved discrepancy", async () => {
+        const data = await fixture(1);
+        const hold = await service.reserveTransferItem({ transferItemId: data.firstItemId,
+            idempotencyKey: `receive-guard-hold-${data.token}` });
+        if (hold.kind !== "reserved") throw Error("Transfer hold fixture failed.");
+        await sequelize.query("UPDATE transfer_receipt_items SET received_quantity = quantity WHERE id = ?",
+            { replacements: [data.firstItemId] });
+        await sequelize.query("UPDATE transfer_receipts SET status = 'completed', completed_at = CURRENT_TIMESTAMP(3) WHERE id = (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?)",
+            { replacements: [data.firstItemId] });
+        const repository = new SequelizeInventoryTransferReceiptV2Repository(createSalesV2Persistence(sequelize));
+        const id = serializeEntityId(data.firstItemId);
+        const actor = serializeEntityId(data.accountId);
+        expect(await repository.receiveTransferItem(id, `receive-guard-${data.token}`, actor))
+            .toEqual({ kind: "source_not_dispatched" });
+        await sequelize.query(
+            `INSERT INTO inventory_movements (branch_id, product_variant_id, quantity_delta, balance_after,
+                transfer_receipt_item_id, reason, reference_type, reference_id, idempotency_key,
+                created_by_account_id, occurred_at, created_at)
+             VALUES (?, ?, -1, 0, ?, 'manual_adjustment', 'transfer_receipt',
+                (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?), ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))`,
+            { replacements: [data.supplierId, data.variantId, data.firstItemId, data.firstItemId,
+                `fake-dispatch-${data.token}`, data.accountId] },
+        );
+        expect(await repository.receiveTransferItem(id, `receive-guard-${data.token}`, actor))
+            .toEqual({ kind: "source_not_dispatched" });
+        await sequelize.query("UPDATE transfer_receipt_items SET received_quantity = 0, lost_quantity = quantity, note = 'Missing in transit' WHERE id = ?",
+            { replacements: [data.firstItemId] });
+        expect(await repository.receiveTransferItem(id, `receive-guard-${data.token}`, actor))
+            .toEqual({ kind: "discrepancy_requires_approval" });
+        const rows = await sequelize.query<{ count: string }>(
+            "SELECT COUNT(*) AS count FROM inventories WHERE branch_id = ? AND product_variant_id = ?",
+            { replacements: [data.recipientId, data.variantId], type: QueryTypes.SELECT });
+        expect(rows[0]?.count).toBe("0");
+    });
+
+    it("rolls back the destination stock and movement with receipt completion", async () => {
+        const data = await fixture(1);
+        const hold = await service.reserveTransferItem({ transferItemId: data.firstItemId,
+            idempotencyKey: `receive-rollback-hold-${data.token}` });
+        if (hold.kind !== "reserved") throw Error("Transfer hold fixture failed.");
+        const id = serializeEntityId(data.firstItemId);
+        const actor = serializeEntityId(data.accountId);
+        await sequelize.query("UPDATE transfer_receipts SET status = 'in_transit', dispatched_at = CURRENT_TIMESTAMP(3) WHERE id = (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?)",
+            { replacements: [data.firstItemId] });
+        const dispatcher = new SequelizeInventoryTransferDispatchV2Repository(createSalesV2Persistence(sequelize));
+        expect((await dispatcher.dispatchTransferItem(id, `receive-rollback-dispatch-${data.token}`, actor)).kind).toBe("dispatched");
+        const marker = Error("rollback receipt");
+        const key = `receive-rollback-${data.token}`;
+        await expect(sequelize.transaction(async (transaction) => {
+            await sequelize.query("UPDATE transfer_receipt_items SET received_quantity = quantity WHERE id = ?",
+                { replacements: [data.firstItemId], transaction });
+            await sequelize.query("UPDATE transfer_receipts SET status = 'completed', completed_at = CURRENT_TIMESTAMP(3) WHERE id = (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?)",
+                { replacements: [data.firstItemId], transaction });
+            const scoped = new SequelizeInventoryTransferReceiptV2Repository(createSalesV2Persistence(sequelize), transaction);
+            expect(await scoped.receiveTransferItem(id, key, actor)).toEqual({ kind: "received", balanceAfter: 1 });
+            throw marker;
+        })).rejects.toBe(marker);
+        const rows = await sequelize.query<{ stockRows: string; movements: string }>(
+            `SELECT (SELECT COUNT(*) FROM inventories WHERE branch_id = ? AND product_variant_id = ?) AS stockRows,
+                    (SELECT COUNT(*) FROM inventory_movements WHERE idempotency_key = ?) AS movements`,
+            { replacements: [data.recipientId, data.variantId, key], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ stockRows: "0", movements: "0" });
+    });
+
+    it("serializes duplicate receipt attempts without double-crediting stock", async () => {
+        const data = await fixture(1);
+        const hold = await service.reserveTransferItem({ transferItemId: data.firstItemId,
+            idempotencyKey: `receive-race-hold-${data.token}` });
+        if (hold.kind !== "reserved") throw Error("Transfer hold fixture failed.");
+        const id = serializeEntityId(data.firstItemId);
+        const actor = serializeEntityId(data.accountId);
+        await sequelize.query("UPDATE transfer_receipts SET status = 'in_transit', dispatched_at = CURRENT_TIMESTAMP(3) WHERE id = (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?)",
+            { replacements: [data.firstItemId] });
+        const dispatcher = new SequelizeInventoryTransferDispatchV2Repository(createSalesV2Persistence(sequelize));
+        expect((await dispatcher.dispatchTransferItem(id, `receive-race-dispatch-${data.token}`, actor)).kind).toBe("dispatched");
+        await sequelize.query("UPDATE transfer_receipt_items SET received_quantity = quantity WHERE id = ?",
+            { replacements: [data.firstItemId] });
+        await sequelize.query("UPDATE transfer_receipts SET status = 'completed', completed_at = CURRENT_TIMESTAMP(3) WHERE id = (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?)",
+            { replacements: [data.firstItemId] });
+        const receiver = new SequelizeInventoryTransferReceiptV2Repository(createSalesV2Persistence(sequelize));
+        const key = `receive-race-${data.token}`;
+        const outcomes = await Promise.all([
+            receiver.receiveTransferItem(id, key, actor), receiver.receiveTransferItem(id, key, actor),
+        ]);
+        expect(outcomes.map((outcome) => outcome.kind).sort()).toEqual(["received", "replayed"]);
+        const rows = await sequelize.query<{ stock: number; movements: string }>(
+            `SELECT stock, (SELECT COUNT(*) FROM inventory_movements WHERE idempotency_key = ?) AS movements
+             FROM inventories WHERE branch_id = ? AND product_variant_id = ?`,
+            { replacements: [key, data.recipientId, data.variantId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ stock: 1, movements: "1" });
+    });
+
+    it("releases an approved source hold when its transfer is cancelled before dispatch", async () => {
+        const data = await fixture(1);
+        const hold = await service.reserveTransferItem({ transferItemId: data.firstItemId,
+            idempotencyKey: `release-transfer-hold-${data.token}` });
+        if (hold.kind !== "reserved") throw Error("Transfer hold fixture failed.");
+        const repository = new SequelizeInventoryTransferReleaseV2Repository(createSalesV2Persistence(sequelize));
+        const id = serializeEntityId(data.firstItemId);
+        expect(await repository.releaseCancelledTransferItem(id)).toEqual({ kind: "transfer_not_cancelled" });
+        await sequelize.query("UPDATE transfer_receipts SET status = 'cancelled' WHERE id = (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?)",
+            { replacements: [data.firstItemId] });
+        expect(await repository.releaseCancelledTransferItem(id)).toEqual({ kind: "released" });
+        expect(await repository.releaseCancelledTransferItem(id)).toEqual({ kind: "replayed" });
+        const rows = await sequelize.query<{ stock: number; status: string; releasedAt: Date | null }>(
+            "SELECT i.stock, r.status, r.released_at AS releasedAt FROM inventories i JOIN inventory_reservations r ON r.inventory_id = i.id WHERE r.id = ?",
+            { replacements: [hold.reservationId], type: QueryTypes.SELECT });
+        expect(rows[0]).toMatchObject({ stock: 1, status: "released" });
+        expect(rows[0]?.releasedAt).not.toBeNull();
+    });
+
+    it("rolls back transfer hold release with receipt cancellation", async () => {
+        const data = await fixture(1);
+        const hold = await service.reserveTransferItem({ transferItemId: data.firstItemId,
+            idempotencyKey: `release-rollback-hold-${data.token}` });
+        if (hold.kind !== "reserved") throw Error("Transfer hold fixture failed.");
+        const marker = Error("rollback transfer cancellation");
+        await expect(sequelize.transaction(async (transaction) => {
+            await sequelize.query("UPDATE transfer_receipts SET status = 'cancelled' WHERE id = (SELECT transfer_receipt_id FROM transfer_receipt_items WHERE id = ?)",
+                { replacements: [data.firstItemId], transaction });
+            const scoped = new SequelizeInventoryTransferReleaseV2Repository(createSalesV2Persistence(sequelize), transaction);
+            expect(await scoped.releaseCancelledTransferItem(serializeEntityId(data.firstItemId)))
+                .toEqual({ kind: "released" });
+            throw marker;
+        })).rejects.toBe(marker);
+        const rows = await sequelize.query<{ status: string }>(
+            "SELECT status FROM inventory_reservations WHERE id = ?",
+            { replacements: [hold.reservationId], type: QueryTypes.SELECT });
+        expect(rows[0]?.status).toBe("active");
     });
 });

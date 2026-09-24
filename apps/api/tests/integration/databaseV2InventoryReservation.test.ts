@@ -6,6 +6,7 @@ import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { InventoryReservationV2Service } from "../../src/modules/inventory-transfer/application/inventory-reservation-v2.service.js";
 import { SequelizeInventoryReservationExpiryV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-reservation-expiry-v2.repository.js";
+import { SequelizeInventoryReturnRestockV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-return-restock-v2.repository.js";
 import { SequelizeInventoryReservationV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-reservation-v2.repository.js";
 import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 
@@ -47,7 +48,8 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 inven
         };
         const first = await createItem(1);
         const second = await createItem(2);
-        return { token, inventoryId, firstOrderId: first.orderId, firstItemId: first.itemId, secondItemId: second.itemId };
+        return { token, accountId, branchId, variantId, inventoryId,
+            firstOrderId: first.orderId, firstItemId: first.itemId, secondItemId: second.itemId };
     };
 
     it("reserves once, replays the exact key and never changes physical stock", async () => {
@@ -253,6 +255,121 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 inven
         const id = serializeEntityId(reserved.reservationId);
         const outcomes = await Promise.all([repository.expireCandidate(id), repository.expireCandidate(id)]);
         expect(outcomes.map((outcome) => outcome.kind).sort()).toEqual(["expired", "skipped"]);
+    });
+
+    it("restocks only inspected sellable returned units with a typed movement", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `return-hold-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Order hold fixture failed.");
+        await sequelize.query("UPDATE orders SET status = 'confirmed', fulfillment_status = 'fulfilled' WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        const orderRepository = new SequelizeInventoryReservationV2Repository(createSalesV2Persistence(sequelize));
+        expect((await orderRepository.confirmOrderReservation(reserved.reservationId)).kind).toBe("confirmed");
+        expect((await orderRepository.consumeOrderReservation(reserved.reservationId, `return-handover-${data.token}`, data.accountId)).kind)
+            .toBe("consumed");
+        const returnId = await insert("INSERT INTO returns (code, request_key, order_id, receiving_branch_id, status, reason, inspected_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'inspected', 'Test', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [`RET-${data.token}`, `ret-${data.token}`, data.firstOrderId, data.branchId]);
+        const returnItemId = await insert("INSERT INTO return_items (return_id, order_item_id, requested_quantity, approved_quantity, received_quantity, restocked_quantity, created_at, updated_at) VALUES (?, ?, 1, 1, 1, 1, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [returnId, data.firstItemId]);
+        const restock = new SequelizeInventoryReturnRestockV2Repository(createSalesV2Persistence(sequelize));
+        const key = `return-restock-${data.token}`;
+        const id = serializeEntityId(returnItemId);
+        const actor = serializeEntityId(data.accountId);
+        expect(await restock.restockReturnItem(id, key, actor)).toEqual({ kind: "restocked", balanceAfter: 1 });
+        expect(await restock.restockReturnItem(id, key, actor)).toEqual({ kind: "replayed", balanceAfter: 1 });
+        expect(await restock.restockReturnItem(id, `return-again-${data.token}`, actor)).toEqual({ kind: "already_restocked" });
+        const rows = await sequelize.query<{ stock: number; movements: string }>(
+            `SELECT stock, (SELECT COUNT(*) FROM inventory_movements WHERE return_item_id = ? AND quantity_delta = 1 AND reference_type = 'return') AS movements
+             FROM inventories WHERE branch_id = ? AND product_variant_id = ?`,
+            { replacements: [returnItemId, data.branchId, data.variantId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ stock: 1, movements: "1" });
+    });
+
+    it("does not restock a return before the original item has left inventory", async () => {
+        const data = await fixture(1);
+        const returnId = await insert("INSERT INTO returns (code, request_key, order_id, receiving_branch_id, status, reason, inspected_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'inspected', 'Test', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [`RET-NO-SOURCE-${data.token}`, `ret-no-source-${data.token}`, data.firstOrderId, data.branchId]);
+        const returnItemId = await insert("INSERT INTO return_items (return_id, order_item_id, requested_quantity, approved_quantity, received_quantity, restocked_quantity, created_at, updated_at) VALUES (?, ?, 1, 1, 1, 1, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [returnId, data.firstItemId]);
+        const restock = new SequelizeInventoryReturnRestockV2Repository(createSalesV2Persistence(sequelize));
+        expect(await restock.restockReturnItem(serializeEntityId(returnItemId), `return-no-source-${data.token}`,
+            serializeEntityId(data.accountId))).toEqual({ kind: "source_not_handed_over" });
+        await sequelize.query(
+            `INSERT INTO inventory_movements (branch_id, product_variant_id, quantity_delta, balance_after,
+                order_item_id, reason, reference_type, reference_id, idempotency_key,
+                created_by_account_id, occurred_at, created_at)
+             VALUES (?, ?, -1, 0, ?, 'order_handover', 'order', 'wrong-order', ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))`,
+            { replacements: [data.branchId, data.variantId, data.firstItemId,
+                `fake-handover-${data.token}`, data.accountId] },
+        );
+        expect(await restock.restockReturnItem(serializeEntityId(returnItemId), `return-no-source-${data.token}`,
+            serializeEntityId(data.accountId))).toEqual({ kind: "source_not_handed_over" });
+        const rows = await sequelize.query<{ stock: number; movements: string }>(
+            "SELECT stock, (SELECT COUNT(*) FROM inventory_movements WHERE return_item_id = ?) AS movements FROM inventories WHERE id = ?",
+            { replacements: [returnItemId, data.inventoryId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ stock: 1, movements: "0" });
+    });
+
+    it("serializes duplicate return restocks without double-crediting inventory", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `return-race-hold-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Order hold fixture failed.");
+        await sequelize.query("UPDATE orders SET status = 'confirmed', fulfillment_status = 'fulfilled' WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        const orderRepository = new SequelizeInventoryReservationV2Repository(createSalesV2Persistence(sequelize));
+        expect((await orderRepository.confirmOrderReservation(reserved.reservationId)).kind).toBe("confirmed");
+        expect((await orderRepository.consumeOrderReservation(reserved.reservationId, `return-race-handover-${data.token}`, data.accountId)).kind)
+            .toBe("consumed");
+        const returnId = await insert("INSERT INTO returns (code, request_key, order_id, receiving_branch_id, status, reason, inspected_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'inspected', 'Test', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [`RET-RACE-${data.token}`, `ret-race-${data.token}`, data.firstOrderId, data.branchId]);
+        const returnItemId = await insert("INSERT INTO return_items (return_id, order_item_id, requested_quantity, approved_quantity, received_quantity, restocked_quantity, created_at, updated_at) VALUES (?, ?, 1, 1, 1, 1, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [returnId, data.firstItemId]);
+        const restock = new SequelizeInventoryReturnRestockV2Repository(createSalesV2Persistence(sequelize));
+        const id = serializeEntityId(returnItemId);
+        const actor = serializeEntityId(data.accountId);
+        const key = `return-race-${data.token}`;
+        const outcomes = await Promise.all([restock.restockReturnItem(id, key, actor), restock.restockReturnItem(id, key, actor)]);
+        expect(outcomes.map((outcome) => outcome.kind).sort()).toEqual(["replayed", "restocked"]);
+        const rows = await sequelize.query<{ stock: number; movements: string }>(
+            "SELECT stock, (SELECT COUNT(*) FROM inventory_movements WHERE idempotency_key = ?) AS movements FROM inventories WHERE id = ?",
+            { replacements: [key, data.inventoryId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ stock: 1, movements: "1" });
+    });
+
+    it("rolls back return restock with the inspection transaction", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `return-rollback-hold-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Order hold fixture failed.");
+        await sequelize.query("UPDATE orders SET status = 'confirmed', fulfillment_status = 'fulfilled' WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        const persistence = createSalesV2Persistence(sequelize);
+        const orderRepository = new SequelizeInventoryReservationV2Repository(persistence);
+        expect((await orderRepository.confirmOrderReservation(reserved.reservationId)).kind).toBe("confirmed");
+        expect((await orderRepository.consumeOrderReservation(reserved.reservationId, `return-rollback-handover-${data.token}`, data.accountId)).kind)
+            .toBe("consumed");
+        const returnId = await insert("INSERT INTO returns (code, request_key, order_id, receiving_branch_id, status, reason, created_at, updated_at) VALUES (?, ?, ?, ?, 'received', 'Test', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [`RET-ROLLBACK-${data.token}`, `ret-rollback-${data.token}`, data.firstOrderId, data.branchId]);
+        const returnItemId = await insert("INSERT INTO return_items (return_id, order_item_id, requested_quantity, approved_quantity, received_quantity, created_at, updated_at) VALUES (?, ?, 1, 1, 1, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [returnId, data.firstItemId]);
+        const key = `return-rollback-${data.token}`;
+        const marker = Error("rollback inspection");
+        await expect(sequelize.transaction(async (transaction) => {
+            await sequelize.query("UPDATE returns SET status = 'inspected', inspected_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
+                { replacements: [returnId], transaction });
+            await sequelize.query("UPDATE return_items SET restocked_quantity = 1 WHERE id = ?",
+                { replacements: [returnItemId], transaction });
+            const scoped = new SequelizeInventoryReturnRestockV2Repository(persistence, transaction);
+            expect(await scoped.restockReturnItem(serializeEntityId(returnItemId), key, serializeEntityId(data.accountId)))
+                .toEqual({ kind: "restocked", balanceAfter: 1 });
+            throw marker;
+        })).rejects.toBe(marker);
+        const rows = await sequelize.query<{ stock: number; movements: string }>(
+            "SELECT stock, (SELECT COUNT(*) FROM inventory_movements WHERE idempotency_key = ?) AS movements FROM inventories WHERE id = ?",
+            { replacements: [key, data.inventoryId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ stock: 0, movements: "0" });
     });
 
     it("records the actual confirmation instant when the MySQL session is not in UTC", async () => {

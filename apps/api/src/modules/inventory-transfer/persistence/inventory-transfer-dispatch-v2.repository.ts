@@ -34,7 +34,8 @@ export class SequelizeInventoryTransferDispatchV2Repository {
             return this.transaction ? await work(this.transaction)
                 : await retryV2Transaction(() => this.persistence.inTransaction(work));
         } catch (error) {
-            if ((error as { parent?: { code?: string } })?.parent?.code === "ER_DUP_ENTRY") {
+            // A caller-owned transaction must fail so earlier stock/hold writes cannot be committed without a movement.
+            if (!this.transaction && (error as { parent?: { code?: string } })?.parent?.code === "ER_DUP_ENTRY") {
                 return { kind: "idempotency_conflict" };
             }
             throw error;

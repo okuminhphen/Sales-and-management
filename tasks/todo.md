@@ -184,7 +184,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Verification: API typecheck (kể cả strict cho catalog/composition), build và full suite
     với MySQL V2 bật đạt 334 tests; 6 skip thuộc Redis/infra follow-up, không thuộc T28.
     `git diff --check` đạt. Cloudinary thật chưa được gọi; test dùng fake provider.
-- [ ] T29 — Inventory balance/reservation/movement service V2.
+- [x] T29 — Inventory balance/reservation/movement service V2 (phạm vi inventory primitives theo xác nhận của người dùng ngày 2026-09-24; orchestration/HTTP thuộc T31/T33/T35).
   - [x] Lát cắt balance read: MySQL V2 tính `available = stock - SUM(active holds)`;
     hold đã quá hạn nhưng chưa được worker release vẫn bị trừ. Unit test và MySQL
     `_test` integration test đã kiểm chứng; read model không dùng thay kiểm tra
@@ -226,7 +226,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     đối chiếu chiều branch requester/supplier và variant, khóa request → receipt
     → item → inventory → active holds, không trừ stock khi duyệt. Repository nhận
     outer transaction của T31; MySQL test replay/conflict, rollback và hai phiếu
-    tranh đơn vị cuối. Chưa dispatch/receive hoặc mount HTTP.
+    tranh đơn vị cuối. Dispatch/receive có primitive riêng bên dưới; chưa mount HTTP.
   - [x] Hardening transaction/timezone: service không retry thao tác con khi
     caller sở hữu transaction; deadlock/lock timeout được ném lại cho checkout/approval
     retry toàn use-case. Repository chỉ retry khi tự mở transaction. Unit tests và
@@ -244,15 +244,27 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     Khóa request → receipt → item → inventory → holds; giảm stock, consume
     hold và append movement typed `transfer_receipt_item_id` một lần. MySQL
     `_test` kiểm chứng replay sau completed, key conflict, rollback và hai
-    dispatch đồng thời; chưa nối HTTP hoặc tăng kho đích.
-  - [ ] Receipt và movement typed transfer đích/return, HTTP compatibility
-    và tích hợp atomic checkout còn chờ; T29 chưa hoàn tất.
+    dispatch đồng thời; chưa nối HTTP.
+  - [x] Receipt đích và cancellation release: kiểm tra dispatch nguồn/hold consumed,
+    chỉ cộng `received_quantity` bán được, ghi movement typed, replay và rollback
+    trong transaction chủ quản. Chênh lệch `lost_quantity`/`non_sellable_quantity`
+    vẫn fail-closed; T31 phải yêu cầu người có quyền duyệt điều chuyển khác
+    người ghi nhận, rồi lưu note/audit và nối orchestration trong cùng transaction.
+    Cancel/reject trước dispatch chỉ nhả hold, không cộng stock.
+  - [x] Return restock nội bộ: chỉ cộng `restocked_quantity` của item đã
+    inspected/completed và có order handover movement đúng loại/reference;
+    hàng không bán được không cộng stock. MySQL `_test` kiểm tra replay,
+    cạnh tranh, thiếu nguồn và rollback; T35 nối eligibility/authorization.
+  - [x] Ranh giới giao dịch: duplicate movement trong outer transaction phải
+    throw để caller rollback toàn bộ; test unit cho dispatch/receipt/restock.
+    HTTP compatibility và atomic checkout không thuộc T29, theo xác nhận của
+    người dùng: T31 nối transfer, T33 nối checkout, T35 nối return/fulfillment.
 - [ ] T30 — Stock request service V2.
-- [ ] T31 — Transfer receipt service V2.
+- [ ] T31 — Transfer receipt service V2; nối reserve/dispatch/receive/release T29 trong transaction chủ quản. Approval chênh lệch phải do người có quyền, khác người ghi nhận, có note/audit.
 - [ ] T32 — Voucher claim/release service V2.
-- [ ] T33 — Order checkout/read/status + transactional outbox V2.
+- [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
 - [ ] T34 — Payment method/payment/webhook V2.
-- [ ] T35 — Shipment compatibility và return/refund persistence boundary.
+- [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
 - [ ] T36 — Conversation/message state và Socket contract V2.
 - [ ] T37 — Notification/behavior/chat proxy identity V2.
   - Acceptance cho T21–T37: route/envelope hiện hữu giữ tối đa; actor/scope từ JWT+DB; DTO Zod đầy đủ; mỗi slice có RED test và real-DB integration test.

@@ -358,7 +358,7 @@ Suite kiểm tra create/replace/delete ảnh, transaction rollback, mất commit
 quyền DB thắng JWT hints, cart ownership, review uniqueness, tài khoản khóa và audit không chứa
 request data nhạy cảm. Test này không thay thế smoke Web/AI/runtime chính tại T42–T44.
 
-## Inventory V2 — T29 đang triển khai
+## Inventory V2 — T29 hoàn tất ở phạm vi primitives
 
 `stock` trong `inventories` là số hàng vật lý bán được tại chi nhánh, **bao gồm** hàng đang giữ.
 `reserved` là tổng reservation `active`, kể cả hold đã quá `expires_at` nhưng worker chưa chuyển
@@ -398,13 +398,23 @@ requester/supplier, khóa request → receipt → item → inventory → reserva
 hold confirmed không expiry và không giảm stock. Repository nhận transaction của
 approval use-case; MySQL `_test` đã kiểm tra rollback, idempotency và cạnh tranh
 đơn vị cuối. Dispatch mới là lúc giảm kho nguồn và ghi movement; nhận hàng đủ
-điều kiện bán mới tăng kho đích, nên hai bước này còn chờ T31.
+điều kiện bán mới tăng kho đích. Việc nối state/HTTP thuộc T31.
 Primitive dispatch nguồn đã có cho T31: sau khi use-case chủ quản chuyển
 receipt sang `in_transit` trong cùng transaction, nó consume hold đã confirm,
 giảm stock nguồn và ghi movement có FK `transfer_receipt_item_id`, actor và
 idempotency key. Replay sau khi receipt hoàn tất không trừ kho lần hai; MySQL
 `_test` đã kiểm tra rollback, key conflict và dispatch đồng thời. Chưa mount
-route hoặc tự chuyển receipt; phần nhận hàng/tăng kho đích vẫn chờ.
+route hoặc tự chuyển receipt.
+Primitive nhận đủ hàng tốt tăng stock đích đúng `received_quantity` và ghi
+movement typed cho transfer item; kiểm tra movement dispatch nguồn, chỉ nhận
+receipt đã `completed`, replay/dedup và rollback cùng transaction. Trường hợp
+`lost_quantity`/`non_sellable_quantity` vẫn fail-closed: T31 phải xác minh
+người duyệt có `transfer.manage.branch`, khác người ghi nhận, lưu note/audit
+rồi mới mở đường hoàn tất chênh lệch. Hủy/reject trước dispatch chỉ release
+hold, không cộng kho. Return restock primitive chỉ cộng `restocked_quantity`
+của item đã inspected/completed và có movement bàn giao gốc; hàng không bán
+được không tự vào stock. T35 sở hữu eligibility/authorization và trạng thái
+return trong cùng transaction. Các primitive này chưa mount runtime HTTP.
 
 Trong các primitive giữ hàng, retry deadlock chỉ bao trùm transaction do repository
 tự mở. Nếu checkout/approval cấp transaction, service trả lại lỗi deadlock/lock timeout
