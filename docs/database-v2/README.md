@@ -130,6 +130,15 @@ Own-profile V2 dùng aggregate `Account` + `Customer` trong cùng transaction. K
 mọi thay đổi email phải mở challenge OTP mới. Xung đột username được trả bằng kết quả nghiệp vụ,
 không lộ lỗi SQL; uniqueness phone chưa được thêm vì DBML revision 4 không khai báo ràng buộc đó.
 
+Composition `routes/identity-v2.ts` hiện nối HTTP V2 riêng cho OTP, register, customer login,
+backoffice login, logout và hồ sơ khách. OTP dùng Redis token gateway và email sender hiện có;
+integration test dùng MemoryOtpStorage + fake sender, không gửi email thật. Đăng nhập cần Redis
+để áp dụng rate limit, Redis lỗi trả 503 cho auth. JWT sống 15 phút, middleware đọc lại context
+active từ MySQL ở mỗi request. Seed SUPER_ADMIN có email nhưng username null nên backoffice login
+nhận email ở trường `username`. Cặp `accountId`/`customerId` trong response là chuỗi BIGINT;
+Web cần đổi kiểu ở T38 trước khi mount runtime chính. Test HTTP với MySQL `_test` ở
+`tests/integration/identityV2Http.test.ts`; endpoint V2 chưa mount trong app legacy.
+
 Role/permission V2 có application service và MySQL repository riêng. Đọc danh mục cần
 `role.read.global`; tạo/sửa/xóa role cần `role.manage.global` trên **grant global** — grant cấp
 branch không bao giờ có thể quản trị RBAC toàn hệ thống. Role nền do seed (`CUSTOMER`, các role

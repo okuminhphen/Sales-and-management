@@ -6,6 +6,7 @@ export type RateLimitOptions = {
     keyPrefix: string;
     maxRequests: number;
     windowSeconds: number;
+    failClosed?: boolean;
     keyGenerator?: (request: Request) => string | Promise<string>;
 };
 
@@ -16,15 +17,22 @@ export const defaultClientIpKey = (request: Request): string => {
     return ip.replace(/[^a-zA-Z0-9_.:-]/g, "_");
 };
 
-export const rateLimit = ({ keyPrefix, maxRequests, windowSeconds, keyGenerator }: RateLimitOptions) =>
+export const rateLimit = ({ keyPrefix, maxRequests, windowSeconds, keyGenerator, failClosed = false }: RateLimitOptions) =>
     async (request: Request, response: Response, next: NextFunction): Promise<void> => {
+        const unavailable = (): void => {
+            response.status(503).json({ error: {
+                code: "RATE_LIMIT_UNAVAILABLE",
+                message: "Authentication service temporarily unavailable",
+            } });
+        };
         const redis = getReadyRedisClient();
         if (!redis) {
             logger.warn("rate_limit.redis_unavailable", {
                 requestId: response.getHeader("X-Request-ID"),
                 keyPrefix,
             });
-            next();
+            if (failClosed) unavailable();
+            else next();
             return;
         }
 
@@ -54,8 +62,9 @@ export const rateLimit = ({ keyPrefix, maxRequests, windowSeconds, keyGenerator 
         } catch (error: unknown) {
             logger.error("rate_limit.failed", {
                 requestId: response.getHeader("X-Request-ID"),
-                error,
+                errorName: error instanceof Error ? error.name : "UnknownError",
             });
-            next();
+            if (failClosed) unavailable();
+            else next();
         }
     };

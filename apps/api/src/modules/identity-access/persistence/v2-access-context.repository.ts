@@ -100,6 +100,15 @@ export class SequelizeV2AccessContextRepository {
             const scope = buildScope(assignment.dataValues);
             if (!role || !scope) return null;
 
+            // Role rows may survive profile deactivation. Revoke their effective
+            // privileges immediately, including tokens issued before deactivation.
+            // Only the bootstrap global SUPER_ADMIN can operate without HR data.
+            if (role.code === "CUSTOMER") {
+                if (!customer || scope.type !== "global") continue;
+            } else if (!(role.code === "SUPER_ADMIN" && scope.type === "global") && !employee) {
+                continue;
+            }
+
             grants.push({
                 roleCode: role.code,
                 scope,
@@ -107,6 +116,7 @@ export class SequelizeV2AccessContextRepository {
             });
         }
 
+        if (grants.length === 0) return null;
         return {
             accountId,
             customerId: customer ? serializeEntityId(customer.dataValues.id) : null,

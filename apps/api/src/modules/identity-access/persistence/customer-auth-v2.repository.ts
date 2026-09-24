@@ -26,7 +26,9 @@ import {
 const customerRoleCode = "CUSTOMER" as const;
 
 const isEmailUniqueConstraint = (error: UniqueConstraintError): boolean =>
-    Object.prototype.hasOwnProperty.call(error.fields ?? {}, "email");
+    Object.prototype.hasOwnProperty.call(error.fields ?? {}, "uq_accounts_email");
+const isUsernameUniqueConstraint = (error: UniqueConstraintError): boolean =>
+    Object.prototype.hasOwnProperty.call(error.fields ?? {}, "uq_accounts_username");
 
 /**
  * MySQL adapter for the V2 customer credential flow. All Account, Customer and
@@ -48,6 +50,7 @@ export class SequelizeCustomerAuthV2Repository implements CustomerAuthV2Reposito
     async registerVerifiedCustomer(input: RegisterVerifiedCustomerInput): Promise<
         | { kind: "created"; accountId: string; customerId: string }
         | { kind: "email_already_exists" }
+        | { kind: "username_already_exists" }
     > {
         try {
             return await retryV2Transaction(() => this.persistence.inTransaction(async (transaction) => {
@@ -123,6 +126,9 @@ export class SequelizeCustomerAuthV2Repository implements CustomerAuthV2Reposito
         } catch (error) {
             if (error instanceof UniqueConstraintError && isEmailUniqueConstraint(error)) {
                 return { kind: "email_already_exists" };
+            }
+            if (error instanceof UniqueConstraintError && isUsernameUniqueConstraint(error)) {
+                return { kind: "username_already_exists" };
             }
             throw error;
         }

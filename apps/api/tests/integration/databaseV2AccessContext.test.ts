@@ -92,4 +92,23 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 access context on MySQL", () =
         }));
         expect(canAccessBranch(superAdminContext!, "9007199254740995", "order.manage.global")).toBe(true);
     });
+
+    it("does not retain internal privileges without an active employee, or customer grants without an active customer", async () => {
+        const persistence = createSalesV2Persistence(sequelize);
+        const contexts = new SequelizeV2AccessContextRepository(persistence);
+        const unique = crypto.randomUUID();
+        const registration = await new SequelizeCustomerAuthV2Repository(persistence).registerVerifiedCustomer({
+            email: `revoked-${unique}@example.test`, username: `revoke-${unique.slice(0, 8)}`,
+            phone: "0900000000", passwordHash: "unused-test-hash",
+        });
+        if (registration.kind !== "created") throw new Error("Could not create authorization fixture");
+        await sequelize.query(`INSERT INTO account_roles
+            (account_id, role_id, scope_type, scope_key, branch_id, assigned_at)
+            SELECT ?, id, 'global', 'GLOBAL', NULL, UTC_TIMESTAMP(3) FROM roles WHERE code = 'BRANCH_MANAGER'`,
+        { replacements: [registration.accountId] });
+        expect((await contexts.findActiveByAccountId(registration.accountId))?.grants.map((grant) => grant.roleCode))
+            .toEqual(["CUSTOMER"]);
+        await sequelize.query("UPDATE customers SET status = 'inactive' WHERE id = ?", { replacements: [registration.customerId] });
+        expect(await contexts.findActiveByAccountId(registration.accountId)).toBeNull();
+    });
 });

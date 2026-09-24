@@ -43,6 +43,7 @@
     "src/modules/transfer-receipt/transfer-receipt.dto.ts",
     "src/security/**/*.ts",
     "src/routes/catalog-commerce-v2.ts",
+    "src/routes/identity-v2.ts",
     "src/shared/contracts/**/*.ts",
     "src/socket.ts",
     "src/utils/cacheHelper.ts",
@@ -86,6 +87,7 @@
     "tests/integration/sizeRoutes.test.ts",
     "tests/integration/bannerV2Http.test.ts",
     "tests/integration/v2HttpAudit.test.ts",
-    "tests/integration/databaseV2T28Http.test.ts"
+    "tests/integration/databaseV2T28Http.test.ts",
+    "tests/integration/identityV2Http.test.ts"
   ]
 }

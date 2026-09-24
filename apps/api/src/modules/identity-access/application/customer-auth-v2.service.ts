@@ -45,6 +45,7 @@ export interface CustomerAuthV2Repository {
     registerVerifiedCustomer: (input: RegisterVerifiedCustomerInput) => Promise<
         | { kind: "created"; accountId: string; customerId: string }
         | { kind: "email_already_exists" }
+        | { kind: "username_already_exists" }
     >;
     findCredentialByEmailOrPhone: (identifier: string) => Promise<CustomerCredential | null>;
     recordSuccessfulLogin: (accountId: string) => Promise<void>;
@@ -61,6 +62,7 @@ export type CustomerRegistrationInput = {
 export type CustomerRegistrationResult =
     | { kind: "registered"; accountId: string; customerId: string }
     | { kind: "email_already_exists" }
+    | { kind: "username_already_exists" }
     | { kind: "verification_email_mismatch" }
     | { kind: "verification_already_claimed" }
     | { kind: "verification_invalid" }
@@ -128,7 +130,7 @@ export class CustomerAuthV2Service {
                 passwordHash,
             });
 
-            if (created.kind === "email_already_exists") {
+            if (created.kind === "email_already_exists" || created.kind === "username_already_exists") {
                 await this.releaseVerificationToken(input.emailVerificationToken);
                 return created;
             }

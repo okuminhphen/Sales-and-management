@@ -102,6 +102,20 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 role management on MySQL", () 
                 type: QueryTypes.INSERT,
             },
         );
+        // A role assignment alone must not grant backoffice privileges to an
+        // account with no active employee profile.
+        await expect(contexts.findActiveByAccountId(accountRows[0]!.id)).resolves.toBeNull();
+        await sequelize.query(
+            "INSERT INTO branches (code, name, address, type, created_at, updated_at) VALUES (?, 'Role test branch', 'Test address', 'branch', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [`ROLE_${suffix}`] },
+        );
+        const branchRows = await sequelize.query<{ id: string }>(
+            "SELECT id FROM branches WHERE code = ?", { replacements: [`ROLE_${suffix}`], type: QueryTypes.SELECT },
+        );
+        await sequelize.query(
+            "INSERT INTO employees (account_id, branch_id, code, full_name, status, created_at, updated_at) VALUES (?, ?, ?, 'Role recipient', 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [accountRows[0]!.id, branchRows[0]!.id, `EMP_${suffix}`] },
+        );
         await expect(contexts.findActiveByAccountId(accountRows[0]!.id)).resolves.toMatchObject({
             grants: [{
                 roleCode: code,

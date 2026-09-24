@@ -66,4 +66,13 @@ describe("Rate Limit Security & Policy (Required 5)", () => {
             expect.objectContaining({ keyPrefix: "test-unavailable" })
         );
     });
+
+    it("rejects authentication attempts when the strict limiter has no Redis", async () => {
+        const app = express();
+        vi.spyOn(redisModule, "getReadyRedisClient").mockReturnValue(undefined);
+        app.post("/login", rateLimit({ keyPrefix: "test-auth", maxRequests: 5,
+            windowSeconds: 60, failClosed: true }), (_req, res) => res.json({ ok: true }));
+        const response = await request(app).post("/login").expect(503);
+        expect(response.body).toMatchObject({ error: { code: "RATE_LIMIT_UNAVAILABLE" } });
+    });
 });

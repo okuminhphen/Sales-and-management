@@ -17,7 +17,11 @@ export class SequelizeBackofficeAuthV2Repository implements BackofficeAuthV2Repo
 
     async findCredentialByUsername(username: string): Promise<BackofficeCredential | null> {
         if (!username) return null;
-        const account = await this.account.findOne({ where: { username } });
+        // The bootstrap SUPER_ADMIN is seeded with email and no username.
+        // Accept an email identifier without ever resolving authorization by email.
+        const account = await this.account.findOne({
+            where: username.includes("@") ? { email: username.trim().toLowerCase() } : { username },
+        });
         if (!account) return null;
 
         return {

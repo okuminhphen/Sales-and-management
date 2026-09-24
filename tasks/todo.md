@@ -105,18 +105,17 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 ## Phase 3 — Backend compatibility-first
 
 - [ ] T21 — Auth register/OTP và customer login trên Account/Customer.
-  - Tiến độ: core service/repository V2, OTP claim lifecycle và MySQL integration đã có; chưa chuyển HTTP route khi consumer legacy còn cần numeric ID.
+  - Tiến độ: core, OTP claim lifecycle, HTTP V2 riêng và MySQL integration đã có. Test đi hết OTP fake email -> verification token -> Account/Customer -> login JWT; email/username trùng trả 409. Chưa mount runtime vì consumer legacy còn numeric ID.
 - [ ] T22 — Google login và admin login trên Account/scoped roles.
-  - Tiến độ: core đăng nhập backoffice bằng username/password đã dùng `accounts`, DB-derived
-    scoped grants và MySQL integration. Google login chưa được chuyển: hợp đồng 49 bảng hiện
+  - Tiến độ: core và HTTP backoffice bằng username hoặc email/password đã dùng `accounts`, DB-derived
+    scoped grants và MySQL integration. Seed SUPER_ADMIN không có username nên chấp nhận email làm định danh đăng nhập. Google login chưa được chuyển: hợp đồng 49 bảng hiện
     chưa có immutable provider subject (ví dụ Google `sub`), nên không được liên kết Account
     theo email. Cần một revision schema được phê duyệt trước khi triển khai OAuth V2.
 - [ ] T23 — JWT/access context và authorization helpers V2.
-  - Tiến độ: V2 JWT (BIGINT string + issuer/audience), DB-derived access context, scoped authorization helper và HTTP middleware fail-closed đã có; route chuyển dần theo capability sau.
+  - Tiến độ: V2 JWT (BIGINT string + issuer/audience), DB-derived access context, scoped authorization helper và HTTP middleware fail-closed đã có; auth/profile và T28 HTTP V2 riêng đã dùng. Context bỏ grant nội bộ khi employee không active, bỏ CUSTOMER khi customer không active; test MySQL xác nhận. Runtime mount chờ cutover.
 - [ ] T24 — User/customer profile endpoints V2.
   - Tiến độ: core own-profile dùng Account + Customer đã có transaction, ownership theo
-    DB-derived access context, username uniqueness mapping và MySQL integration. HTTP endpoint
-    vẫn chờ auth/middleware V2 được nối vào app compatibility, không trộn với legacy numeric ID.
+    DB-derived access context, username uniqueness mapping và MySQL integration. HTTP V2 riêng có GET `/user/:id`, PUT `/user/update/:userId` (chỉ own profile) và test MySQL; runtime legacy chưa mount.
 - [ ] T25 — Role/permission/admin management endpoints V2.
   - Tiến độ: core Role/Permission V2 đã có global-scope authorization, immutable seeded roles,
     atomic replace permission mapping, chặn xóa role đang được gán và MySQL integration; HTTP
