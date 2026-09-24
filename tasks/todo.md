@@ -227,6 +227,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     → item → inventory → active holds, không trừ stock khi duyệt. Repository nhận
     outer transaction của T31; MySQL test replay/conflict, rollback và hai phiếu
     tranh đơn vị cuối. Chưa dispatch/receive hoặc mount HTTP.
+  - [x] Hardening transaction/timezone: service không retry thao tác con khi
+    caller sở hữu transaction; deadlock/lock timeout được ném lại cho checkout/approval
+    retry toàn use-case. Repository chỉ retry khi tự mở transaction. Unit tests và
+    typecheck đạt. So sánh/ghi `TIMESTAMP` cùng múi giờ session qua
+    `CURRENT_TIMESTAMP(3)`; hai test MySQL với session `+07:00`/`-07:00` đã đạt
+    trên `_test`, cùng focused reservation/transfer/adjustment (24 tests).
   - [ ] Expire worker an toàn với payment chưa rõ, dispatch/receipt và
     movement typed transfer/return, HTTP compatibility và tích hợp atomic
     checkout còn chờ; T29 chưa hoàn tất.

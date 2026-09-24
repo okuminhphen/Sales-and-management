@@ -1,4 +1,5 @@
 import { QueryTypes, type Transaction } from "sequelize";
+import { retryV2Transaction } from "../../../database/v2/transaction-retry.js";
 import type { V2Persistence } from "../../../database/v2/persistence.js";
 import { serializeDatabaseEntityId, type EntityId } from "../../../shared/contracts/database-scalars.js";
 import type {
@@ -62,7 +63,7 @@ export class SequelizeInventoryReservationV2Repository implements InventoryReser
             // sub-operation, when a scoped transaction hits a deadlock.
             return this.transaction
                 ? await this.reserveLocked(input, this.transaction)
-                : await this.persistence.inTransaction((transaction) => this.reserveLocked(input, transaction));
+                : await retryV2Transaction(() => this.persistence.inTransaction((transaction) => this.reserveLocked(input, transaction)));
         } catch (error) {
             const code = (error as { parent?: { code?: string } })?.parent?.code;
             if (code === "ER_DUP_ENTRY") return { kind: "idempotency_conflict" };
@@ -93,7 +94,7 @@ export class SequelizeInventoryReservationV2Repository implements InventoryReser
             { replacements: [inventoryId], transaction, type: QueryTypes.SELECT },
         );
         const holds = await this.persistence.sequelize.query<{ status: string; orderItemId: unknown; quantity: unknown; confirmedAt: Date | null; expiresAt: Date | null; expired: number }>(
-            "SELECT status, order_item_id AS orderItemId, quantity, confirmed_at AS confirmedAt, expires_at AS expiresAt, (expires_at <= UTC_TIMESTAMP(3)) AS expired FROM inventory_reservations WHERE id = ? FOR UPDATE",
+            "SELECT status, order_item_id AS orderItemId, quantity, confirmed_at AS confirmedAt, expires_at AS expiresAt, (expires_at <= CURRENT_TIMESTAMP(3)) AS expired FROM inventory_reservations WHERE id = ? FOR UPDATE",
             { replacements: [reservationId], transaction, type: QueryTypes.SELECT },
         );
         const order = orders[0];
@@ -107,7 +108,7 @@ export class SequelizeInventoryReservationV2Repository implements InventoryReser
         if (hold.confirmedAt !== null && hold.expiresAt === null) return { kind: "replayed" };
         if (hold.expiresAt === null || Number(hold.expired) === 1) return { kind: "reservation_expired" };
         await this.persistence.sequelize.query(
-            "UPDATE inventory_reservations SET confirmed_at = UTC_TIMESTAMP(3), expires_at = NULL, updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            "UPDATE inventory_reservations SET confirmed_at = CURRENT_TIMESTAMP(3), expires_at = NULL, updated_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
             { replacements: [reservationId], transaction },
         );
         return { kind: "confirmed" };
@@ -156,7 +157,7 @@ export class SequelizeInventoryReservationV2Repository implements InventoryReser
         if (hold.status === "released") return { kind: "replayed" };
         if (hold.status !== "active") return { kind: "reservation_finalized" };
         await this.persistence.sequelize.query(
-            "UPDATE inventory_reservations SET status = 'released', released_at = UTC_TIMESTAMP(3), updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            "UPDATE inventory_reservations SET status = 'released', released_at = CURRENT_TIMESTAMP(3), updated_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
             { replacements: [reservationId], transaction },
         );
         return { kind: "released" };
@@ -239,15 +240,15 @@ export class SequelizeInventoryReservationV2Repository implements InventoryReser
         const balanceAfter = stock - itemQuantity;
         if (balanceAfter < reserved - itemQuantity) throw new Error("Inventory invariant violated after handover.");
         await this.persistence.sequelize.query(
-            "UPDATE inventories SET stock = ?, updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            "UPDATE inventories SET stock = ?, updated_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
             { replacements: [balanceAfter, inventoryId], transaction },
         );
         await this.persistence.sequelize.query(
-            "UPDATE inventory_reservations SET status = 'consumed', consumed_at = UTC_TIMESTAMP(3), updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            "UPDATE inventory_reservations SET status = 'consumed', consumed_at = CURRENT_TIMESTAMP(3), updated_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
             { replacements: [reservationId], transaction },
         );
         await this.persistence.sequelize.query(
-            "INSERT INTO inventory_movements (branch_id, product_variant_id, quantity_delta, balance_after, order_item_id, reason, reference_type, reference_id, idempotency_key, created_by_account_id, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, 'order_handover', 'order', ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            "INSERT INTO inventory_movements (branch_id, product_variant_id, quantity_delta, balance_after, order_item_id, reason, reference_type, reference_id, idempotency_key, created_by_account_id, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, 'order_handover', 'order', ?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
             { replacements: [order.branchId, item.variantId, -itemQuantity, balanceAfter, orderItemId,
                 orderId, operationKey, actorAccountId], transaction, type: QueryTypes.INSERT },
         );
@@ -324,7 +325,7 @@ export class SequelizeInventoryReservationV2Repository implements InventoryReser
         if (reserved > stock) throw new Error("Invalid active reservation total in database.");
         if (quantity > stock - reserved) return { kind: "insufficient_stock" };
         const [id] = await this.persistence.sequelize.query(
-            "INSERT INTO inventory_reservations (inventory_id, order_item_id, quantity, status, expires_at, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 'active', FROM_UNIXTIME(?), ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            "INSERT INTO inventory_reservations (inventory_id, order_item_id, quantity, status, expires_at, idempotency_key, created_at, updated_at) VALUES (?, ?, ?, 'active', FROM_UNIXTIME(?), ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
             { replacements: [inventoryId, input.orderItemId, quantity, input.expiresAt.getTime() / 1000, input.idempotencyKey], transaction, type: QueryTypes.INSERT },
         );
         return { kind: "reserved", reservationId: serializeDatabaseEntityId(id), quantity };

@@ -165,6 +165,49 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 inven
         expect(rows[0]?.expiresAt).not.toBeNull();
     });
 
+    it("compares hold expiry correctly when the MySQL session is not in UTC", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `timezone-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        await sequelize.query("UPDATE orders SET status = 'confirmed', updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        await sequelize.query("UPDATE inventory_reservations SET expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 SECOND WHERE id = ?",
+            { replacements: [reserved.reservationId] });
+        await sequelize.transaction(async (transaction) => {
+            await sequelize.query("SET time_zone = '+07:00'", { transaction });
+            try {
+                const repository = new SequelizeInventoryReservationV2Repository(createSalesV2Persistence(sequelize), transaction);
+                expect(await repository.confirmOrderReservation(reserved.reservationId)).toEqual({ kind: "reservation_expired" });
+            } finally {
+                await sequelize.query("SET time_zone = '+00:00'", { transaction });
+            }
+        });
+    });
+
+    it("records the actual confirmation instant when the MySQL session is not in UTC", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `timezone-confirm-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        await sequelize.query("UPDATE orders SET status = 'confirmed', updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            { replacements: [data.firstOrderId] });
+        await sequelize.transaction(async (transaction) => {
+            await sequelize.query("SET time_zone = '-07:00'", { transaction });
+            try {
+                const repository = new SequelizeInventoryReservationV2Repository(createSalesV2Persistence(sequelize), transaction);
+                expect(await repository.confirmOrderReservation(reserved.reservationId)).toEqual({ kind: "confirmed" });
+                const rows = await sequelize.query<{ driftSeconds: number }>(
+                    "SELECT ABS(UNIX_TIMESTAMP(confirmed_at) - UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3))) AS driftSeconds FROM inventory_reservations WHERE id = ?",
+                    { replacements: [reserved.reservationId], transaction, type: QueryTypes.SELECT },
+                );
+                expect(Number(rows[0]?.driftSeconds)).toBeLessThan(5);
+            } finally {
+                await sequelize.query("SET time_zone = '+00:00'", { transaction });
+            }
+        });
+    });
+
     it("releases only a cancelled pre-handover order with no unresolved payment", async () => {
         const data = await fixture(1);
         const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,

@@ -20,4 +20,18 @@ describe("InventoryTransferReservationV2Service", () => {
         } });
         expect(await service.reserveTransferItem({ transferItemId: "1", idempotencyKey: "key" })).toEqual({ kind: "inventory_unavailable" });
     });
+
+    it("does not retry a deadlocked repository call that may belong to a receipt approval transaction", async () => {
+        let calls = 0;
+        const deadlock = { parent: { code: "ER_LOCK_DEADLOCK" } };
+        const service = new InventoryTransferReservationV2Service({ repository: {
+            reserveTransferItem: async () => {
+                calls += 1;
+                throw deadlock;
+            },
+        } });
+        await expect(service.reserveTransferItem({ transferItemId: "1", idempotencyKey: "key" }))
+            .rejects.toBe(deadlock);
+        expect(calls).toBe(1);
+    });
 });

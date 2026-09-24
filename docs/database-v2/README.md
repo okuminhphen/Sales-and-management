@@ -390,6 +390,14 @@ approval use-case; MySQL `_test` đã kiểm tra rollback, idempotency và cạn
 đơn vị cuối. Dispatch mới là lúc giảm kho nguồn và ghi movement; nhận hàng đủ
 điều kiện bán mới tăng kho đích, nên hai bước này còn chờ T31.
 
+Trong các primitive giữ hàng, retry deadlock chỉ bao trùm transaction do repository
+tự mở. Nếu checkout/approval cấp transaction, service trả lại lỗi deadlock/lock timeout
+để use-case chủ quản rollback và retry **toàn bộ** giao dịch; không retry một thao tác
+con trên transaction đã lỗi. Với cột MySQL `TIMESTAMP`, predicate hết hạn và thời điểm
+ghi trong inventory slice dùng cùng múi giờ session (`CURRENT_TIMESTAMP`); đầu vào
+expiry được lưu từ Unix epoch. Regression cho MySQL session `+07:00`/`-07:00`
+đã đạt trên database `_test`.
+
 `apps/api/src/routes/inventory-v2.ts` là router standalone cho `GET /inventory/:branchId` dưới
 `/api/v1` khi mount. JWT V2 được kiểm tra, quyền hiện tại lấy từ MySQL: nhân viên chỉ xem branch
 được cấp `inventory.read.branch`, global nội bộ có thể xem mọi branch, customer không được xem.

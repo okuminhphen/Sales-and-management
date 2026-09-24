@@ -1,4 +1,4 @@
-import { retryV2Transaction } from "../../../database/v2/transaction-retry.js";
+import { isRetryableV2TransactionError } from "../../../database/v2/transaction-retry.js";
 import { serializeEntityId, type EntityId } from "../../../shared/contracts/database-scalars.js";
 
 export type ReserveOrderItemInput = { orderItemId: EntityId; idempotencyKey: string; expiresAt: Date };
@@ -33,9 +33,13 @@ export class InventoryReservationV2Service {
         const expiresAt = new Date(Math.floor(input.expiresAt.getTime() / 1000) * 1000);
         if (expiresAt.getTime() <= now.getTime()) return { kind: "invalid_reservation_input" };
         try {
-            return await retryV2Transaction(() => this.dependencies.repository.reserveOrderItem({
+            return await this.dependencies.repository.reserveOrderItem({
                 orderItemId, idempotencyKey: input.idempotencyKey as string, expiresAt,
-            }));
-        } catch { return { kind: "inventory_unavailable" }; }
+            });
+        } catch (error) {
+            // A checkout that owns the transaction must retry from its first write.
+            if (isRetryableV2TransactionError(error)) throw error;
+            return { kind: "inventory_unavailable" };
+        }
     }
 }

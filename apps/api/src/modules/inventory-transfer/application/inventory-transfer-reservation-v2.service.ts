@@ -1,4 +1,4 @@
-import { retryV2Transaction } from "../../../database/v2/transaction-retry.js";
+import { isRetryableV2TransactionError } from "../../../database/v2/transaction-retry.js";
 import { serializeEntityId, type EntityId } from "../../../shared/contracts/database-scalars.js";
 
 export type ReserveTransferItemInput = { transferItemId: EntityId; idempotencyKey: string };
@@ -23,9 +23,13 @@ export class InventoryTransferReservationV2Service {
             return { kind: "invalid_reservation_input" };
         }
         try {
-            return await retryV2Transaction(() => this.dependencies.repository.reserveTransferItem({
+            return await this.dependencies.repository.reserveTransferItem({
                 transferItemId, idempotencyKey: input.idempotencyKey as string,
-            }));
-        } catch { return { kind: "inventory_unavailable" }; }
+            });
+        } catch (error) {
+            // The receipt approval owns the transaction and must restart as one unit.
+            if (isRetryableV2TransactionError(error)) throw error;
+            return { kind: "inventory_unavailable" };
+        }
     }
 }

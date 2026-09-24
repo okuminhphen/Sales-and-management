@@ -15,7 +15,7 @@ const getMySqlErrorCode = (error: unknown): string | null => {
     return null;
 };
 
-const isRetryableMySqlTransactionError = (error: unknown): boolean => {
+export const isRetryableV2TransactionError = (error: unknown): boolean => {
     const code = getMySqlErrorCode(error);
     return code === "ER_LOCK_DEADLOCK" || code === "ER_LOCK_WAIT_TIMEOUT";
 };
@@ -35,7 +35,7 @@ export const retryV2Transaction = async <Result>(
         try {
             return await work();
         } catch (error) {
-            const canRetry = attempt < maxAttempts - 1 && isRetryableMySqlTransactionError(error);
+            const canRetry = attempt < maxAttempts - 1 && isRetryableV2TransactionError(error);
             if (!canRetry) throw error;
             await waitForRetry(attempt);
         }

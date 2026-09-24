@@ -1,4 +1,5 @@
 import { QueryTypes, type Transaction } from "sequelize";
+import { retryV2Transaction } from "../../../database/v2/transaction-retry.js";
 import type { V2Persistence } from "../../../database/v2/persistence.js";
 import { serializeDatabaseEntityId } from "../../../shared/contracts/database-scalars.js";
 import type {
@@ -27,7 +28,8 @@ export class SequelizeInventoryTransferReservationV2Repository implements Invent
     async reserveTransferItem(input: ReserveTransferItemInput): Promise<ReserveTransferItemOutcome> {
         try {
             const work = (transaction: Transaction) => this.reserveLocked(input, transaction);
-            return this.transaction ? await work(this.transaction) : await this.persistence.inTransaction(work);
+            return this.transaction ? await work(this.transaction)
+                : await retryV2Transaction(() => this.persistence.inTransaction(work));
         } catch (error) {
             if ((error as { parent?: { code?: string } })?.parent?.code === "ER_DUP_ENTRY") {
                 return { kind: "idempotency_conflict" };
@@ -120,7 +122,7 @@ export class SequelizeInventoryTransferReservationV2Repository implements Invent
         const [id] = await this.persistence.sequelize.query(
             `INSERT INTO inventory_reservations (inventory_id, transfer_receipt_item_id, quantity, status,
                 confirmed_at, idempotency_key, created_at, updated_at)
-             VALUES (?, ?, ?, 'active', UTC_TIMESTAMP(3), ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`,
+             VALUES (?, ?, ?, 'active', CURRENT_TIMESTAMP(3), ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))`,
             { replacements: [inventoryId, input.transferItemId, quantity, input.idempotencyKey],
                 transaction, type: QueryTypes.INSERT },
         );

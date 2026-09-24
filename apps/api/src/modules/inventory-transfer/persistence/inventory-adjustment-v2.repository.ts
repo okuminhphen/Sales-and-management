@@ -38,7 +38,7 @@ export class SequelizeInventoryAdjustmentV2Repository implements InventoryAdjust
         if (inventories.length === 0 && input.quantityDelta < 0) return { kind: "insufficient_stock" };
         if (inventories.length === 0) {
             await this.persistence.sequelize.query(
-                "INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, 0, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE id = id",
+                "INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, 0, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE id = id",
                 { replacements, transaction },
             );
             inventories = await this.persistence.sequelize.query<InventoryRow>(inventorySql,
@@ -80,12 +80,12 @@ export class SequelizeInventoryAdjustmentV2Repository implements InventoryAdjust
         if (balanceAfter > 2_147_483_647) throw new Error("Stock would overflow INTEGER.");
         if (balanceAfter < reserved) return { kind: "insufficient_stock" };
         await this.persistence.sequelize.query(
-            "UPDATE inventories SET stock = ?, updated_at = UTC_TIMESTAMP(3) WHERE id = ?",
+            "UPDATE inventories SET stock = ?, updated_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
             { replacements: [balanceAfter, inventoryId], transaction },
         );
         const referenceId = createHash("sha256").update(input.idempotencyKey).digest("hex");
         const [id] = await this.persistence.sequelize.query(
-            "INSERT INTO inventory_movements (branch_id, product_variant_id, quantity_delta, balance_after, reason, reference_type, reference_id, idempotency_key, created_by_account_id, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, 'manual_adjustment', ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            "INSERT INTO inventory_movements (branch_id, product_variant_id, quantity_delta, balance_after, reason, reference_type, reference_id, idempotency_key, created_by_account_id, occurred_at, created_at) VALUES (?, ?, ?, ?, ?, 'manual_adjustment', ?, ?, ?, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
             { replacements: [input.branchId, input.variantId, input.quantityDelta, balanceAfter,
                 input.reason, referenceId, input.idempotencyKey, input.actorAccountId], transaction, type: QueryTypes.INSERT },
         );
