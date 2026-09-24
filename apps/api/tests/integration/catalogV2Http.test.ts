@@ -9,6 +9,8 @@ import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { seedV2Database } from "../../src/database/v2/seed.js";
 import { createCatalogV2Router } from "../../src/routes/catalog-v2.js";
 import { signV2AccessToken } from "../../src/security/v2-access-token.js";
+import type { CatalogMediaProvider } from "../../src/modules/catalog/application/catalog-media-provider.js";
+import { SequelizeCatalogMediaCleanupV2Repository } from "../../src/modules/catalog/persistence/catalog-media-cleanup-v2.repository.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP on MySQL", () => {
     let sequelize: Sequelize;
@@ -18,6 +20,16 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
     let inactiveProductId: string;
     let variantId: string;
     let adminBearer: string;
+    const uploadedIds: string[] = [];
+    const deletedIds: string[] = [];
+    const mediaProvider: CatalogMediaProvider = {
+        upload: async (_file, publicId) => {
+            uploadedIds.push(publicId);
+            return { kind: "uploaded", asset: { publicId,
+                url: `https://res.cloudinary.com/demo/image/upload/${publicId.replace("/", "-")}.jpg` } };
+        },
+        delete: async (publicId) => { deletedIds.push(publicId); return { kind: "deleted" }; },
+    };
 
     beforeAll(async () => {
         if (!env.V2_MIGRATIONS_TARGET_DATABASE?.endsWith("_test")) throw new Error("Explicit _test database required");
@@ -69,7 +81,7 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
         }))[0]!.id;
         app = express();
         app.use(express.json());
-        app.use("/api/v1", createCatalogV2Router({ persistence: createSalesV2Persistence(sequelize) }));
+        app.use("/api/v1", createCatalogV2Router({ persistence: createSalesV2Persistence(sequelize), mediaProvider }));
     });
     afterAll(async () => { await sequelize?.close(); });
 
@@ -248,5 +260,93 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Catalog V2 HTTP o
         expect(events.map((event) => event.eventType)).toEqual([
             "catalog.product.upserted", "catalog.product.upserted",
         ]);
+    });
+
+    it("replaces bounded product images and queues old media cleanup safely", async () => {
+        const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]);
+        await request(app).put(`/api/v1/product/${productId}/images`).attach("images", jpeg, "a.jpg").expect(401);
+        await request(app).put(`/api/v1/product/${productId}/images`).set("Authorization", adminBearer)
+            .attach("images", Buffer.from("not an image"), "bad.jpg").expect(400);
+        expect(uploadedIds).toHaveLength(0);
+        await request(app).put(`/api/v1/product/${productId}/images`).set("Authorization", adminBearer)
+            .attach("images", jpeg, "a.jpg").expect(200);
+        const firstId = uploadedIds[0]!;
+        const firstRead = await request(app).get(`/api/v1/product/${productId}`).expect(200);
+        expect(firstRead.body.DT.images).toHaveLength(1);
+        expect(firstRead.body.DT.images[0]).not.toHaveProperty("publicId");
+        const cleanup = new SequelizeCatalogMediaCleanupV2Repository(createSalesV2Persistence(sequelize));
+        await expect(cleanup.isReferenced(firstId)).resolves.toBe(true);
+        await request(app).put(`/api/v1/product/${productId}/images`).set("Authorization", adminBearer)
+            .attach("images", jpeg, "b.jpg").expect(200);
+        await expect(cleanup.isReferenced(firstId)).resolves.toBe(false);
+        const secondId = uploadedIds[1]!;
+        await expect(cleanup.isReferenced(secondId)).resolves.toBe(true);
+        const events = await sequelize.query<{ eventType: string }>(
+            "SELECT event_type AS eventType FROM outbox_events WHERE aggregate_id = ? ORDER BY id",
+            { replacements: [firstId], type: QueryTypes.SELECT },
+        );
+        expect(events.map((event) => event.eventType)).toEqual([
+            "catalog.product.media_upload_reserved", "catalog.product.media_cleanup_requested",
+        ]);
+        await request(app).delete(`/api/v1/product/${productId}/images`).set("Authorization", adminBearer).expect(200);
+        await expect(cleanup.isReferenced(secondId)).resolves.toBe(false);
+    });
+
+    it("keeps a committed product image when its DB commit acknowledgement is lost", async () => {
+        const persistence = createSalesV2Persistence(sequelize);
+        const uncertainPersistence = {
+            ...persistence,
+            inTransaction: async <T,>(work: Parameters<typeof persistence.inTransaction<T>>[0]): Promise<T> => {
+                await persistence.inTransaction(work);
+                throw new Error("Simulated lost commit acknowledgement");
+            },
+        };
+        const uncertainApp = express();
+        uncertainApp.use(express.json());
+        uncertainApp.use("/api/v1", createCatalogV2Router({ persistence: uncertainPersistence, mediaProvider }));
+        const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]);
+        const uploadsBefore = uploadedIds.length;
+        const deletionsBefore = deletedIds.length;
+        await request(uncertainApp).put(`/api/v1/product/${productId}/images`)
+            .set("Authorization", adminBearer).attach("images", jpeg, "uncertain.jpg").expect(503);
+        const publicId = uploadedIds[uploadsBefore]!;
+        const cleanup = new SequelizeCatalogMediaCleanupV2Repository(persistence);
+        await expect(cleanup.isReferenced(publicId)).resolves.toBe(true);
+        expect(deletedIds.slice(deletionsBefore)).not.toContain(publicId);
+        const reservations = await sequelize.query<{ publishedAt: Date | null }>(
+            "SELECT published_at AS publishedAt FROM outbox_events WHERE event_type = 'catalog.product.media_upload_reserved' AND aggregate_id = ?",
+            { replacements: [publicId], type: QueryTypes.SELECT },
+        );
+        expect(reservations).toHaveLength(1);
+        expect(reservations[0]!.publishedAt).not.toBeNull();
+        await request(app).delete(`/api/v1/product/${productId}/images`).set("Authorization", adminBearer).expect(200);
+    });
+
+    it("rolls back image references and outbox completion on a DB transaction failure", async () => {
+        const persistence = createSalesV2Persistence(sequelize);
+        const rollbackPersistence = {
+            ...persistence,
+            inTransaction: async <T,>(work: Parameters<typeof persistence.inTransaction<T>>[0]): Promise<T> =>
+                persistence.inTransaction(async (transaction) => {
+                    await work(transaction);
+                    throw new Error("Simulated transaction failure");
+                }),
+        };
+        const rollbackApp = express();
+        rollbackApp.use(express.json());
+        rollbackApp.use("/api/v1", createCatalogV2Router({ persistence: rollbackPersistence, mediaProvider }));
+        const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]);
+        const uploadsBefore = uploadedIds.length;
+        await request(rollbackApp).put(`/api/v1/product/${productId}/images`)
+            .set("Authorization", adminBearer).attach("images", jpeg, "rollback.jpg").expect(503);
+        const publicId = uploadedIds[uploadsBefore]!;
+        const cleanup = new SequelizeCatalogMediaCleanupV2Repository(persistence);
+        await expect(cleanup.isReferenced(publicId)).resolves.toBe(false);
+        const reservations = await sequelize.query<{ publishedAt: Date | null }>(
+            "SELECT published_at AS publishedAt FROM outbox_events WHERE event_type = 'catalog.product.media_upload_reserved' AND aggregate_id = ?",
+            { replacements: [publicId], type: QueryTypes.SELECT },
+        );
+        expect(reservations).toHaveLength(1);
+        expect(reservations[0]!.publishedAt).toBeNull();
     });
 });

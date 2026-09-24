@@ -67,6 +67,7 @@
     "tests/unit/catalogSizeCommandV2Service.test.ts",
     "tests/unit/catalogProductCommandV2Service.test.ts",
     "tests/unit/catalogVariantCommandV2Service.test.ts",
+    "tests/unit/catalogProductMediaV2Service.test.ts",
     "tests/unit/backofficeAuthV2Service.test.ts",
     "tests/unit/roleManagementV2Service.test.ts",
     "tests/unit/employeeV2Service.test.ts",

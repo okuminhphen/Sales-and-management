@@ -237,7 +237,7 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 banner media lifecycle on MySQ
         expect(job).not.toBeNull();
         if (!job) return;
         expect(job.attempts).toBeGreaterThan(0);
-        expect(job.publicId).toMatch(/^banners\//);
+        expect(job.publicId).toMatch(/^(banners|products)\//);
         if (!await repository.isReferenced(job.publicId)) {
             expect(await media.delete(job.publicId)).toEqual({ kind: "deleted" });
         }

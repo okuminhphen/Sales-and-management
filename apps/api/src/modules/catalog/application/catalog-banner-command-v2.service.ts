@@ -5,7 +5,7 @@ import { canManageBanners } from "./catalog-banner-policy.js";
 import { toCatalogPublicTargetUrl } from "./catalog-public-media.js";
 import type { CatalogMediaProvider, MediaAsset, MediaUploadInput, MediaUploadResult } from "./catalog-media-provider.js";
 import type { CatalogMediaCleanupLog } from "./catalog-media-cleanup-log.js";
-import { MAX_BANNER_IMAGE_BYTES, BANNER_IMAGE_MIME_TYPES } from "./catalog-media-provider.js";
+import { MAX_BANNER_IMAGE_BYTES, BANNER_IMAGE_MIME_TYPES, hasCatalogImageSignature } from "./catalog-media-provider.js";
 
 export type BannerStatus = "draft" | "active" | "inactive";
 export type BannerMetadata = { name: string; targetUrl: string | null; status: BannerStatus };
@@ -97,19 +97,6 @@ const normalizePatch = (input: unknown): BannerMetadataPatch | null => {
 
 const parseId = (input: unknown): EntityId | null => {
     try { return serializeEntityId(input); } catch { return null; }
-};
-
-const hasImageSignature = (file: MediaUploadInput): boolean => {
-    const bytes = file.buffer;
-    if (!Buffer.isBuffer(bytes)) return false;
-    if (file.mimetype === "image/jpeg") {
-        return bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
-    }
-    if (file.mimetype === "image/png") {
-        return bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-    }
-    return file.mimetype === "image/webp" && bytes.length >= 12
-        && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
 };
 
 export type CatalogBannerCommandDependencies = {
@@ -220,7 +207,7 @@ export class CatalogBannerCommandV2Service {
         if (!BANNER_IMAGE_MIME_TYPES.has(file.mimetype)) {
             return { kind: "upload_failed", reason: "unsupported_format" };
         }
-        if (!Buffer.isBuffer(file.buffer) || file.buffer.length === 0 || !hasImageSignature(file)) {
+        if (!Buffer.isBuffer(file.buffer) || file.buffer.length === 0 || !hasCatalogImageSignature(file)) {
             return { kind: "upload_failed", reason: "invalid_content" };
         }
         if (file.buffer.length > MAX_BANNER_IMAGE_BYTES) {

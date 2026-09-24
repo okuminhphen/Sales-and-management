@@ -39,8 +39,9 @@ describe("CloudinaryCatalogMediaProvider", () => {
         expect(await provider.upload(image, publicId)).toEqual({ kind: "provider_error", message: "invalid_response" });
     });
 
-    it("refuses to delete assets outside the banners folder", async () => {
+    it("refuses to delete assets outside the catalog-owned folders", async () => {
         const { provider, requests } = setup();
+        expect(await provider.delete("other/important")).toEqual({ kind: "provider_error", message: "invalid_public_id" });
         expect(await provider.delete("products/important")).toEqual({ kind: "provider_error", message: "invalid_public_id" });
         expect(requests).toEqual([]);
     });
@@ -48,5 +49,14 @@ describe("CloudinaryCatalogMediaProvider", () => {
     it("maps provider deletion results to idempotent outcomes", async () => {
         const { provider } = setup({ destroy: async () => ({ result: "not found" }) });
         expect(await provider.delete(publicId)).toEqual({ kind: "not_found" });
+    });
+
+    it("accepts server-owned product assets but rejects unscoped product IDs", async () => {
+        const { provider, requests } = setup();
+        const productId = "products/05bdd20b-d7c3-4327-849d-982587ac1b75";
+        expect(await provider.upload(image, productId)).toMatchObject({ kind: "uploaded" });
+        expect(await provider.delete(productId)).toEqual({ kind: "deleted" });
+        expect(await provider.delete("products/../../other")).toEqual({ kind: "provider_error", message: "invalid_public_id" });
+        expect(requests).toEqual([`upload:${productId}`, `destroy:${productId}`]);
     });
 });

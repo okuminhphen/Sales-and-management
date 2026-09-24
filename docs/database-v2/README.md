@@ -275,8 +275,8 @@ yêu cầu JWT V2 và grant nội bộ `catalog.manage.global` từ DB. `code`/`
 category có child/product cũng trả 409. T39 phải cập nhật Web đọc contract mới trước khi router
 này thay thế legacy. Size mutation giữ legacy path `POST /size/create`, `PUT /size/update`,
 `DELETE /size/delete/:id` nhưng ID là BIGINT string, trả 409 khi trùng tên hoặc còn variant
-tham chiếu; không xóa cascade. Mutation variant, media product và availability theo branch
-vẫn là việc T27/T29 tiếp theo.
+tham chiếu; không xóa cascade. Availability theo branch là việc T29; các route legacy
+`/category/check`, `/product-by-category/read` và recommendation còn cần map/đối chiếu Web.
 
 Product metadata V2 đã có `POST /product/create`, `PUT /product/update/:id` và
 `DELETE /product/delete` (chuyển `inactive`, không hard-delete). Variant có
@@ -285,8 +285,14 @@ Product metadata V2 đã có `POST /product/create`, `PUT /product/update/:id` v
 product/size được bảo vệ bởi unique DB; `sizeId` không đổi sau khi tạo. Route variant không
 nhận `stock`: tồn kho theo variant và branch thuộc T29. Giá đầu vào `price` bắt buộc
 là decimal string, category ID là BIGINT string; create mặc định `draft`. Metadata route dùng
-JSON và **chưa nhận ảnh/multipart**; image lifecycle sẽ nối riêng sau khi có cùng mức bảo đảm
-cleanup/retry như banner. Mỗi thay đổi product và outbox event catalog commit cùng transaction.
+JSON. `PUT /product/:productId/images` nhận 1–5 ảnh multipart field `images`, mỗi ảnh tối đa
+5 MiB, chỉ JPEG/PNG/WebP có chữ ký file hợp lệ; `DELETE /product/:productId/images` xóa bộ ảnh
+khỏi product. JWT V2 và quyền global được kiểm tra **trước** khi buffer. Upload dùng public ID
+server-generated dưới `products/`, ghi reservation bền vững trước khi gọi provider, rồi thay
+JSON ảnh + hoàn tất reservation + tạo cleanup intent cho ảnh cũ trong một transaction.
+Worker media V2 đối chiếu reference ở cả banner và product trước khi xóa; DB rollback hoặc
+mất xác nhận commit không làm xóa ảnh còn được tham chiếu. Test chỉ dùng fake provider, chưa
+gọi Cloudinary thật. Mỗi thay đổi product và outbox event catalog commit cùng transaction.
 Event payload V2 giữ giá dưới dạng string và có `status`; mọi variant mutation cũng tạo product
 upsert event cùng transaction để consumer có thể rehydrate product. T40 phải cập nhật AI consumer để bỏ qua
 draft/inactive và query schema V2 trước khi mount router runtime. Chưa dùng số tồn từ product.

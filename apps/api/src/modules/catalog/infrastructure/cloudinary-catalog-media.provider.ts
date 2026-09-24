@@ -1,7 +1,7 @@
 import cloudinary from "../../../config/cloudinary.js";
 import type { CatalogMediaProvider, MediaDeleteResult, MediaUploadInput, MediaUploadResult } from
     "../application/catalog-media-provider.js";
-import { isOwnedBannerAsset } from "../application/catalog-media-provider.js";
+import { isOwnedCatalogAsset } from "../application/catalog-media-provider.js";
 
 export type CloudinaryMediaOperations = {
     upload: (buffer: Buffer, publicId: string) => Promise<unknown>;
@@ -51,7 +51,7 @@ export class CloudinaryCatalogMediaProvider implements CatalogMediaProvider {
     constructor(private readonly operations: CloudinaryMediaOperations = configuredCloudinaryOperations) {}
 
     async upload(input: MediaUploadInput, publicId: string): Promise<MediaUploadResult> {
-        if (!isOwnedBannerAsset(publicId)) return { kind: "invalid_file", reason: "invalid_public_id" };
+        if (!isOwnedCatalogAsset(publicId)) return { kind: "invalid_file", reason: "invalid_public_id" };
         try {
             const result = await withTimeout(this.operations.upload(input.buffer, publicId));
             if (!isRecord(result) || result.public_id !== publicId
@@ -65,7 +65,7 @@ export class CloudinaryCatalogMediaProvider implements CatalogMediaProvider {
     }
 
     async delete(publicId: string): Promise<MediaDeleteResult> {
-        if (!isOwnedBannerAsset(publicId)) return { kind: "provider_error", message: "invalid_public_id" };
+        if (!isOwnedCatalogAsset(publicId)) return { kind: "provider_error", message: "invalid_public_id" };
         try {
             const result = await withTimeout(this.operations.destroy(publicId));
             if (!isRecord(result)) return { kind: "provider_error", message: "invalid_response" };

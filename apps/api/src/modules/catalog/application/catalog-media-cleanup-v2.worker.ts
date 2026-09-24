@@ -1,5 +1,5 @@
 import type { EntityId } from "../../../shared/contracts/database-scalars.js";
-import { isOwnedBannerAsset, type CatalogMediaProvider } from "./catalog-media-provider.js";
+import { isOwnedCatalogAsset, type CatalogMediaProvider } from "./catalog-media-provider.js";
 
 export type CatalogMediaCleanupJob = {
     id: EntityId;
@@ -15,7 +15,7 @@ export interface CatalogMediaCleanupV2Repository {
     markFailed: (id: EntityId, error: string) => Promise<void>;
 }
 
-/** Processes only banner-media jobs; Cloudinary deletion is idempotent on retry. */
+/** Processes catalog-owned media jobs; Cloudinary deletion is idempotent on retry. */
 export class CatalogMediaCleanupV2Worker {
     constructor(private readonly dependencies: {
         repository: CatalogMediaCleanupV2Repository;
@@ -27,7 +27,7 @@ export class CatalogMediaCleanupV2Worker {
         if (!job) return false;
 
         try {
-            if (!isOwnedBannerAsset(job.publicId)) {
+            if (!isOwnedCatalogAsset(job.publicId)) {
                 await this.dependencies.repository.markFailed(job.id, "invalid_public_id");
                 return true;
             }

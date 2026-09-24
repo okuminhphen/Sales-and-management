@@ -70,4 +70,21 @@ describe("CatalogMediaCleanupV2Worker", () => {
         const { worker } = setup({ queued: false });
         expect(await worker.runOnce()).toBe(false);
     });
+
+    it("allows a server-owned product asset cleanup job", async () => {
+        const deleted: string[] = [];
+        const repository: CatalogMediaCleanupV2Repository = {
+            claimNext: async () => ({ ...job, publicId: "products/05bdd20b-d7c3-4327-849d-982587ac1b75" }),
+            isReferenced: async () => false,
+            markCompleted: async () => {},
+            markFailed: async () => { throw new Error("Unexpected failure"); },
+        };
+        const mediaProvider: CatalogMediaProvider = {
+            upload: async () => ({ kind: "provider_error", message: "unused" }),
+            delete: async (publicId) => { deleted.push(publicId); return { kind: "deleted" }; },
+        };
+        const worker = new CatalogMediaCleanupV2Worker({ repository, mediaProvider });
+        expect(await worker.runOnce()).toBe(true);
+        expect(deleted).toEqual(["products/05bdd20b-d7c3-4327-849d-982587ac1b75"]);
+    });
 });

@@ -24,10 +24,24 @@ import { createCatalogProductCommandV2Router } from "../modules/catalog/interfac
 import { CatalogVariantCommandV2Service } from "../modules/catalog/application/catalog-variant-command-v2.service.js";
 import { SequelizeCatalogVariantCommandV2Repository } from "../modules/catalog/persistence/catalog-variant-command-v2.repository.js";
 import { createCatalogVariantCommandV2Router } from "../modules/catalog/interfaces/http/catalog-variant-command-v2.routes.js";
+import { CatalogProductMediaV2Service } from "../modules/catalog/application/catalog-product-media-v2.service.js";
+import { SequelizeCatalogProductMediaV2Repository } from "../modules/catalog/persistence/catalog-product-media-v2.repository.js";
+import { createCatalogProductMediaV2Router } from "../modules/catalog/interfaces/http/catalog-product-media-v2.routes.js";
+import { CloudinaryCatalogMediaProvider } from "../modules/catalog/infrastructure/cloudinary-catalog-media.provider.js";
+import type { CatalogMediaProvider } from "../modules/catalog/application/catalog-media-provider.js";
 
 /** Standalone T27 composition; legacy app mounting waits for T38-T44 cutover. */
-export const createCatalogV2Router = (dependencies: { persistence: V2Persistence; audit?: V2HttpAuditWriter }): Router => {
+export const createCatalogV2Router = (dependencies: {
+    persistence: V2Persistence;
+    audit?: V2HttpAuditWriter;
+    mediaProvider?: CatalogMediaProvider;
+}): Router => {
     const { persistence } = dependencies;
+    if (!dependencies.mediaProvider && (!process.env.CLOUDINARY_CLOUD_NAME?.trim()
+        || !process.env.CLOUDINARY_API_KEY?.trim() || !process.env.CLOUDINARY_API_SECRET?.trim())) {
+        throw new Error("Cloudinary credentials are required for V2 product media.");
+    }
+    const mediaProvider = dependencies.mediaProvider ?? new CloudinaryCatalogMediaProvider();
     const router = Router();
     const auth = createV2AuthMiddleware({ accessContexts: new SequelizeV2AccessContextRepository(persistence) });
     router.use(createCatalogReadV2Router({
@@ -54,6 +68,13 @@ export const createCatalogV2Router = (dependencies: { persistence: V2Persistence
     router.use(createCatalogVariantCommandV2Router({
         auth,
         command: new CatalogVariantCommandV2Service({ repository: new SequelizeCatalogVariantCommandV2Repository(persistence) }),
+        audit: dependencies.audit,
+    }));
+    router.use(createCatalogProductMediaV2Router({
+        auth,
+        command: new CatalogProductMediaV2Service({
+            repository: new SequelizeCatalogProductMediaV2Repository(persistence), mediaProvider,
+        }),
         audit: dependencies.audit,
     }));
     return router;

@@ -17,8 +17,8 @@ export class SequelizeCatalogMediaCleanupV2Repository implements CatalogMediaCle
                  FROM outbox_events
                  WHERE published_at IS NULL AND attempts < 20
                    AND (locked_at IS NULL OR locked_at < UTC_TIMESTAMP(3) - INTERVAL 60 SECOND)
-                   AND (event_type = 'catalog.banner.media_cleanup_requested'
-                        OR (event_type = 'catalog.banner.media_upload_reserved'
+                   AND (event_type IN ('catalog.banner.media_cleanup_requested', 'catalog.product.media_cleanup_requested')
+                        OR (event_type IN ('catalog.banner.media_upload_reserved', 'catalog.product.media_upload_reserved')
                             AND created_at < UTC_TIMESTAMP(3) - INTERVAL 5 MINUTE))
                  ORDER BY id ASC LIMIT 1 FOR UPDATE SKIP LOCKED`,
                 { type: QueryTypes.SELECT, transaction },
@@ -34,7 +34,7 @@ export class SequelizeCatalogMediaCleanupV2Repository implements CatalogMediaCle
             return {
                 id: serializeDatabaseEntityId(row.id),
                 publicId: row.aggregateId,
-                kind: row.eventType === "catalog.banner.media_upload_reserved"
+                kind: row.eventType.endsWith("media_upload_reserved")
                     ? "upload_reserved" : "cleanup_requested",
                 attempts: row.attempts + 1,
             };
@@ -44,8 +44,14 @@ export class SequelizeCatalogMediaCleanupV2Repository implements CatalogMediaCle
     async isReferenced(publicId: string): Promise<boolean> {
         const rows = await this.persistence.sequelize.query<{ id: unknown }>(
             `SELECT id FROM banners
-             WHERE JSON_UNQUOTE(JSON_EXTRACT(image, '$.publicId')) = ? LIMIT 1`,
-            { replacements: [publicId], type: QueryTypes.SELECT },
+             WHERE JSON_UNQUOTE(JSON_EXTRACT(image, '$.publicId')) = ?
+             UNION ALL
+             SELECT products.id FROM products
+             JOIN JSON_TABLE(products.images, '$[*]'
+                 COLUMNS (public_id VARCHAR(128) PATH '$.publicId')) AS product_image
+               ON product_image.public_id = ?
+             LIMIT 1`,
+            { replacements: [publicId, publicId], type: QueryTypes.SELECT },
         );
         return rows.length > 0;
     }
