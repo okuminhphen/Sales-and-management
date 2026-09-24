@@ -233,9 +233,14 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     typecheck đạt. So sánh/ghi `TIMESTAMP` cùng múi giờ session qua
     `CURRENT_TIMESTAMP(3)`; hai test MySQL với session `+07:00`/`-07:00` đã đạt
     trên `_test`, cùng focused reservation/transfer/adjustment (24 tests).
-  - [ ] Expire worker an toàn với payment chưa rõ, dispatch/receipt và
-    movement typed transfer/return, HTTP compatibility và tích hợp atomic
-    checkout còn chờ; T29 chưa hoàn tất.
+  - [x] Expire worker nội bộ: chỉ chuyển order hold đã hết hạn sang `expired`
+    khi order còn pending/unfulfilled và mọi payment đã failed/cancelled;
+    khóa order → payment → item → inventory → reservation rồi kiểm tra lại.
+    Cursor tránh bị payment chưa rõ ở đầu hàng đợi chặn hold khác; runner
+    độc lập có explicit flag, chưa bật trên API legacy. Unit + MySQL `_test`
+    kiểm chứng pending/processing/completed, failed, confirmed order, replay.
+  - [ ] Dispatch/receipt và movement typed transfer/return, HTTP compatibility
+    và tích hợp atomic checkout còn chờ; T29 chưa hoàn tất.
 - [ ] T30 — Stock request service V2.
 - [ ] T31 — Transfer receipt service V2.
 - [ ] T32 — Voucher claim/release service V2.

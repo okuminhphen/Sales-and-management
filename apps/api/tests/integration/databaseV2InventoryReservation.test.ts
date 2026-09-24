@@ -5,6 +5,7 @@ import { env } from "../../src/config/env.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { InventoryReservationV2Service } from "../../src/modules/inventory-transfer/application/inventory-reservation-v2.service.js";
+import { SequelizeInventoryReservationExpiryV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-reservation-expiry-v2.repository.js";
 import { SequelizeInventoryReservationV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-reservation-v2.repository.js";
 import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 
@@ -183,6 +184,75 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 inven
                 await sequelize.query("SET time_zone = '+00:00'", { transaction });
             }
         });
+    });
+
+    it("expires an unpaid pending order hold without changing physical stock", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `worker-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        await sequelize.query("UPDATE inventory_reservations SET expires_at = CURRENT_TIMESTAMP(3) - INTERVAL 1 SECOND WHERE id = ?",
+            { replacements: [reserved.reservationId] });
+        const repository = new SequelizeInventoryReservationExpiryV2Repository(createSalesV2Persistence(sequelize));
+        expect(await repository.findNextCandidate(serializeEntityId(BigInt(reserved.reservationId) - 1n)))
+            .toBe(reserved.reservationId);
+        expect(await repository.expireCandidate(serializeEntityId(reserved.reservationId))).toEqual({ kind: "expired" });
+        expect(await repository.expireCandidate(serializeEntityId(reserved.reservationId))).toEqual({ kind: "skipped" });
+        const rows = await sequelize.query<{ status: string; releasedAt: Date | null; stock: number }>(
+            "SELECT r.status, r.released_at AS releasedAt, i.stock FROM inventory_reservations r JOIN inventories i ON i.id = r.inventory_id WHERE r.id = ?",
+            { replacements: [reserved.reservationId], type: QueryTypes.SELECT });
+        expect(rows[0]).toMatchObject({ status: "expired", stock: 1 });
+        expect(rows[0]?.releasedAt).not.toBeNull();
+    });
+
+    it("retains an expired hold while a payment is pending, processing or completed", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `worker-payment-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        await sequelize.query("UPDATE inventory_reservations SET expires_at = CURRENT_TIMESTAMP(3) - INTERVAL 1 SECOND WHERE id = ?",
+            { replacements: [reserved.reservationId] });
+        const methodId = await insert("INSERT INTO payment_methods (code, name, created_at, updated_at) VALUES (?, 'Test', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))", [`worker-${data.token}`]);
+        const paymentId = await insert("INSERT INTO payments (order_id, payment_method_id, provider, merchant_reference, amount, status, created_at, updated_at) VALUES (?, ?, 'test', ?, '100.0000', 'pending', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [data.firstOrderId, methodId, `worker-${data.token}`]);
+        const repository = new SequelizeInventoryReservationExpiryV2Repository(createSalesV2Persistence(sequelize));
+        const candidateId = serializeEntityId(reserved.reservationId);
+        expect(await repository.expireCandidate(candidateId)).toEqual({ kind: "skipped" });
+        await sequelize.query("UPDATE payments SET status = 'processing' WHERE id = ?", { replacements: [paymentId] });
+        expect(await repository.expireCandidate(candidateId)).toEqual({ kind: "skipped" });
+        await sequelize.query("UPDATE payments SET status = 'completed', paid_at = CURRENT_TIMESTAMP(3) WHERE id = ?", { replacements: [paymentId] });
+        expect(await repository.expireCandidate(candidateId)).toEqual({ kind: "skipped" });
+    });
+
+    it("waits for a failed payment and an unconfirmed order before expiring the hold", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `worker-failed-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        await sequelize.query("UPDATE inventory_reservations SET expires_at = CURRENT_TIMESTAMP(3) - INTERVAL 1 SECOND WHERE id = ?",
+            { replacements: [reserved.reservationId] });
+        const methodId = await insert("INSERT INTO payment_methods (code, name, created_at, updated_at) VALUES (?, 'Test', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))", [`worker-failed-${data.token}`]);
+        await insert("INSERT INTO payments (order_id, payment_method_id, provider, merchant_reference, amount, status, created_at, updated_at) VALUES (?, ?, 'test', ?, '100.0000', 'failed', CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3))",
+            [data.firstOrderId, methodId, `worker-failed-${data.token}`]);
+        const repository = new SequelizeInventoryReservationExpiryV2Repository(createSalesV2Persistence(sequelize));
+        const candidateId = serializeEntityId(reserved.reservationId);
+        await sequelize.query("UPDATE orders SET status = 'confirmed' WHERE id = ?", { replacements: [data.firstOrderId] });
+        expect(await repository.expireCandidate(candidateId)).toEqual({ kind: "skipped" });
+        await sequelize.query("UPDATE orders SET status = 'pending' WHERE id = ?", { replacements: [data.firstOrderId] });
+        expect(await repository.expireCandidate(candidateId)).toEqual({ kind: "expired" });
+    });
+
+    it("lets only one concurrent worker expire the same hold", async () => {
+        const data = await fixture(1);
+        const reserved = await service.reserveOrderItem({ orderItemId: data.firstItemId,
+            idempotencyKey: `worker-race-${data.token}`, expiresAt: expiry() });
+        if (reserved.kind !== "reserved") throw Error("Reservation fixture failed.");
+        await sequelize.query("UPDATE inventory_reservations SET expires_at = CURRENT_TIMESTAMP(3) - INTERVAL 1 SECOND WHERE id = ?",
+            { replacements: [reserved.reservationId] });
+        const repository = new SequelizeInventoryReservationExpiryV2Repository(createSalesV2Persistence(sequelize));
+        const id = serializeEntityId(reserved.reservationId);
+        const outcomes = await Promise.all([repository.expireCandidate(id), repository.expireCandidate(id)]);
+        expect(outcomes.map((outcome) => outcome.kind).sort()).toEqual(["expired", "skipped"]);
     });
 
     it("records the actual confirmation instant when the MySQL session is not in UTC", async () => {

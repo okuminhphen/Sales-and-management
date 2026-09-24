@@ -379,8 +379,18 @@ hold khi order và fulfillment đều `cancelled` và mọi payment đã `failed
 processing hoặc completed đều giữ hold để đối soát. Release không cộng stock vì chưa xuất kho.
 Primitive `consume` yêu cầu fulfillment đã `shipping`/`fulfilled` và hold đã confirm; nó giảm
 stock, chuyển hold `consumed` và ghi movement có FK `order_item_id` trong cùng transaction.
-Caller T33/T35 vẫn phải kiểm tra payment/COD và đổi fulfillment trong transaction đó. Expire
-worker còn phụ thuộc payment/order policy; chưa có runtime bán hàng V2 hoàn chỉnh.
+Caller T33/T35 vẫn phải kiểm tra payment/COD và đổi fulfillment trong transaction đó.
+Expire worker V2 hiện chỉ xử lý hold order `active` đã hết hạn của đơn còn `pending` và
+`unfulfilled`, khi mọi payment attempt (nếu có) đều `failed`/`cancelled`. `pending`,
+`processing`, `completed`, đơn đã xác nhận hoặc hold đã confirm đều giữ nguyên để đối soát;
+worker không đổi stock hay trạng thái order. Mỗi candidate được kiểm tra lại trong transaction
+với thứ tự khóa order → payment → item → inventory → reservation; nhiều worker chạy cùng lúc
+không được expire hai lần. Cursor trong bộ nhớ đi tiếp qua hold chưa an toàn, rồi quét lại sau
+khi hết danh sách. Test MySQL `_test` đã xác minh các trạng thái payment và idempotency.
+Worker chỉ chạy bằng process riêng `npm run inventory-reservation:expire --workspace @sales/api`
+và yêu cầu đặt `V2_INVENTORY_RESERVATION_EXPIRY_ENABLED=true` rõ ràng **sau cutover**;
+chưa được tự khởi động cùng API legacy. T34 phải kiểm tra hold dưới order lock trước khi tạo
+hoặc xử lý payment muộn, không coi việc worker expire là bằng chứng thanh toán thất bại.
 
 Primitive `reserveTransferItem` dành cho T31 giữ hàng tại branch cung cấp khi phiếu
 điều chuyển đã được duyệt. Nó đối chiếu request (nếu có) và receipt theo chiều
