@@ -60,6 +60,11 @@ describe("V2 access tokens and authorization helpers", () => {
         expect(canAccessCustomer(customerContext, "9007199254740994")).toBe(true);
         expect(canAccessCustomer(customerContext, "9007199254740995")).toBe(false);
         expect(canAccessBranch(customerContext, "9007199254740995", "order.read.branch")).toBe(false);
+        expect(canAccessBranch({
+            ...customerContext,
+            grants: [{ roleCode: "CUSTOMER", scope: { type: "branch", branchId: "9007199254740995" },
+                permissions: ["order.manage.branch"] }],
+        }, "9007199254740995", "order.manage.branch")).toBe(false);
     });
 
     it("requires a global assignment for global administrative permissions", () => {

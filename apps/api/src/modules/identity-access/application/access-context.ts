@@ -61,7 +61,7 @@ export const canAccessBranch = (
     if (!grant.permissions.includes(requiredPermission)) return false;
 
     if (grant.scope.type === "branch") {
-        return requiredPermission.endsWith(".branch")
+        return grant.roleCode !== "CUSTOMER" && requiredPermission.endsWith(".branch")
             && matchesEntityId(grant.scope.branchId, branchId);
     }
 

@@ -582,6 +582,17 @@ làm rollback cả status lẫn voucher. COD/delivery, cancel và bàn giao hàn
 được nối trong lát này. Unit 2/2, MySQL checkout/confirm 4/4, API
 typecheck/build và full suite 508 pass, 6 skip.
 
+Lát hủy nội bộ chỉ nhận đơn pickup còn `pending/unfulfilled` và mọi payment
+attempt đã `failed/cancelled` (hoặc chưa có attempt); `processing`, `pending`
+hay `completed` đều chặn. Trong một transaction, nó đổi order/fulfillment
+status sang `cancelled`, release voucher và hold chưa hết hạn, ghi history và
+`commerce.order.cancelled` vào outbox. Hold đã expired không giảm stock lần
+nữa; retry trả replay. Đây chưa phải luồng hủy đơn đã thu tiền hoặc route HTTP.
+Replay của confirm/cancel chỉ áp dụng cho `store_pickup`; phân quyền branch
+loại `CUSTOMER` kể cả khi grant bị cấu hình nhầm. Unit cancellation 2/2,
+MySQL checkout/confirm/cancel 6/6, API typecheck/build và full suite 512 pass,
+6 skip.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

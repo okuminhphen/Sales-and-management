@@ -358,8 +358,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     confirm toàn bộ hold, ghi history/outbox atomically. Test MySQL kiểm tra
     chưa thu tiền, hold hết hạn rollback và retry không ghi lặp. Unit 2/2,
     MySQL checkout/confirm 4/4, API typecheck/build và full suite 508 pass,
-    6 skip. COD/delivery, cancel và handover còn chờ các lát T33/T34/T35
-    tương ứng.
+    6 skip. Lát hủy nội bộ chỉ xử lý pickup pending chưa thu tiền và mọi
+    payment attempt đã failed/cancelled: nhả voucher/hold, ghi history/outbox
+    cùng transaction; processing/completed bị chặn. Unit 2/2, MySQL 2/2,
+    API typecheck/build và full suite 512 pass, 6 skip. Replay chỉ cho
+    store_pickup; CUSTOMER branch grant không thể vượt quyền nội bộ.
+    COD/delivery, cancel sau thu tiền và handover
+    còn chờ các lát T33/T34/T35 tương ứng.
   - [ ] Transactional outbox, HTTP compatibility, MySQL concurrency/error-path
     và full regression trước khi đóng T33.
 - [ ] T34 — Payment method/payment/webhook V2.

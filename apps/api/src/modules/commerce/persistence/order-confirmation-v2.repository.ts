@@ -51,7 +51,8 @@ export class SequelizeOrderConfirmationV2Repository implements OrderConfirmation
         if (!order || serializeDatabaseEntityId(order.branchId) !== command.branchId) {
             throw new Error("Order confirmation branch changed.");
         }
-        if (order.status === "confirmed" && order.fulfillmentStatus === "unfulfilled") {
+        if (order.fulfillmentType === "store_pickup" && order.status === "confirmed"
+            && order.fulfillmentStatus === "unfulfilled") {
             return { kind: "replayed", orderId: command.orderId };
         }
         if (order.status !== "pending" || order.fulfillmentStatus !== "unfulfilled"
