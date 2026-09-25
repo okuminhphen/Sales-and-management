@@ -290,6 +290,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     mới chốt; caller khai báo đủ từng item, primitive T29 ghi movement tăng đích
     cùng trạng thái `completed` và history trong transaction. Sai tổng hoặc
     mất/hỏng fail-closed; item sau lỗi rollback toàn bộ credit trước.
+    Review hồi quy: sau `RECEIPT_RECORDED`, đường complete đủ hàng phải từ chối
+    trước mọi write, không được ghi đè mất/hỏng để né duyệt hai người. Đã thêm
+    guard dưới row lock và unit RED→GREEN; ca MySQL tương ứng đang chờ engine.
   - [x] Lát cắt ghi nhận chênh lệch: destination branch/global khai báo đủ
     số lượng từng item kèm lý do bắt buộc; lưu `RECEIPT_RECORDED` với actor,
     giữ `in_transit` và không cộng tồn đích. Chỉ ghi một lần dưới row lock.

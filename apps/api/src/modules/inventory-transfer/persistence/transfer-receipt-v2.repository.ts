@@ -56,6 +56,13 @@ export class SequelizeTransferReceiptV2Repository implements TransferReceiptV2Re
             `SELECT id, quantity FROM transfer_receipt_items
              WHERE transfer_receipt_id = ? ORDER BY id ASC FOR UPDATE`,
             { replacements: [id], transaction, type: QueryTypes.SELECT });
+        // A recorded shortage is immutable until a different manager approves it. A fresh
+        // full-quantity payload must not erase the observation and bypass that approval.
+        const recordedDiscrepancy = await this.persistence.sequelize.query<{ id: unknown }>(
+            `SELECT id FROM transfer_history WHERE transfer_receipt_id = ?
+             AND action = 'RECEIPT_RECORDED' ORDER BY id ASC LIMIT 1 FOR UPDATE`,
+            { replacements: [id], transaction, type: QueryTypes.SELECT });
+        if (recordedDiscrepancy.length > 0) return { kind: "discrepancy_requires_approval" };
         const submitted = new Map(items.map((item) => [item.itemId, item]));
         if (storedItems.length !== items.length || storedItems.length === 0) return { kind: "transfer_conflict" };
         for (const item of storedItems) {

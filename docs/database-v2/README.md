@@ -490,6 +490,8 @@ qua primitive T29 và history được commit. Không nhận đủ item, sai t�
 có mất/hỏng đều fail-closed; mất/hỏng phải qua luồng ghi nhận và duyệt hai
 người ở lát cắt kế tiếp. Endpoint legacy `complete` không có body **không thể**
 được xem là bằng chứng đã nhận đủ và chưa được mount sang V2.
+Sau khi đã có `RECEIPT_RECORDED`, đường nhận đủ cũng bị khóa trong transaction:
+payload mới không được ghi đè số lượng mất/hỏng để bỏ qua người duyệt độc lập.
 
 Với chênh lệch, bước ghi nhận riêng yêu cầu quantity của toàn bộ item và note
 bắt buộc. Một transaction lưu received/lost/non-sellable và history

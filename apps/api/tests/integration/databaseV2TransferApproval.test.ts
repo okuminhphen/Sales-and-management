@@ -398,6 +398,32 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
             note: "One item missing", recordedBy: data.admin.accountId, destinationCount: "0" });
     });
 
+    it("cannot replace a recorded loss with a clean receipt to bypass independent approval", async () => {
+        const data = await fixture(5);
+        expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
+        expect((await data.dispatchService.dispatch(data.admin, data.transferId)).kind).toBe("dispatched");
+        const items = await sequelize.query<{ id: string }>(
+            "SELECT id FROM transfer_receipt_items WHERE transfer_receipt_id = ?",
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        const itemId = items[0].id;
+        expect(await data.discrepancyService.record(data.admin, data.transferId,
+            [{ itemId, receivedQuantity: 2, lostQuantity: 1, nonSellableQuantity: 0 }],
+            "One unit lost")).toEqual({ kind: "recorded" });
+        expect(await data.receiptService.complete(data.admin, data.transferId,
+            [{ itemId, receivedQuantity: 3, lostQuantity: 0, nonSellableQuantity: 0 }]))
+            .toEqual({ kind: "discrepancy_requires_approval" });
+        const rows = await sequelize.query<{ status: string; received: number; lost: number;
+            destinationMovements: string }>(
+            `SELECT tr.status, ti.received_quantity AS received, ti.lost_quantity AS lost,
+                    (SELECT COUNT(*) FROM inventory_movements im WHERE im.transfer_receipt_item_id = ti.id
+                     AND im.reason = 'transfer_receive') AS destinationMovements
+             FROM transfer_receipts tr JOIN transfer_receipt_items ti ON ti.transfer_receipt_id = tr.id
+             WHERE tr.id = ?`,
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        expect(rows[0]).toEqual({ status: "in_transit", received: 2, lost: 1,
+            destinationMovements: "0" });
+    });
+
     it("requires a different global approver and credits only sellable received quantity", async () => {
         const data = await fixture(5);
         expect((await data.transferService.approve(data.admin, data.transferId)).kind).toBe("approved");
