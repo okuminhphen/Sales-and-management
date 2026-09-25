@@ -653,7 +653,7 @@ là khóa nội bộ, PII hoặc chi phí nội bộ. Phạm vi quyền vẫn l�
 
 MySQL integration tạo delivery shipment thật và HTTP compatibility test kiểm tra
 serialization an toàn. Focused test 5/5, API typecheck/build và toàn bộ API suite
-539 pass, 6 skip đạt. Slice này chưa tạo shipment lúc checkout, chưa book carrier,
+542 pass, 6 skip đạt. Slice này chưa tạo shipment lúc checkout, chưa book carrier,
 callback hoặc state transition; tất cả vẫn chưa mount runtime legacy.
 
 Primitive `DeliveryShipmentV2Service` tạo một shipment `pending` bền vững cho

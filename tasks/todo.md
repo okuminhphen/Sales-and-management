@@ -421,7 +421,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     COD và timestamp; không lộ provider request key, provider order ID, recipient
     snapshot hoặc carrier fee. Scope tiếp tục lấy từ order/access context V2.
     MySQL delivery fixture và HTTP contract test đạt; API typecheck/build và full
-    suite 539 pass, 6 skip. Chưa tạo shipment checkout, carrier booking/callback/
+    suite 542 pass, 6 skip. Chưa tạo shipment checkout, carrier booking/callback/
     state transition hoặc mount runtime.
   - [x] Primitive tạo shipment delivery `pending`: lock order, chỉ nhận delivery
     order `pending/unfulfilled`, snapshot recipient/location/COD từ trusted
