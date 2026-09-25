@@ -304,8 +304,15 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     xem tất cả. Trả BIGINT ID dạng string, nested item/variant/product/size,
     lịch sử actor và thời gian. Detail ngoài scope ẩn như not found. Unit và
     MySQL `_test` đã đạt.
-  - [ ] Còn lại: route/DTO compatibility và full regression trước khi đóng T31.
-    Runtime legacy chưa mount V2.
+  - [x] Route/DTO V2 độc lập giữ `/transfer-receipts*`, envelope `EM/EC/DT`,
+    phân trang list và action approve/reject/cancel. Bổ sung `dispatch`,
+    `record-discrepancy`, `approve-discrepancy`; `complete` bắt buộc body đủ
+    item/quantity, không suy đoán từ endpoint legacy không body. Zod strict,
+    BIGINT string và audit HTTP; fake-service HTTP test đạt. Chưa mount runtime.
+  - [ ] Chạy lại HTTP/MySQL integration và full regression trước khi đóng T31.
+    Checkpoint hiện tại bị chặn môi trường: Docker Desktop engine không chạy,
+    MySQL `_test` trả `ECONNREFUSED` trước khi test bắt đầu. Typecheck/build và
+    fake-service HTTP test vẫn đạt. Runtime legacy chưa mount V2.
 - [ ] T32 — Voucher claim/release service V2.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
 - [ ] T34 — Payment method/payment/webhook V2.

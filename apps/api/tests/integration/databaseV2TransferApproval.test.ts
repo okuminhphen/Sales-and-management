@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { QueryTypes, Sequelize } from "sequelize";
+import express from "express";
+import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { env } from "../../src/config/env.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
@@ -20,6 +22,7 @@ import { SequelizeTransferClosureV2Repository } from "../../src/modules/inventor
 import { SequelizeTransferReceiptV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-receipt-v2.repository.js";
 import { SequelizeTransferDiscrepancyV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-discrepancy-v2.repository.js";
 import { SequelizeTransferQueryV2Repository } from "../../src/modules/inventory-transfer/persistence/transfer-query-v2.repository.js";
+import { createTransferV2Router } from "../../src/modules/inventory-transfer/interfaces/http/transfer-v2.routes.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 transfer approval on MySQL", () => {
@@ -101,6 +104,46 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("Database V2 trans
             expect(detail.receipt.id).toBe(data.transferId);
             expect(detail.receipt.histories[0]?.performedBy).toBe(data.admin.accountId);
         }
+    });
+
+    it("exposes explicit V2 transfer transitions with validated quantities and independent discrepancy approval", async () => {
+        const data = await fixture(5);
+        const itemRows = await sequelize.query<{ id: string }>(
+            "SELECT id FROM transfer_receipt_items WHERE transfer_receipt_id = ?",
+            { replacements: [data.transferId], type: QueryTypes.SELECT });
+        const itemId = itemRows[0].id;
+        const query = new TransferQueryV2Service({ repository: new SequelizeTransferQueryV2Repository(
+            createSalesV2Persistence(sequelize)) });
+        const approverId = await insert("INSERT INTO accounts (email, status, created_at, updated_at) VALUES (?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", [`http-approver-${data.token}@example.invalid`]);
+        let context: V2AccessContext = { ...data.admin, grants: [{ roleCode: "SUPER_ADMIN",
+            scope: { type: "global" }, permissions: ["transfer.read.branch", "transfer.manage.branch"] }] };
+        const app = express();
+        app.use(express.json());
+        app.use("/api/v1", createTransferV2Router({ query, approval: data.transferService,
+            dispatch: data.dispatchService, closure: data.closureService,
+            receipt: data.receiptService, discrepancy: data.discrepancyService,
+            auth: (req, _res, next) => { (req as typeof req & { v2AccessContext: V2AccessContext }).v2AccessContext = context; next(); } }));
+        expect((await request(app).get("/api/v1/transfer-receipts?page=1&limit=20")).body.DT)
+            .toEqual(expect.arrayContaining([expect.objectContaining({ id: data.transferId })]));
+        expect((await request(app).get(`/api/v1/transfer-receipts/${data.transferId}`)).status).toBe(200);
+        expect((await request(app).post(`/api/v1/transfer-receipts/${data.transferId}/complete`).send({})).status).toBe(400);
+        expect((await request(app).post(`/api/v1/transfer-receipts/${data.transferId}/approve`)).status).toBe(200);
+        expect((await request(app).post(`/api/v1/transfer-receipts/${data.transferId}/dispatch`)).status).toBe(200);
+        const discrepancy = { items: [{ itemId, receivedQuantity: 2, lostQuantity: 1, nonSellableQuantity: 0 }],
+            note: "One item lost" };
+        expect((await request(app).post(`/api/v1/transfer-receipts/${data.transferId}/complete`)
+            .send({ items: [{ ...discrepancy.items[0], itemId: Number(itemId) }] })).status).toBe(400);
+        expect((await request(app).post(`/api/v1/transfer-receipts/${data.transferId}/record-discrepancy`)
+            .send(discrepancy)).status).toBe(200);
+        expect((await request(app).post(`/api/v1/transfer-receipts/${data.transferId}/approve-discrepancy`)
+            .send({ note: "Loss confirmed" })).status).toBe(409);
+        context = { ...context, accountId: approverId };
+        expect((await request(app).post(`/api/v1/transfer-receipts/${data.transferId}/approve-discrepancy`)
+            .send({ note: "Loss confirmed" })).status).toBe(200);
+        const detail = await request(app).get(`/api/v1/transfer-receipts/${data.transferId}`);
+        expect(detail.body.DT).toMatchObject({ status: "completed", items: [{ receivedQuantity: 2,
+            lostQuantity: 1 }], histories: expect.arrayContaining([{ action: "DISCREPANCY_APPROVED",
+            performedBy: approverId, note: "Loss confirmed", id: expect.any(String), createdAt: expect.any(String) }]) });
     });
 
     it("reserves stock on approval without debiting source or crediting destination, and rejects replay", async () => {

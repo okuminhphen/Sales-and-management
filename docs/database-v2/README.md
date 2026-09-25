@@ -479,8 +479,9 @@ kho đích vẫn không đổi. Nếu item sau không dispatch được, toàn b
 item trước rollback. Hủy/từ chối chỉ áp dụng trước dispatch; khi đã duyệt thì
 mọi hold được release cùng transaction với trạng thái và history, không cộng
 physical stock vì chưa trừ. Phiếu đang vận chuyển phải qua nhận/đối soát, không
-được dùng cancel/reject. Chưa mount runtime. Query và HTTP vẫn chờ; không coi T31 hoàn thành ở
-checkpoint này.
+được dùng cancel/reject. Chưa mount runtime. Query/HTTP đã có mã độc lập nhưng
+integration MySQL của route chưa được xác minh sau khi Docker Desktop dừng;
+không coi T31 hoàn thành ở checkpoint này.
 
 Lát cắt receipt không chênh lệch nhận danh sách quantity tường minh cho **mọi**
 item; chỉ destination branch hoặc global có quyền mới hoàn tất. Trong cùng
@@ -506,9 +507,13 @@ duyệt đồng thời, mất toàn bộ và rollback khi stock đích vượt g
 Read model T31 trả danh sách/chi tiết phiếu gồm branch, item, variant,
 product/size và history. Grant `transfer.read.branch` scoped theo branch nguồn
 hoặc đích được lọc ở SQL trước phân trang; grant global xem tất cả. Chi tiết
-ngoài scope trả not found, mọi BIGINT ID trong payload là string. Route V2 vẫn
-chưa mount; Web hiện còn giả định ID number và luồng complete không body, cần
-được cập nhật ở T39 trước cutover T40.
+ngoài scope trả not found, mọi BIGINT ID trong payload là string. Route V2
+độc lập giữ `/transfer-receipts*` và envelope `EM/EC/DT`; `complete` yêu cầu
+body khai báo mọi item, `dispatch` là action riêng, chênh lệch dùng hai action
+`record-discrepancy`/`approve-discrepancy`. DTO strict và fake-service HTTP
+test đã đạt; HTTP/MySQL integration còn phải chạy lại vì Docker Desktop engine
+đang không chạy (`ECONNREFUSED`). Route **chưa mount**; Web hiện còn giả định
+ID number và luồng complete không body, cần cập nhật ở T39 trước cutover T40.
 
 ## Giới hạn và kiểm thử chung còn lại
 
