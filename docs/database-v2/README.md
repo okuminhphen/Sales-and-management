@@ -701,6 +701,19 @@ thái payment/order, reconcile hoặc mount HTTP. Unit gateway/request 5/5,
 MySQL attempt 6/6, API typecheck/build và full suite 547 pass, 6 skip đạt;
 không gọi VNPay thật hoặc log secret.
 
+Callback V2 đi qua `VnPayPaymentCallbackV2Service`: nếu gateway không xác minh
+được chữ ký thì persistence không được gọi. Khi callback đã verified, repository
+lấy payment rồi khóa đúng thứ tự `order → payment` như checkout; kiểm tra lại
+provider, `V2<paymentId>`, merchant reference, VND và amount từ MySQL trước khi
+ghi. Trong cùng transaction, nó cập nhật payment và thêm `payment_events` với
+`event_key` idempotent. Callback trùng chỉ replay; provider transaction ID không
+được gán sang payment khác hoặc thay ID đã có; payment `completed` không bao giờ
+hạ về `failed`. Callback success trễ vẫn có thể ghi nhận completed để luồng
+reconciliation/refund xử lý riêng, tuyệt đối không tự khôi phục order/stock.
+Unit boundary 2/2 và MySQL 10/10 (gồm concurrent duplicate callback) đạt;
+typecheck/build và full API suite 553 pass, 6 skip đạt. HTTP/IPN adapter,
+reconciliation và runtime mount vẫn chưa được triển khai.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

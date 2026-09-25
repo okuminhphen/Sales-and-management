@@ -79,6 +79,7 @@
     "tests/unit/v2Seed.test.ts",
     "tests/unit/v2AuthMiddleware.test.ts",
     "tests/unit/vnpayGatewayV2.test.ts",
+    "tests/unit/vnpayPaymentCallbackV2.test.ts",
     "tests/unit/vnpayPaymentRequestV2.test.ts",
     "tests/integration/infrastructure.test.ts",
     "tests/integration/databaseV2FullSchema.test.ts",

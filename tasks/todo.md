@@ -418,8 +418,14 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     expiry 15 phút, IP/locale/bank code và callback signature/amount/reference
     đều fail-closed. Unit 5/5, MySQL attempt 6/6, API typecheck/build và full
     API suite 547 pass, 6 skip đạt.
-    Chưa có HTTP adapter, callback persistence/idempotency, reconcile hay mount
-    runtime nên mục T34 vẫn mở.
+  - [x] Callback persistence VNPay: application service luôn gọi gateway verify
+    trước repository. Repository khóa `order → payment`, đối chiếu provider,
+    `V2<paymentId>`, currency VND và amount DB; success/failure và
+    `payment_events` được ghi cùng transaction. Event key replay idempotent,
+    provider transaction không được đổi/trùng payment khác, completed không
+    thể bị hạ bởi callback trễ. Unit 2/2 và MySQL 10/10 gồm concurrent duplicate
+    callback đạt; typecheck/build và full API suite 553 pass, 6 skip đạt. Chưa
+    có HTTP adapter, reconciliation hay mount runtime nên mục T34 vẫn mở.
 - [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
   Làm foundation shipment cần cho T33 trước, giữ những policy return/refund còn
   mở ở trạng thái fail-closed; quay lại T33 khi dependency đã có test MySQL.

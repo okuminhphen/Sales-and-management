@@ -5,12 +5,18 @@ import { env } from "../../src/config/env.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { VnPayAttemptV2Service } from "../../src/modules/payment/application/vnpay-attempt-v2.service.js";
+import type { VnPayCallback } from "../../src/modules/payment/application/vnpay-gateway.port.js";
+import { VnPayPaymentCallbackV2Service } from "../../src/modules/payment/application/vnpay-payment-callback-v2.service.js";
 import { SequelizeVnPayAttemptV2Repository } from "../../src/modules/payment/persistence/vnpay-attempt-v2.repository.js";
+import { SequelizeVnPayPaymentCallbackV2Repository } from "../../src/modules/payment/persistence/vnpay-payment-callback-v2.repository.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
+import { serializeMoney } from "../../src/shared/contracts/database-scalars.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 VNPay attempt reservation on MySQL", () => {
     let db: Sequelize;
     let service: VnPayAttemptV2Service;
+    let callbacks: VnPayPaymentCallbackV2Service;
+    let nextCallback: VnPayCallback;
     let buyer: V2AccessContext;
     let branchId: string;
     let methodId: string;
@@ -86,6 +92,10 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 VNPay attempt 
         methodId = (await one<{ id: string }>("SELECT id FROM payment_methods WHERE code = 'VNPAY'")).id;
         service = new VnPayAttemptV2Service({ repository:
             new SequelizeVnPayAttemptV2Repository(createSalesV2Persistence(db)) });
+        callbacks = new VnPayPaymentCallbackV2Service({
+            gateway: { verifyCallback: () => nextCallback },
+            repository: new SequelizeVnPayPaymentCallbackV2Repository(createSalesV2Persistence(db)),
+        });
     });
     afterAll(async () => { await db?.close(); });
 
@@ -174,5 +184,102 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 VNPay attempt 
             .toEqual({ kind: "order_not_payable" });
         expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM payments WHERE order_id IN (?, ?)",
             [missingOrderId, expiredOrderId])).n)).toBe(0);
+    });
+
+    it("records one verified VNPay success atomically and replays its provider event", async () => {
+        const orderId = await createOrder(`VNP-CALLBACK-${suffix}`);
+        const attempt = await service.reserve(buyer, { orderId, requestKey: `callback-${suffix}` });
+        if (attempt.kind !== "created") throw new Error("VNPay callback fixture was not reserved.");
+        nextCallback = {
+            kind: "verified", paymentId: attempt.paymentId, transactionReference: `V2${attempt.paymentId}`,
+            amount: attempt.amount, providerTransactionId: `700${suffix.slice(0, 9)}`,
+            outcome: "completed", responseCode: "00", transactionStatus: "00",
+            eventKey: `vnpay:V2${attempt.paymentId}:700${suffix.slice(0, 9)}`,
+        };
+
+        expect(await callbacks.handle({ vnp_SecureHash: "test-only" })).toEqual({
+            kind: "processed", paymentId: attempt.paymentId, status: "completed",
+        });
+        expect(await callbacks.handle({ vnp_SecureHash: "test-only" })).toEqual({
+            kind: "replayed", paymentId: attempt.paymentId, status: "completed",
+        });
+        const stored = await one<{ status: string; amount: string; transactionId: string; paidAt: Date | null }>(
+            "SELECT status, amount, provider_transaction_id AS transactionId, paid_at AS paidAt FROM payments WHERE id = ?",
+            [attempt.paymentId],
+        );
+        expect(stored).toMatchObject({ status: "completed", amount: "100.0000", transactionId: `700${suffix.slice(0, 9)}` });
+        expect(stored.paidAt).not.toBeNull();
+        expect(Number((await one<{ n: string }>(
+            "SELECT COUNT(*) AS n FROM payment_events WHERE payment_id = ?", [attempt.paymentId],
+        )).n)).toBe(1);
+    });
+
+    it("fails closed on amount mismatch and never downgrades a completed payment", async () => {
+        const orderId = await createOrder(`VNP-CALLBACK-GUARD-${suffix}`);
+        const attempt = await service.reserve(buyer, { orderId, requestKey: `callback-guard-${suffix}` });
+        if (attempt.kind !== "created") throw new Error("VNPay callback guard fixture was not reserved.");
+        nextCallback = {
+            kind: "verified", paymentId: attempt.paymentId, transactionReference: `V2${attempt.paymentId}`,
+            amount: serializeMoney("99.0000"), providerTransactionId: `701${suffix.slice(0, 9)}`,
+            outcome: "completed", responseCode: "00", transactionStatus: "00",
+            eventKey: `vnpay:V2${attempt.paymentId}:701${suffix.slice(0, 9)}`,
+        };
+        expect(await callbacks.handle({ vnp_SecureHash: "test-only" })).toEqual({
+            kind: "amount_mismatch", paymentId: attempt.paymentId,
+        });
+        expect((await one<{ status: string }>("SELECT status FROM payments WHERE id = ?", [attempt.paymentId])).status)
+            .toBe("pending");
+
+        nextCallback = { ...nextCallback, amount: attempt.amount, providerTransactionId: `702${suffix.slice(0, 9)}`,
+            eventKey: `vnpay:V2${attempt.paymentId}:702${suffix.slice(0, 9)}` };
+        expect(await callbacks.handle({ vnp_SecureHash: "test-only" })).toMatchObject({ kind: "processed", status: "completed" });
+        nextCallback = { ...nextCallback, outcome: "failed", responseCode: "24", transactionStatus: "02",
+            providerTransactionId: null, eventKey: `vnpay:V2${attempt.paymentId}:late-failure` };
+        expect(await callbacks.handle({ vnp_SecureHash: "test-only" })).toEqual({
+            kind: "completed_conflict", paymentId: attempt.paymentId,
+        });
+        expect((await one<{ status: string }>("SELECT status FROM payments WHERE id = ?", [attempt.paymentId])).status)
+            .toBe("completed");
+    });
+
+    it("does not allow a later callback to replace a known VNPay transaction number", async () => {
+        const orderId = await createOrder(`VNP-CALLBACK-TXN-${suffix}`);
+        const attempt = await service.reserve(buyer, { orderId, requestKey: `callback-transaction-${suffix}` });
+        if (attempt.kind !== "created") throw new Error("VNPay callback transaction fixture was not reserved.");
+        nextCallback = {
+            kind: "verified", paymentId: attempt.paymentId, transactionReference: `V2${attempt.paymentId}`,
+            amount: attempt.amount, providerTransactionId: `703${suffix.slice(0, 9)}`,
+            outcome: "failed", responseCode: "24", transactionStatus: "02",
+            eventKey: `vnpay:V2${attempt.paymentId}:703${suffix.slice(0, 9)}`,
+        };
+        expect(await callbacks.handle({ vnp_SecureHash: "test-only" })).toMatchObject({ kind: "processed", status: "failed" });
+        nextCallback = { ...nextCallback, providerTransactionId: `704${suffix.slice(0, 9)}`,
+            outcome: "completed", responseCode: "00", transactionStatus: "00",
+            eventKey: `vnpay:V2${attempt.paymentId}:704${suffix.slice(0, 9)}` };
+        expect(await callbacks.handle({ vnp_SecureHash: "test-only" })).toEqual({
+            kind: "provider_transaction_conflict", paymentId: attempt.paymentId,
+        });
+        expect((await one<{ status: string }>("SELECT status FROM payments WHERE id = ?", [attempt.paymentId])).status)
+            .toBe("failed");
+    });
+
+    it("processes concurrent copies of one verified provider event exactly once", async () => {
+        const orderId = await createOrder(`VNP-CALLBACK-RACE-${suffix}`);
+        const attempt = await service.reserve(buyer, { orderId, requestKey: `callback-race-${suffix}` });
+        if (attempt.kind !== "created") throw new Error("VNPay callback race fixture was not reserved.");
+        nextCallback = {
+            kind: "verified", paymentId: attempt.paymentId, transactionReference: `V2${attempt.paymentId}`,
+            amount: attempt.amount, providerTransactionId: `705${suffix.slice(0, 9)}`,
+            outcome: "completed", responseCode: "00", transactionStatus: "00",
+            eventKey: `vnpay:V2${attempt.paymentId}:705${suffix.slice(0, 9)}`,
+        };
+        const results = await Promise.all([
+            callbacks.handle({ vnp_SecureHash: "test-only" }),
+            callbacks.handle({ vnp_SecureHash: "test-only" }),
+        ]);
+        expect(results.map((result) => result.kind).sort()).toEqual(["processed", "replayed"]);
+        expect(Number((await one<{ n: string }>(
+            "SELECT COUNT(*) AS n FROM payment_events WHERE payment_id = ?", [attempt.paymentId],
+        )).n)).toBe(1);
     });
 });
