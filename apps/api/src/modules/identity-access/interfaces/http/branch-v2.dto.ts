@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const entityId = z.string().regex(/^[1-9]\d{0,19}$/)
-    .refine((value) => BigInt(value) <= 18446744073709551615n);
+    .pipe(z.string().refine((value) => BigInt(value) <= 18446744073709551615n));
 const nullablePhone = z.string().trim().min(1).max(30).nullable();
 const nullableEmail = z.string().trim().email().max(255).nullable();
 export const branchV2Params = z.object({ branchId: entityId }).strict();

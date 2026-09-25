@@ -660,6 +660,18 @@ hủy có chủ đích; hệ thống chưa tự hủy order khi hết 15 phút v
 chờ quyết định. Checkpoint mới nhất: full API suite 529 pass, 6 skip;
 typecheck/build đạt.
 
+HTTP lifecycle V2 riêng giữ hai action nội bộ `POST /order/:orderId/confirm`
+và `POST /order/:orderId/cancel`; chưa mount runtime legacy. Cả hai yêu cầu JWT
+V2 và branch/global grant lấy lại từ DB. Confirm không nhận body; cancel chỉ
+nhận `reason` đã trim (1–500 ký tự). Browser không thể gửi status tự do để nhảy
+state. Response giữ envelope `EM/EC/DT.orderId`; quyền sai, ID/reason sai,
+trạng thái/payment không hợp lệ và hạ tầng được map 403/400/409/503. Audit chỉ
+ghi actor/order/outcome, không ghi lý do hủy. Validation BIGINT V2 đã dùng
+`regex → pipe → BigInt` để ID không phải số trả 400 thay vì ném lỗi 500. HTTP
+mock 3/3 và transaction MySQL thật xác nhận cả confirm pickup đã thanh toán lẫn
+cancel pickup chưa thanh toán đạt; handover vẫn bị chặn bởi policy xác thực
+người nhận chưa chốt.
+
 Publisher outbox V2 là worker **opt-in**, tách khỏi `outbox:publish` legacy.
 Nó chỉ claim event `catalog.product.upserted/deleted` và
 `commerce.order.created/confirmed/cancelled`; các row `catalog.*.media_*`

@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-const entityId = z.string().regex(/^[1-9]\d{0,18}$/, "Must be a positive decimal entity ID.").refine(
+const entityId = z.string().regex(/^[1-9]\d{0,18}$/, "Must be a positive decimal entity ID.").pipe(z.string().refine(
     (value) => BigInt(value) <= 9_223_372_036_854_775_807n,
     "Entity ID is outside the signed MySQL BIGINT range.",
-);
+));
 
 /**
  * Price, payment method and payment status are intentionally absent: POS cash

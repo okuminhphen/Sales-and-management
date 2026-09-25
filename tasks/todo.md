@@ -404,6 +404,14 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     MySQL kiểm tra thêm manual cancellation sau khi expiry worker đã chuyển
     hold sang `expired`: voucher release, order cancelled, stock và movement
     không bị cộng/trừ lần hai. Full suite 529 pass, 6 skip, typecheck/build đạt.
+    HTTP lifecycle V2 có `POST /order/:orderId/confirm` và `/cancel` riêng,
+    auth branch/global DB-derived, confirm body rỗng strict và cancel chỉ nhận
+    reason 1–500 ký tự; browser không gửi status để nhảy state. Envelope legacy,
+    audit không ghi reason/body, map 403/400/409/503; mock 3/3 và MySQL transaction
+    thật kiểm tra confirm paid pickup/cancel unpaid pickup đạt. Validator BIGINT
+    V2 được harden `regex → pipe → BigInt` trên các DTO đang dùng để ID text luôn
+    trả 400, không ném 500. Chưa mount runtime legacy; handover vẫn chờ policy
+    xác thực người nhận.
     Không tự động hủy order khi hết 15 phút vì policy này chưa được chốt.
     COD/delivery, cancel sau thu tiền và handover còn chờ các lát T33/T34/T35.
   - [x] Publisher V2 opt-in: MySQL `FOR UPDATE SKIP LOCKED` claim và lease

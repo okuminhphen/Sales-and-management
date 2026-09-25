@@ -8,6 +8,7 @@ import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { OrderCheckoutV2Service } from "../../src/modules/commerce/application/order-checkout-v2.service.js";
 import { createOnlinePickupCheckoutV2Router } from "../../src/modules/commerce/interfaces/http/online-pickup-checkout-v2.routes.js";
+import { createOrderLifecycleV2Router } from "../../src/modules/commerce/interfaces/http/order-lifecycle-v2.routes.js";
 import { SequelizeOrderCheckoutV2Repository } from "../../src/modules/commerce/persistence/order-checkout-v2.repository.js";
 import { OrderConfirmationV2Service } from "../../src/modules/commerce/application/order-confirmation-v2.service.js";
 import { SequelizeOrderConfirmationV2Repository } from "../../src/modules/commerce/persistence/order-confirmation-v2.repository.js";
@@ -24,9 +25,11 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
     let db: Sequelize;
     let service: OrderCheckoutV2Service;
     let httpApp: express.Express;
+    let lifecycleHttpApp: express.Express;
     let confirmation: OrderConfirmationV2Service;
     let cancellation: OrderCancellationV2Service;
     let actor: V2AccessContext;
+    let manager: V2AccessContext;
     let branchId: string;
     let variantId: string;
     let voucherCode: string;
@@ -57,6 +60,8 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
         await db.query("INSERT INTO customers (account_id, full_name, status, loyalty_points, created_at, updated_at) VALUES (?, 'Checkout test', 'active', 0, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [accountId] });
         const customerId = (await one<{ id: string }>("SELECT id FROM customers WHERE account_id = ?", [accountId])).id;
         actor = { accountId, customerId, employeeId: null, grants: [] };
+        manager = { accountId, customerId: null, employeeId: null,
+            grants: [{ roleCode: "SUPER_ADMIN", scope: { type: "global" }, permissions: ["order.manage.global"] }] };
         httpApp = express();
         httpApp.use(express.json());
         httpApp.use("/api/v1", createOnlinePickupCheckoutV2Router({
@@ -65,6 +70,16 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
                 next();
             },
             checkout: service,
+        }));
+        lifecycleHttpApp = express();
+        lifecycleHttpApp.use(express.json());
+        lifecycleHttpApp.use("/api/v1", createOrderLifecycleV2Router({
+            auth: (request, _response, next) => {
+                (request as V2AuthenticatedRequest).v2AccessContext = manager;
+                next();
+            },
+            confirmation,
+            cancellation,
         }));
         await db.query("INSERT INTO branches (code, name, address, type, created_at, updated_at) VALUES (?, 'Checkout branch', 'Test', 'branch', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [`OC-${suffix}`] });
         branchId = (await one<{ id: string }>("SELECT id FROM branches WHERE code = ?", [`OC-${suffix}`])).id;
@@ -418,5 +433,46 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
         ))).toEqual({ status: "pending", fulfillmentStatus: "unfulfilled" });
         expect((await one<{ status: string }>(`SELECT status FROM inventory_reservations WHERE order_item_id IN
             (SELECT id FROM order_items WHERE order_id = ?)`, [orderId]))).toEqual({ status: "active" });
+    });
+
+    it("confirms paid pickup and cancels unpaid pickup through the V2 HTTP lifecycle transaction", async () => {
+        const sizeName = `OC-LIFE-${suffix}`;
+        await db.query("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [sizeName] });
+        const sizeId = (await one<{ id: string }>("SELECT id FROM sizes WHERE name = ?", [sizeName])).id;
+        const productId = (await one<{ id: string }>("SELECT product_id AS id FROM product_variants WHERE id = ?", [variantId])).id;
+        const sku = `OC-LIFE-${suffix}`;
+        await db.query("INSERT INTO product_variants (product_id, size_id, sku, status, created_at, updated_at) VALUES (?, ?, ?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [productId, sizeId, sku] });
+        const lifecycleVariantId = (await one<{ id: string }>("SELECT id FROM product_variants WHERE sku = ?", [sku])).id;
+        await db.query("INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, 2, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [branchId, lifecycleVariantId] });
+        const paid = await service.checkoutOnlinePickup(actor, { checkoutKey: `checkout-lifecycle-paid-${suffix}`,
+            branchId, recipientName: "Nguyen Lifecycle", recipientPhone: "0901234567", voucherCode: null,
+            items: [{ variantId: lifecycleVariantId, quantity: 1 }] });
+        expect(paid.kind).toBe("created");
+        if (paid.kind !== "created") throw new Error("Paid lifecycle checkout fixture failed.");
+        const paymentCode = `OC-LIFE-PAY-${suffix}`;
+        await db.query("INSERT INTO payment_methods (code, name, is_active, created_at, updated_at) VALUES (?, 'Lifecycle payment', 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [paymentCode] });
+        const paymentMethodId = (await one<{ id: string }>("SELECT id FROM payment_methods WHERE code = ?", [paymentCode])).id;
+        await db.query(`INSERT INTO payments (order_id, payment_method_id, provider, merchant_reference, amount,
+            status, paid_at, created_at, updated_at) VALUES (?, ?, 'test', ?, '100.0000', 'completed',
+            UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`,
+        { replacements: [paid.orderId, paymentMethodId, `OC-LIFE-PAY-${suffix}`] });
+        await request(lifecycleHttpApp).post(`/api/v1/order/${paid.orderId}/confirm`).expect(200)
+            .expect({ EM: "Update order status successfully", EC: "0", DT: { orderId: paid.orderId } });
+        expect((await one<{ status: string }>("SELECT status FROM orders WHERE id = ?", [paid.orderId]))).toEqual({ status: "confirmed" });
+
+        const unpaid = await service.checkoutOnlinePickup(actor, { checkoutKey: `checkout-lifecycle-unpaid-${suffix}`,
+            branchId, recipientName: "Nguyen Lifecycle", recipientPhone: "0901234567", voucherCode: null,
+            items: [{ variantId: lifecycleVariantId, quantity: 1 }] });
+        expect(unpaid.kind).toBe("created");
+        if (unpaid.kind !== "created") throw new Error("Unpaid lifecycle checkout fixture failed.");
+        await request(lifecycleHttpApp).post(`/api/v1/order/${unpaid.orderId}/cancel`)
+            .send({ reason: "Customer requested cancellation" }).expect(200)
+            .expect({ EM: "Update order status successfully", EC: "0", DT: { orderId: unpaid.orderId } });
+        expect((await one<{ status: string }>("SELECT status FROM orders WHERE id = ?", [unpaid.orderId]))).toEqual({ status: "cancelled" });
+        expect((await one<{ status: string }>(`SELECT status FROM inventory_reservations WHERE order_item_id IN
+            (SELECT id FROM order_items WHERE order_id = ?)`, [unpaid.orderId]))).toEqual({ status: "released" });
     });
 });

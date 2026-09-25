@@ -20,9 +20,9 @@ export type OrderReadDtoV2 = {
     }[];
 };
 
-const entityId = z.string().regex(/^[1-9]\d{0,18}$/).refine(
+const entityId = z.string().regex(/^[1-9]\d{0,18}$/).pipe(z.string().refine(
     (value) => BigInt(value) <= 9_223_372_036_854_775_807n,
-);
+));
 
 export const orderReadUserParamsV2 = z.object({ userId: entityId });
 export const orderReadBranchParamsV2 = z.object({ branchId: entityId });

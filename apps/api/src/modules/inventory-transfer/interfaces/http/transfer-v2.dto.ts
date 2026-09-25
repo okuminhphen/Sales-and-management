@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 const entityId = z.string().regex(/^[1-9]\d{0,18}$/)
-    .refine((value) => BigInt(value) <= 9_223_372_036_854_775_807n);
+    .pipe(z.string().refine((value) => BigInt(value) <= 9_223_372_036_854_775_807n));
 const quantity = z.number().int().min(0).max(2_147_483_647);
 const item = z.object({
     itemId: entityId, receivedQuantity: quantity,
