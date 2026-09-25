@@ -116,6 +116,14 @@ DDL baseline V2 khai báo tất cả entity ID là MySQL `BIGINT` có dấu, do 
 kiểm tra cả cực đại hợp lệ và giá trị overflow. Không thay migration/schema hay API path, chỉ chặn
 input vốn không thể lưu trong cột thật.
 
+## T39.1 — web scalar và public catalog response boundary
+
+Web có scalar V2 dùng chung cho signed BIGINT ID và canonical `DECIMAL(19,4)` money, tách khỏi
+identity để catalog/cart/order/admin không phụ thuộc chéo module. Public product parser allowlist
+đúng output catalog V2: `id`, `categoryId`, `name`, `slug`, `description`, `basePrice` và image
+HTTP(S). Nó fail-closed với JSON number, money không canonical, ID ngoài range và media unsafe.
+Lát này chưa đổi `ProductDto` legacy, Axios service hoặc UI; catalog V2 cũng chưa mount runtime.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task

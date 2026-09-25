@@ -1,8 +1,6 @@
-/**
- * V2 identifiers cross the HTTP boundary as decimal strings. They are branded so
- * V2 consumers cannot accidentally fall back to the numeric legacy contract.
- */
-export type V2EntityId = string & { readonly __brand: "V2EntityId" };
+import type { V2EntityId } from "./database-v2";
+
+export type { V2EntityId } from "./database-v2";
 
 export type V2RoleScope =
   | Readonly<{ type: "global" }>

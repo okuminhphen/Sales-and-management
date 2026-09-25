@@ -887,6 +887,17 @@ T38.1/T38.2/T38.3 **chưa** thay `EntityId` legacy, không ghi session, không �
 V2. Router identity V2 vẫn chưa mount trong runtime legacy; việc nối service/state là lát kế tiếp
 sau khi có integration contract phù hợp.
 
+## Web public catalog contract V2 — T39.1
+
+`apps/web/src/types/database-v2.ts` và `services/database-v2.contract.ts` là boundary scalar
+chung: entity ID signed BIGINT vẫn là string và money chỉ nhận decimal canonical `DECIMAL(19,4)`;
+không có phép đổi sang JavaScript `number`. Public product V2 có type/parser độc lập, allowlist
+`id`, `categoryId`, `name`, `slug`, `description`, `basePrice` và image URL HTTP(S). JSON number,
+money không canonical, ID overflow và URL media unsafe trả `null` để consumer fail-closed.
+
+T39.1 chưa thay `ProductDto` legacy, chưa gọi Axios/router V2 và chưa render UI mới. Catalog V2 vẫn
+độc lập khỏi runtime legacy cho đến checkpoint cutover.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

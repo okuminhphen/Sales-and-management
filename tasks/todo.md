@@ -551,6 +551,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     `v2EntityId` chung đúng migration DDL và đưa parser Web về cùng range. Unit API 6/6 + Web
     10/10 đạt; overflow ID bị chặn trước service/database.
 - [ ] T39 — Web catalog/cart/order/admin contract cho ID string và DECIMAL money.
+  - [x] T39.1 — Scalar/common public catalog boundary: signed BIGINT + canonical DECIMAL parser
+    dùng chung, product V2 allowlist và safe HTTP(S) image. Unit Web 16/16 focused đạt; chưa đổi
+    `ProductDto`/Axios/UI hoặc mount catalog V2.
 - [ ] T40 — AI MySQL catalog repository dùng products/product_variants V2.
 - [ ] T41 — AI personalization queries dùng customer/behavior V2; không đổi RAG/model.
 - [ ] T42 — Full rehearsal Node + Python + critical smoke flows trên DB V2 test.
