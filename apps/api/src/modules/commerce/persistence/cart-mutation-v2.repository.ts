@@ -67,15 +67,21 @@ export class SequelizeCartMutationV2Repository implements CartMutationV2Reposito
     }
 
     async remove(customerId: EntityId, cartItemId: EntityId): Promise<RemoveCartItemOutcome> {
-        const affectedRows = await this.persistence.sequelize.query(
-            `DELETE cart_items FROM cart_items
-             INNER JOIN carts ON carts.id = cart_items.cart_id
-             WHERE carts.customer_id = ? AND cart_items.id = ?`,
-            { replacements: [customerId, cartItemId], type: QueryTypes.BULKDELETE },
-        );
-        if (affectedRows === 0) return { kind: "item_not_found" };
-        if (affectedRows !== 1) throw new TypeError("Cart item deletion affected an unexpected number of rows.");
-        return { kind: "removed" };
+        return this.persistence.inTransaction(async (transaction) => {
+            const carts = await this.persistence.sequelize.query<IdRow>(
+                "SELECT id FROM carts WHERE customer_id = ? FOR UPDATE",
+                { replacements: [customerId], type: QueryTypes.SELECT, transaction },
+            );
+            const cartId = carts[0]?.id;
+            if (!cartId) return { kind: "item_not_found" };
+            const affectedRows = await this.persistence.sequelize.query(
+                "DELETE FROM cart_items WHERE id = ? AND cart_id = ?",
+                { replacements: [cartItemId, cartId], type: QueryTypes.BULKDELETE, transaction },
+            );
+            if (affectedRows === 0) return { kind: "item_not_found" };
+            if (affectedRows !== 1) throw new TypeError("Cart item deletion affected an unexpected number of rows.");
+            return { kind: "removed" };
+        });
     }
 
     async update(customerId: EntityId, cartItemId: EntityId, quantity: number): Promise<UpdateCartItemOutcome> {

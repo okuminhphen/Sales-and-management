@@ -243,10 +243,12 @@ nhưng customer ID chỉ lấy từ access context DB-derived. Chỉ variant/pro
 được thêm; một cart tái sử dụng cho mỗi customer và một dòng cho mỗi variant. Adapter ghi trong
 transaction, dùng unique key của cart cùng `FOR UPDATE` trên cart để tuần tự hóa các lệnh thêm
 đồng thời; tổng quantity không vượt giới hạn `INT` của schema. Thêm giỏ không đọc inventory,
-không giữ hàng và không chốt giá. Cart remove core xóa bằng một câu lệnh SQL có điều kiện
-`customer_id` và `cart_item.id`, nên ID của người khác hoặc ID không tồn tại cùng trả một kết quả
-`item_not_found`; không tạo cart mới. Cart update core thay quantity nguyên dương trong
-transaction sau khi khóa cart/item của customer. Update cùng quantity vẫn thành công; item
+không giữ hàng và không chốt giá. Cart remove core khóa cart theo `customer_id` trước,
+rồi xóa item theo `(cart_id, cart_item.id)` trong cùng transaction; ID của người khác hoặc
+ID không tồn tại cùng trả `item_not_found` và không tạo cart mới. Thứ tự khóa này giống
+add/update và bước trừ cart của checkout, tránh deadlock do remove khóa item trước cart.
+Cart update core thay quantity nguyên dương trong transaction sau khi khóa cart/item của customer.
+Update cùng quantity vẫn thành công; item
 không thuộc khách trả `item_not_found`, còn product/variant ngừng bán trả
 `variant_unavailable` (người dùng vẫn có thể remove item đó). DTO/route compatibility và audit HTTP
 đã có trong composition V2 riêng; chưa mount vào runtime legacy.
@@ -584,6 +586,10 @@ lần hai. Test MySQL kiểm tra partial/full consume, rollback, cạnh tranh v�
 cart add và hai checkout đồng thời cùng key (một order/hold/outbox). Race
 cùng key đã chạy lặp năm lần. Sau lát cắt này full API suite đạt 528 pass,
 6 skip, API typecheck/build đạt; không đồng nghĩa HTTP checkout đã sẵn sàng.
+MySQL test riêng mô phỏng thứ tự khóa checkout và đã tái hiện deadlock khi remove
+dùng multi-table DELETE; remove hiện lấy khóa cart trước
+item và test hồi quy đã đạt. API suite sau sửa đạt 530 pass, 6 skip;
+typecheck/build đạt.
 
 Confirm online pickup nội bộ chỉ chấp nhận payment `completed` đủ `total_amount`
 (hoặc đơn 0 đồng), không có refund đang xử lý. Nó khóa order → voucher → payment

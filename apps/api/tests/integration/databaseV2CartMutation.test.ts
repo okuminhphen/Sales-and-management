@@ -161,4 +161,32 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 cart mutation on MySQL", () =>
         );
         expect(Number(count.total)).toBe(0);
     });
+
+    it("serializes removal behind the cart lock before taking the item lock", async () => {
+        await service.add(owner, { productVariantId: activeVariantId, quantity: 2 });
+        const cart = await one<{ id: string }>("SELECT id FROM carts WHERE customer_id = ?", [owner.customerId]);
+        const item = await one<{ id: string }>("SELECT id FROM cart_items WHERE cart_id = ?", [cart.id]);
+        const transaction = await sequelize.transaction();
+        let committed = false;
+        try {
+            await sequelize.query("SELECT id FROM carts WHERE id = ? FOR UPDATE", {
+                replacements: [cart.id], transaction, type: QueryTypes.SELECT,
+            });
+            let removalSettled = false;
+            const removal = service.remove(owner, { cartItemId: item.id }).then(
+                (value) => ({ value, error: null }),
+                (error: unknown) => ({ value: null, error }),
+            ).finally(() => { removalSettled = true; });
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            expect(removalSettled).toBe(false);
+            await sequelize.query("SELECT id FROM cart_items WHERE id = ? FOR UPDATE", {
+                replacements: [item.id], transaction, type: QueryTypes.SELECT,
+            });
+            await transaction.commit();
+            committed = true;
+            expect(await removal).toEqual({ value: { kind: "removed" }, error: null });
+        } finally {
+            if (!committed) await transaction.rollback().catch(() => undefined);
+        }
+    }, 15_000);
 });

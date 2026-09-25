@@ -362,7 +362,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     rollback và checkout cạnh tranh với cart add. Full suite 523 pass, 6 skip;
     cùng-key checkout cạnh tranh cũng chỉ tạo một order/hold/outbox và trừ cart
     một lần (MySQL test chạy lặp 5 lần). Full suite 528 pass, 6 skip;
-    chưa mount HTTP; delivery/POS còn lại.
+    chưa mount HTTP; delivery/POS còn lại. MySQL test tái hiện deadlock do
+    cart remove khóa item trước cart khi checkout đang giữ cart; đã đổi remove
+    thành transaction khóa cart trước rồi xóa item, focused test 5/5 và full
+    API suite 530 pass, 6 skip; typecheck/build đạt.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
     Lát confirm online pickup nội bộ đã yêu cầu completed payments đủ total
