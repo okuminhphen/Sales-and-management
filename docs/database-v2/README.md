@@ -539,6 +539,20 @@ T32 chưa tạo route công khai và chưa mount runtime: T33 phải nối claim
 release vào các use-case checkout/confirm/cancel. Test unit 4/4, MySQL `_test`
 12/12, API typecheck/build và toàn bộ suite 488 pass, 6 skip.
 
+## Order V2 — T33 đang triển khai
+
+Read model đầu tiên trả order và snapshot item với BIGINT ID/DECIMAL string.
+Quyền đọc lấy từ access context DB-derived: customer chỉ đọc đơn của chính
+mình; nhân viên đọc branch được cấp quyền; chỉ internal global grant được đọc
+toàn bộ. Repository đặt bộ lọc trong SQL trước phân trang và detail, nên đơn
+ngoài phạm vi hiện như không tồn tại. Unit 3/3, MySQL `_test` 1/1, API
+typecheck/build và full suite 491 pass, 6 skip. Đây chưa phải contract HTTP
+đã mount; mapping với Web legacy còn ở T39/T40.
+
+Checkout, status/history, voucher/inventory transaction và outbox của T33 vẫn
+chưa hoàn thành. Không dùng read slice này làm bằng chứng rằng luồng đặt hàng
+V2 đã sẵn sàng chạy end-to-end.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

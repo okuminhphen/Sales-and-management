@@ -330,6 +330,17 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     full suite 488 pass, 6 skip. Chưa mount runtime; T33 nối các primitive này
     vào checkout/cancel/confirm transaction chủ quản.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
+  - [x] Lát cắt đọc order: customer chỉ xem order của chính mình; nhân viên
+    chỉ xem branch được grant; global internal grant mới xem tất cả. Filter
+    SQL trước pagination/detail, BIGINT ID và DECIMAL string, order item snapshot.
+    Unit 3/3, MySQL `_test` 1/1; API typecheck/build và full suite 491 pass,
+    6 skip. Chưa mount HTTP runtime; legacy/Web contract mapping thuộc T39/T40.
+  - [ ] Checkout idempotent, giá/discount snapshot, phân bổ discount từng item;
+    claim voucher T32 + reserve inventory T29 trong một outer transaction.
+  - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
+    confirm/release/consume inventory hold và movement trong cùng transaction.
+  - [ ] Transactional outbox, HTTP compatibility, MySQL concurrency/error-path
+    và full regression trước khi đóng T33.
 - [ ] T34 — Payment method/payment/webhook V2.
 - [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
 - [ ] T36 — Conversation/message state và Socket contract V2.
