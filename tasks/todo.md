@@ -273,7 +273,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     approve tạo transfer pending liên kết cùng transaction, chống duyệt trùng.
     DTO Zod, route/envelope V2 độc lập và HTTP/MySQL tests đã đạt. Giữ/xuất/nhận
     kho thuộc T31; runtime legacy chưa mount cho tới cutover T40.
-- [ ] T31 — Transfer receipt service V2; nối reserve/dispatch/receive/release T29 trong transaction chủ quản. Approval chênh lệch phải do người có quyền, khác người ghi nhận, có note/audit.
+- [x] T31 — Transfer receipt service V2; nối reserve/dispatch/receive/release T29 trong transaction chủ quản. Approval chênh lệch phải do người có quyền, khác người ghi nhận, có note/audit.
   - [x] Lát cắt approve: chỉ global `transfer.manage.branch` được duyệt;
     request/transfer đối chiếu chiều branch và tổng variant, khóa theo thứ tự;
     chuyển `approved` + tạo các hold T29 + history trong một transaction.
@@ -292,7 +292,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     mất/hỏng fail-closed; item sau lỗi rollback toàn bộ credit trước.
     Review hồi quy: sau `RECEIPT_RECORDED`, đường complete đủ hàng phải từ chối
     trước mọi write, không được ghi đè mất/hỏng để né duyệt hai người. Đã thêm
-    guard dưới row lock và unit RED→GREEN; ca MySQL tương ứng đang chờ engine.
+    guard dưới row lock và unit RED→GREEN; ca MySQL tương ứng đã đạt.
   - [x] Lát cắt ghi nhận chênh lệch: destination branch/global khai báo đủ
     số lượng từng item kèm lý do bắt buộc; lưu `RECEIPT_RECORDED` với actor,
     giữ `in_transit` và không cộng tồn đích. Chỉ ghi một lần dưới row lock.
@@ -312,10 +312,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     `record-discrepancy`, `approve-discrepancy`; `complete` bắt buộc body đủ
     item/quantity, không suy đoán từ endpoint legacy không body. Zod strict,
     BIGINT string và audit HTTP; fake-service HTTP test đạt. Chưa mount runtime.
-  - [ ] Chạy lại HTTP/MySQL integration và full regression trước khi đóng T31.
-    Checkpoint hiện tại bị chặn môi trường: Docker Desktop engine không chạy,
-    MySQL `_test` trả `ECONNREFUSED` trước khi test bắt đầu. Typecheck/build và
-    fake-service HTTP test vẫn đạt. Runtime legacy chưa mount V2.
+  - [x] Chạy lại HTTP/MySQL integration và full regression trước khi đóng T31.
+    Docker Desktop/MySQL `_test` đã chạy lại được: 31/31 test tập trung đạt;
+    toàn bộ API suite 472 pass, 6 skip. Typecheck/build và fake-service HTTP
+    test đã đạt ở checkpoint code trước đó. Runtime legacy chưa mount V2.
 - [ ] T32 — Voucher claim/release service V2.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
 - [ ] T34 — Payment method/payment/webhook V2.

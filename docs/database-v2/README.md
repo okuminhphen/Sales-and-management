@@ -466,7 +466,7 @@ dạng string và hiển thị trạng thái `cancelled` thay cho giả định 
 Test MySQL `_test` đã kiểm tra atomic create/update/approve/reject, rollback
 khi variant sai, concurrent approve, auth scope và HTTP DTO.
 
-## Transfer receipt V2 — T31 đang triển khai
+## Transfer receipt V2 — T31 hoàn tất ở module độc lập
 
 Lát cắt duyệt transfer đã nối primitive reserve của T29 trong outer transaction:
 quyền global `transfer.manage.branch`, đối chiếu phiếu yêu cầu/chiều branch và
@@ -479,9 +479,9 @@ kho đích vẫn không đổi. Nếu item sau không dispatch được, toàn b
 item trước rollback. Hủy/từ chối chỉ áp dụng trước dispatch; khi đã duyệt thì
 mọi hold được release cùng transaction với trạng thái và history, không cộng
 physical stock vì chưa trừ. Phiếu đang vận chuyển phải qua nhận/đối soát, không
-được dùng cancel/reject. Chưa mount runtime. Query/HTTP đã có mã độc lập nhưng
-integration MySQL của route chưa được xác minh sau khi Docker Desktop dừng;
-không coi T31 hoàn thành ở checkpoint này.
+được dùng cancel/reject. Chưa mount runtime; việc chuyển route V2 vào runtime
+thuộc T40 sau khi Web được cập nhật ở T39. Query/HTTP độc lập và integration
+MySQL trên database `_test` đã được xác minh.
 
 Lát cắt receipt không chênh lệch nhận danh sách quantity tường minh cho **mọi**
 item; chỉ destination branch hoặc global có quyền mới hoàn tất. Trong cùng
@@ -513,9 +513,10 @@ ngoài scope trả not found, mọi BIGINT ID trong payload là string. Route V2
 độc lập giữ `/transfer-receipts*` và envelope `EM/EC/DT`; `complete` yêu cầu
 body khai báo mọi item, `dispatch` là action riêng, chênh lệch dùng hai action
 `record-discrepancy`/`approve-discrepancy`. DTO strict và fake-service HTTP
-test đã đạt; HTTP/MySQL integration còn phải chạy lại vì Docker Desktop engine
-đang không chạy (`ECONNREFUSED`). Route **chưa mount**; Web hiện còn giả định
-ID number và luồng complete không body, cần cập nhật ở T39 trước cutover T40.
+test đã đạt; HTTP/MySQL integration và hồi quy API đã chạy lại thành công:
+31/31 test tập trung, toàn bộ suite 472 pass và 6 skip. Route **chưa mount**;
+Web hiện còn giả định ID number và luồng complete không body, cần cập nhật ở
+T39 trước cutover T40.
 
 ## Giới hạn và kiểm thử chung còn lại
 
