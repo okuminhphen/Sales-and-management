@@ -43,10 +43,18 @@ là tạo một write-path V2 duy nhất; Socket chỉ là adapter gọi cùng u
    và `GET /message/get/:conversationId`; không dùng `GET` để tạo state, không
    nhận userId/sender/role từ browser. Chỉ compose router riêng cho test; runtime
    legacy chưa import/mount nó.
-4. **T36.4 — Socket bridge và staff handoff**: thực hiện sau khi common writer,
-   role scope và handoff policy đủ test. Socket phải re-authorize mỗi command,
-   persist trước emit, không tin room membership. Không sửa Socket legacy trong
-   lát nền này; AI worker/assistant run thuộc T37.
+4. **T36.4a — customer yêu cầu nhân viên (persistence control)**: customer đã
+   được xác thực chỉ chuyển conversation của chính mình từ `open/bot|paused`
+   sang `waiting_staff/paused`; command key + request hash và `expectedVersion`
+   được kiểm tra dưới row lock. Cùng command/payload replay; command đổi payload
+   conflict; command stale conflict. Event phải giữ đủ assignee/branch nguồn trước
+   khi release. Lát này không chọn staff, không notify, không tạo AI run và không
+   emit Socket; factory runtime tiếp tục unmounted.
+5. **T36.4b — staff handoff và Socket bridge**: chỉ thực hiện khi permission
+   matrix `read/reply/claim/assign/change_mode/close`, scope central/branch và
+   routing được duyệt/test. Socket phải re-authorize mỗi command, persist trước
+   emit, không tin room membership. Không sửa Socket legacy như hotfix; AI
+   worker/assistant run thuộc T37.
 
 Mỗi lát theo RED → GREEN → refactor, có unit và MySQL `_test` thật. Nếu một policy
 vận hành (handoff, retention, AI availability) chưa được phê duyệt, V2 giữ factory

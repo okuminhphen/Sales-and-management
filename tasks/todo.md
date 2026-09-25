@@ -503,6 +503,19 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [ ] T36.4 — Socket bridge và staff handoff sau khi writer/scope/policy đủ:
     mỗi command re-authorize, không lấy room membership làm quyền, persist trước
     emit. Không sửa legacy socket như một hotfix; assistant worker thuộc T37.
+    - [x] T36.4a — Customer request-human control primitive: chỉ customer active
+      sở hữu conversation mới được chuyển `open/bot|paused` thành
+      `waiting_staff/paused` và clear assignee. Command key + SHA-256 request hash
+      chống replay sai payload; `expectedVersion` được kiểm tra dưới lock để chỉ một
+      command mới thắng. Event lưu trạng thái/assignee/branch nguồn trước release.
+      Unit 3/3 và MySQL `_test` 4/4 kiểm tra replay, payload conflict, race version,
+      ownership và audit paused-assignee. Không có staff claim/routing, notification,
+      Socket, AI run hay runtime mount. API typecheck/build và full suite V2 đạt
+      599 pass, 6 skip (2 infrastructure test skip theo cấu hình) tại checkpoint này.
+    - [ ] T36.4b — Staff claim/assign/routing và Socket chỉ triển khai sau khi
+      permission matrix granular cùng central/branch scope được chốt. Không được
+      dùng `SUPER_ADMIN` hoặc membership room legacy thay cho permission/resource
+      authorization DB-derived.
 - [ ] T37 — Notification/behavior/chat proxy identity V2.
   - Acceptance cho T21–T37: route/envelope hiện hữu giữ tối đa; actor/scope từ JWT+DB; DTO Zod đầy đủ; mỗi slice có RED test và real-DB integration test.
   - Verify từng task: focused unit/integration + API typecheck; mỗi 2–3 task chạy API build/checkpoint regression.

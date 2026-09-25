@@ -691,7 +691,7 @@ chưa bật trong Compose và chưa kiểm chứng publish tới RabbitMQ thật
 unit fake broker và integration MySQL `_test`.
 API typecheck/build và full suite 522 pass, 6 skip tại checkpoint này.
 
-## Conversation/message V2 — T36.1 và T36.2
+## Conversation/message V2 — T36.1 đến T36.4a
 
 Hai lát đầu chỉ là persistence/application V2, **chưa được mount** vào REST hoặc
 Socket legacy. Mở conversation khóa row `customers` trong transaction, kiểm tra
@@ -722,6 +722,26 @@ Kiểm chứng MySQL `_test`: concurrent open chỉ tạo một conversation + m
 8 writer cho cùng conversation có sequence 1..8, retry song song cùng key chỉ
 ghi một message, ownership customer B bị ẩn. Unit, API typecheck và build đều
 đạt tại thời điểm hoàn thành lát cắt.
+
+T36.4a bổ sung control primitive để chính customer yêu cầu nhân viên. Transaction
+khóa conversation thuộc account/customer active, kiểm tra `expectedVersion` rồi
+chuyển `open/bot` hoặc `open/paused` thành `waiting_staff/paused`, xoá assignee và
+ghi `handoff_requested` cùng version tăng đúng một. Command key và SHA-256 hash
+bao gồm action, customer/account, conversation và version: retry y hệt replay,
+đổi payload conflict, còn command stale trả conflict để client đồng bộ lại state.
+Audit giữ assignee và branch nguồn nếu conversation paused đã có người phụ trách.
+
+Đây chưa phải inbox nhân viên hay realtime feature: không chọn/assign/routing nhân
+viên, không tạo notification/outbox, không emit Socket và không tạo `assistant_runs`.
+Tất cả còn factory/runtime legacy chưa import hoặc mount. Staff claim/assign/Socket
+chỉ được làm sau khi permission matrix granular và central/branch scope được duyệt;
+không dùng quyền admin tổng quát hoặc membership room cũ để thay authorization theo
+resource DB-derived.
+
+Kiểm chứng T36.4a: unit 3/3, MySQL `_test` 4/4 (replay/conflict, race version,
+ownership và giữ audit assignee nguồn) cùng API typecheck/build đều đạt. Full API
+suite chạy với migration V2 `_test`: 599 pass, 6 skip; hai integration test hạ tầng
+được skip theo cấu hình, không được tính là chứng nhận Socket/RabbitMQ runtime.
 
 ## Shipment read V2 — T35 foundation
 
