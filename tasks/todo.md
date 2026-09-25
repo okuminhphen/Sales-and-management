@@ -486,10 +486,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     mount runtime legacy. Unit 3/3 và MySQL 2/2 kiểm tra 5 open đồng thời chỉ
     tạo một conversation + một `created` event, không tạo AI run; account inactive
     fail-closed. API typecheck/build đạt.
-  - [ ] T36.2 — Common message/history use case V2: ownership customer, khóa
+  - [x] T36.2 — Common message/history use case V2: ownership customer, khóa
     conversation, `seq` tăng đơn điệu, `dedup_key` + SHA-256 request hash,
     pagination cursor bounded. Retry cùng payload replay; cùng key khác payload
-    conflict; persist trước mọi publish. Unit + MySQL `_test`; chưa gọi Socket/AI.
+    conflict; persist trước mọi publish. Unit 4/4 và MySQL 2/2: 8 writer
+    đồng thời có seq 1..8, retry 5 request cùng key chỉ ghi một row, key đổi
+    payload conflict, history `beforeSeq` chronological/bounded và customer B
+    không thấy/gửi được hội thoại A. Chưa gọi Socket/AI hay publish outbox.
   - [ ] T36.3 — HTTP factory V2 riêng: DTO Zod strict, V2 JWT/access context,
     envelope legacy và audit không body/PII. Factory chỉ dùng test/composition V2,
     không import hoặc mount vào runtime legacy trước cutover.

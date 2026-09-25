@@ -691,6 +691,28 @@ chưa bật trong Compose và chưa kiểm chứng publish tới RabbitMQ thật
 unit fake broker và integration MySQL `_test`.
 API typecheck/build và full suite 522 pass, 6 skip tại checkpoint này.
 
+## Conversation/message V2 — T36.1 và T36.2
+
+Hai lát đầu chỉ là persistence/application V2, **chưa được mount** vào REST hoặc
+Socket legacy. Mở conversation khóa row `customers` trong transaction, kiểm tra
+lại account/customer đang active và tạo đúng một conversation active cùng event
+`created`; trạng thái `open/bot` hiện chỉ là baseline để kiểm thử schema, không
+khởi chạy AI worker hay tạo `assistant_runs`.
+
+Gửi và đọc message dùng một use case chung cho adapter REST/Socket ở lát sau.
+Mỗi lệnh gửi khóa conversation, tự lấy customer/account từ V2 access context,
+chuẩn hóa text (1–5.000 ký tự), tăng `seq`, lưu `dedup_key` và SHA-256 request
+hash trong một transaction. Retry cùng key/nội dung replay message cũ; cùng key
+nhưng payload khác conflict. History trả theo `beforeSeq`, thứ tự tăng dần và
+tối đa 100 tin; không trả sender account, dedup key, hash hoặc metadata nội bộ.
+Lát này không broadcast Socket, không publish outbox và không enqueue AI nên
+không thể vô tình mở chat runtime khi policy handoff/retention chưa được chốt.
+
+Kiểm chứng MySQL `_test`: concurrent open chỉ tạo một conversation + một event;
+8 writer cho cùng conversation có sequence 1..8, retry song song cùng key chỉ
+ghi một message, ownership customer B bị ẩn. Unit, API typecheck và build đều
+đạt tại thời điểm hoàn thành lát cắt.
+
 ## Shipment read V2 — T35 foundation
 
 Order read V2 lấy shipment theo một query cho toàn bộ trang đơn (không tạo N+1).
