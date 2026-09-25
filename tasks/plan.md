@@ -138,6 +138,19 @@ T39.2 chỉ tái sử dụng validator ảnh public của catalog và thêm type
 V2. Các route V2 hiện có URL compatibility trùng legacy, nên wiring runtime chỉ được làm ở lát
 cutover có integration contract rõ ràng.
 
+## T39.3 — web order read response boundary
+
+Web bổ sung model/parser thuần cho cả list và detail order V2. Contract allowlist order, immutable
+item snapshot và shipment tracking; ID dùng signed BIGINT string, mọi amount dùng `DECIMAL(19,4)`
+canonical, enum channel/fulfillment/status bị giới hạn đúng schema và timestamp phải là ISO-UTC
+canonical. Snapshot ảnh chỉ nhận HTTP(S) hoặc path nội bộ tuyệt đối an toàn và chuẩn hóa về `{ url }`;
+raw JSON/PII không được đi qua type kết quả.
+
+Parser xác minh item có `orderId` đúng aggregate, công thức từng line và tổng order, COD không vượt
+total, ràng buộc channel/fulfillment/shipping/shipment theo schema và pagination chung bounded.
+Payload sai fail-closed. T39.3 chưa thay `OrderDto`/Axios/Redux/UI legacy, không tạo checkout/payment
+request và không mount router order V2; chỉ nối runtime sau cutover integration contract.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task

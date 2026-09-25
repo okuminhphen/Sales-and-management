@@ -559,6 +559,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     signed BIGINT/DECIMAL(19,4), quantity/page có bound và metadata page nhất quán; payload sai
     fail-closed. Unit Web focused 12/12 (scalar/catalog/cart) + typecheck đạt; chưa đổi
     `CartItem`/localStorage/Axios/Redux/UI hay mount cart V2.
+  - [x] T39.3 — Order read response boundary: type/parser thuần cho list/detail V2, allowlist
+    order/item snapshot/shipment, exact signed BIGINT/DECIMAL, enum/timestamp canonical, snapshot
+    image HTTP(S)/internal-safe và pagination shared. Kiểm tra line/order money identity, item owner,
+    COD/fulfillment invariants; payload sai fail-closed. Unit Web focused 17/17
+    (scalar/catalog/cart/order) + typecheck đạt; chưa đổi `OrderDto`/Axios/Redux/UI, checkout/payment
+    hoặc mount route V2.
 - [ ] T40 — AI MySQL catalog repository dùng products/product_variants V2.
 - [ ] T41 — AI personalization queries dùng customer/behavior V2; không đổi RAG/model.
 - [ ] T42 — Full rehearsal Node + Python + critical smoke flows trên DB V2 test.

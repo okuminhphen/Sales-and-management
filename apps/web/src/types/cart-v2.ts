@@ -1,5 +1,5 @@
 import type { V2CatalogImage } from "./catalog-v2";
-import type { V2EntityId, V2Money } from "./database-v2";
+import type { V2EntityId, V2Money, V2OffsetPagination } from "./database-v2";
 
 /** Compatibility cart item returned by the V2 `/cart/read/:userId` endpoint. */
 export interface V2CartItem {
@@ -14,14 +14,7 @@ export interface V2CartItem {
   catalogActive: boolean;
 }
 
-export interface V2CartPagination {
-  page: number;
-  limit: number;
-  totalItems: number;
-  totalPages: number;
-}
-
 export interface V2CartReadPage {
   items: readonly V2CartItem[];
-  pagination: V2CartPagination;
+  pagination: V2OffsetPagination;
 }

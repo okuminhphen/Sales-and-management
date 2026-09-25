@@ -1,4 +1,4 @@
-import type { V2EntityId, V2Money } from "../types/database-v2";
+import type { V2EntityId, V2Money, V2OffsetPagination } from "../types/database-v2";
 
 const ENTITY_ID_PATTERN = /^[1-9]\d{0,18}$/;
 const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
@@ -14,3 +14,17 @@ export const parseV2EntityId = (value: unknown): V2EntityId | null => {
 /** Accepts only canonical, non-negative DECIMAL(19,4) response values. */
 export const parseV2Money = (value: unknown): V2Money | null =>
   typeof value === "string" && MONEY_PATTERN.test(value) ? value as V2Money : null;
+
+/** Validates bounded offset metadata against the items already parsed from a V2 response. */
+export const parseV2OffsetPagination = (value: unknown, itemCount: number): V2OffsetPagination | null => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const { page, limit, totalItems, totalPages } = value as Record<string, unknown>;
+  if (
+    typeof page !== "number" || !Number.isSafeInteger(page) || page < 1 ||
+    typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
+    typeof totalItems !== "number" || !Number.isSafeInteger(totalItems) || totalItems < 0 ||
+    typeof totalPages !== "number" || !Number.isSafeInteger(totalPages) || totalPages < 0 ||
+    itemCount > limit || itemCount > totalItems || totalPages !== Math.ceil(totalItems / limit)
+  ) return null;
+  return { page, limit, totalItems, totalPages };
+};

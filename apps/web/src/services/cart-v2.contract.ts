@@ -1,7 +1,7 @@
 import { parseV2CatalogImage } from "./catalog-v2.contract";
-import { parseV2EntityId, parseV2Money } from "./database-v2.contract";
+import { parseV2EntityId, parseV2Money, parseV2OffsetPagination } from "./database-v2.contract";
 import type { V2CatalogImage } from "../types/catalog-v2";
-import type { V2CartItem, V2CartPagination, V2CartReadPage } from "../types/cart-v2";
+import type { V2CartItem, V2CartReadPage } from "../types/cart-v2";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -42,19 +42,6 @@ const parseCartItem = (value: unknown): V2CartItem | null => {
   return { id, productId, productVariantId, name, price, images, size, quantity, catalogActive: value.catalogActive };
 };
 
-const parsePagination = (value: unknown, itemCount: number): V2CartPagination | null => {
-  if (!isRecord(value)) return null;
-  const { page, limit, totalItems, totalPages } = value;
-  if (
-    typeof page !== "number" || !Number.isSafeInteger(page) || page < 1 ||
-    typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 100 ||
-    typeof totalItems !== "number" || !Number.isSafeInteger(totalItems) || totalItems < 0 ||
-    typeof totalPages !== "number" || !Number.isSafeInteger(totalPages) || totalPages < 0 ||
-    itemCount > limit || itemCount > totalItems || totalPages !== Math.ceil(totalItems / limit)
-  ) return null;
-  return { page, limit, totalItems, totalPages };
-};
-
 /**
  * Validates the successful V2 cart compatibility response before Web stores or renders it.
  * It deliberately has no HTTP side effect while the V2 router remains unmounted.
@@ -65,6 +52,6 @@ export const parseV2CartReadResponse = (value: unknown): V2CartReadPage | null =
   const items = value.DT.map(parseCartItem);
   if (!items.every((item): item is V2CartItem => item !== null)) return null;
 
-  const pagination = parsePagination(value.pagination, items.length);
+  const pagination = parseV2OffsetPagination(value.pagination, items.length);
   return pagination ? { items, pagination } : null;
 };

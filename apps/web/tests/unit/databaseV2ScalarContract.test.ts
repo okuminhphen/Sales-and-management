@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseV2EntityId, parseV2Money } from "../../src/services/database-v2.contract";
+import { parseV2EntityId, parseV2Money, parseV2OffsetPagination } from "../../src/services/database-v2.contract";
 
 describe("database V2 scalar contract", () => {
   it("preserves a signed BIGINT identifier as a string", () => {
@@ -19,5 +19,16 @@ describe("database V2 scalar contract", () => {
     expect(parseV2Money(12.5)).toBeNull();
     expect(parseV2Money("12.5")).toBeNull();
     expect(parseV2Money("1000000000000000.0000")).toBeNull();
+  });
+
+  it("requires bounded and internally consistent V2 offset pagination", () => {
+    expect(parseV2OffsetPagination(
+      { page: 2, limit: 20, totalItems: 21, totalPages: 2 },
+      1,
+    )).toMatchObject({ page: 2, limit: 20, totalItems: 21, totalPages: 2 });
+    expect(parseV2OffsetPagination(
+      { page: 1, limit: 20, totalItems: 0, totalPages: 0 },
+      1,
+    )).toBeNull();
   });
 });

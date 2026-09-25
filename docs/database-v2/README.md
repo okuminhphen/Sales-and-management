@@ -912,6 +912,21 @@ không hợp lệ hay metadata mâu thuẫn. Nó dùng chung validator ảnh cat
 `CartItem`/localStorage legacy, gọi Axios, ghi Redux hoặc render UI. Router cart V2 vẫn chưa mount;
 không được wire runtime khi URL compatibility còn trùng route legacy.
 
+## Web order read contract V2 — T39.3
+
+`apps/web/src/types/order-v2.ts` và `services/order-v2.contract.ts` đặt boundary độc lập cho cả
+list và detail order V2. Result chỉ giữ order, immutable item snapshot và tracking shipment cần
+render; không giữ các field PII/secret nội bộ không thuộc DTO. BIGINT và money vẫn là string,
+status/channel/fulfillment dùng đúng enum schema, timestamp là ISO-UTC canonical. Snapshot ảnh
+chỉ nhận URL HTTP(S) hoặc path nội bộ bắt đầu bằng `/` không thể đổi origin; cả hai chuẩn hóa thành
+`{ url }` trước khi đi xuống UI.
+
+Ngoài shape, parser kiểm tra `orderId` trên từng item, công thức line và tổng order, discount/COD
+không vượt hạn mức, ràng buộc online/carry-out/shipping/shipment và pagination bounded dùng chung.
+Payload vi phạm trả `null`. T39.3 **chưa** thay `OrderDto`, gọi Axios, ghi Redux, tạo checkout/payment
+hay mount router V2; các URL compatibility còn trùng route legacy nên runtime wiring phải đợi
+cutover có integration contract.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
