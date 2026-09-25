@@ -672,9 +672,7 @@ chỉ trả method `is_active = TRUE` theo thứ tự ID. `id` là BIGINT string
 `code/name/description/isActive/createdAt/updatedAt` được map tường minh.
 JWT V2 phải tham chiếu account còn active và có role hiện hành từ database;
 token giả hoặc account bị khóa không được đọc. Adapter chưa mount vào runtime
-legacy. Chưa có payment attempt, VNPay URL, return/webhook hoặc paid-state
-transition V2; không coi lát đọc này là hoàn thành T34.
-Focused MySQL HTTP test 2/2, API typecheck/build và full suite 533 pass,
+legacy. Focused MySQL HTTP test 2/2, API typecheck/build và full suite 533 pass,
 6 skip.
 
 Primitive nội bộ VNPay attempt khóa order, payment method rồi payment, lấy customer từ V2
@@ -695,11 +693,9 @@ chữ-số, ngắn hơn giới hạn provider và xác định duy nhất paymen
 điểm `created_at` của attempt được dùng lại để retry tạo đúng URL/expiry, không
 tạo giao dịch provider mới. Adapter HMAC-SHA512 canonical-sort, dùng mốc GMT+7,
 chỉ chấp nhận tiền VND nguyên (x100 theo contract VNPay), IP/locale/bank code
-hợp lệ và callback có chữ ký, merchant, reference, amount hợp lệ. Callback mới
-chỉ được parse/xác thực in-memory; chưa ghi `payment_events`, chưa đổi trạng
-thái payment/order, reconcile hoặc mount HTTP. Unit gateway/request 5/5,
-MySQL attempt 6/6, API typecheck/build và full suite 547 pass, 6 skip đạt;
-không gọi VNPay thật hoặc log secret.
+hợp lệ và callback có chữ ký, merchant, reference, amount hợp lệ. Unit
+gateway/request 5/5, MySQL attempt 6/6, API typecheck/build và full suite 547
+pass, 6 skip đạt; không gọi VNPay thật hoặc log secret.
 
 Callback V2 đi qua `VnPayPaymentCallbackV2Service`: nếu gateway không xác minh
 được chữ ký thì persistence không được gọi. Khi callback đã verified, repository
@@ -711,8 +707,26 @@ ghi. Trong cùng transaction, nó cập nhật payment và thêm `payment_events
 hạ về `failed`. Callback success trễ vẫn có thể ghi nhận completed để luồng
 reconciliation/refund xử lý riêng, tuyệt đối không tự khôi phục order/stock.
 Unit boundary 2/2 và MySQL 10/10 (gồm concurrent duplicate callback) đạt;
-typecheck/build và full API suite 553 pass, 6 skip đạt. HTTP/IPN adapter,
-reconciliation và runtime mount vẫn chưa được triển khai.
+typecheck/build và full API suite 553 pass, 6 skip đạt.
+
+HTTP factory `createVnPayPaymentV2Router` giữ compatibility path tạo URL nhưng
+**chưa mount runtime**. `POST /create-payment-url` yêu cầu V2 auth, DTO strict,
+idempotency key và lấy `request.ip` từ Express/proxy boundary thay vì body;
+response vẫn chỉ là `{ vnpUrl }` để không đổi Web contract. Browser `GET
+/payment-return` được public để VNPay redirect về nhưng `VnPayPaymentReturnV2Service`
+chỉ xác minh HMAC rồi trả `awaiting_confirmation` hoặc `payment_failed`: không
+ghi payment event và không đổi order/stock. Chỉ `GET /vnpay/ipn` gọi
+`VnPayPaymentCallbackV2Service` để ghi event; nó trả JSON protocol `00` cho lần
+ghi đầu, `02` cho replay/đã hoàn thành, `97` cho chữ ký sai và các mã an toàn
+khác cho lỗi lookup/amount/hạ tầng. Focused HTTP 5/5 xác nhận body price bị từ
+chối, IP server-derived, browser return không mutation và IPN idempotent; API
+typecheck/build và full suite 558 pass, 6 skip đạt.
+
+Khi cutover production, cấu hình `VNP_RETURN_URL` tới HTTPS endpoint
+`/api/v1/payment-return` và cấu hình riêng IPN URL HTTPS `/api/v1/vnpay/ipn`
+trên portal VNPay. Không dùng browser return hoặc custom webhook header làm
+nguồn xác nhận thanh toán. Reconciliation và runtime mount vẫn là việc còn lại
+của T34.
 
 ## Giới hạn và kiểm thử chung còn lại
 

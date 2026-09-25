@@ -424,8 +424,14 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     `payment_events` được ghi cùng transaction. Event key replay idempotent,
     provider transaction không được đổi/trùng payment khác, completed không
     thể bị hạ bởi callback trễ. Unit 2/2 và MySQL 10/10 gồm concurrent duplicate
-    callback đạt; typecheck/build và full API suite 553 pass, 6 skip đạt. Chưa
-    có HTTP adapter, reconciliation hay mount runtime nên mục T34 vẫn mở.
+    callback đạt; typecheck/build và full API suite 553 pass, 6 skip đạt.
+  - [x] HTTP factory VNPay V2 (chưa mount runtime): `POST /create-payment-url`
+    yêu cầu V2 auth, DTO strict và chỉ lấy IP từ server; browser return chỉ xác
+    minh/chuyển trạng thái trình bày, không ghi database; IPN `GET /vnpay/ipn`
+    là đường duy nhất gọi callback persistence và phản hồi `RspCode` theo
+    protocol VNPay. Focused HTTP 5/5, API typecheck/build và full suite 558
+    pass, 6 skip đạt. Reconciliation, cấu hình IPN SSL khi cutover và runtime
+    mount vẫn là việc còn lại của T34.
 - [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
   Làm foundation shipment cần cho T33 trước, giữ những policy return/refund còn
   mở ở trạng thái fail-closed; quay lại T33 khi dependency đã có test MySQL.
