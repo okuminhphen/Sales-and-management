@@ -22,6 +22,7 @@ type ProductRow = {
     sizeName: string; basePrice: string; imagesText: string | null;
 };
 type VoucherQuote = { discountType: "fixed" | "percent"; discountValue: string; maxDiscountAmount: string | null };
+type CartItemRow = { id: unknown; variantId: unknown; quantity: number };
 type CheckoutFailure = { kind: "product_unavailable" | "branch_unavailable"
     | "insufficient_stock" | "voucher_not_eligible" };
 
@@ -186,6 +187,7 @@ export class SequelizeOrderCheckoutV2Repository implements OrderCheckoutV2Reposi
             if (hold.kind === "insufficient_stock") reject("insufficient_stock");
             if (hold.kind !== "reserved") throw new Error(`Checkout hold failed: ${hold.kind}`);
         }
+        await this.consumePurchasedCartItems(input, transaction);
         await sql.query(
             `INSERT INTO outbox_events (event_id, event_type, aggregate_type, aggregate_id,
                 payload, occurred_at, created_at, updated_at)
@@ -195,5 +197,36 @@ export class SequelizeOrderCheckoutV2Repository implements OrderCheckoutV2Reposi
                 branchId: input.branchId, channel: "online", fulfillmentType: "store_pickup" })], transaction },
         );
         return { kind: "created", orderId };
+    }
+
+    /** A cart is optional at checkout. Serialize with cart mutations and leave additions/other lines intact. */
+    private async consumePurchasedCartItems(input: PreparedOnlinePickupCheckout, transaction: Transaction): Promise<void> {
+        const sql = this.persistence.sequelize;
+        const carts = await sql.query<{ id: unknown }>(
+            "SELECT id FROM carts WHERE customer_id = ? FOR UPDATE",
+            { replacements: [input.customerId], transaction, type: QueryTypes.SELECT },
+        );
+        if (!carts[0]) return;
+        const cartId = serializeDatabaseEntityId(carts[0].id);
+        const placeholders = input.items.map(() => "?").join(", ");
+        const cartItems = await sql.query<CartItemRow>(
+            `SELECT id, product_variant_id AS variantId, quantity FROM cart_items
+             WHERE cart_id = ? AND product_variant_id IN (${placeholders}) ORDER BY id ASC FOR UPDATE`,
+            { replacements: [cartId, ...input.items.map((item) => item.variantId)], transaction, type: QueryTypes.SELECT },
+        );
+        const purchased = new Map(input.items.map((item) => [item.variantId, item.quantity]));
+        for (const item of cartItems) {
+            const quantity = purchased.get(serializeDatabaseEntityId(item.variantId));
+            if (!quantity) continue;
+            if (!Number.isSafeInteger(item.quantity) || item.quantity <= 0) throw new Error("Invalid cart quantity.");
+            const itemId = serializeDatabaseEntityId(item.id);
+            if (item.quantity <= quantity) {
+                await sql.query("DELETE FROM cart_items WHERE id = ? AND cart_id = ?",
+                    { replacements: [itemId, cartId], transaction });
+            } else {
+                await sql.query("UPDATE cart_items SET quantity = ?, updated_at = UTC_TIMESTAMP(3) WHERE id = ? AND cart_id = ?",
+                    { replacements: [item.quantity - quantity, itemId, cartId], transaction });
+            }
+        }
     }
 }

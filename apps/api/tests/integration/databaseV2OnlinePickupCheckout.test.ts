@@ -10,6 +10,8 @@ import { OrderConfirmationV2Service } from "../../src/modules/commerce/applicati
 import { SequelizeOrderConfirmationV2Repository } from "../../src/modules/commerce/persistence/order-confirmation-v2.repository.js";
 import { OrderCancellationV2Service } from "../../src/modules/commerce/application/order-cancellation-v2.service.js";
 import { SequelizeOrderCancellationV2Repository } from "../../src/modules/commerce/persistence/order-cancellation-v2.repository.js";
+import { CartMutationV2Service } from "../../src/modules/commerce/application/cart-mutation-v2.service.js";
+import { SequelizeCartMutationV2Repository } from "../../src/modules/commerce/persistence/cart-mutation-v2.repository.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup checkout on MySQL", () => {
@@ -125,6 +127,60 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
             recipientPhone: "0900000000", voucherCode });
         expect(result).toEqual({ kind: "insufficient_stock" });
         expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM orders WHERE checkout_key = ?", [key])).n)).toBe(0);
+    });
+
+    it("consumes only purchased quantities from the buyer cart atomically and only once", async () => {
+        const sizeName = `OC-CART-${suffix}`;
+        await db.query("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [sizeName] });
+        const sizeId = (await one<{ id: string }>("SELECT id FROM sizes WHERE name = ?", [sizeName])).id;
+        const productId = (await one<{ id: string }>("SELECT product_id AS id FROM product_variants WHERE id = ?", [variantId])).id;
+        const sku = `OC-CART-${suffix}`;
+        await db.query("INSERT INTO product_variants (product_id, size_id, sku, status, created_at, updated_at) VALUES (?, ?, ?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [productId, sizeId, sku] });
+        const cartVariantId = (await one<{ id: string }>("SELECT id FROM product_variants WHERE sku = ?", [sku])).id;
+        await db.query("INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, 4, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [branchId, cartVariantId] });
+        await db.query("INSERT INTO carts (customer_id, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [actor.customerId] });
+        const cartId = (await one<{ id: string }>("SELECT id FROM carts WHERE customer_id = ?", [actor.customerId])).id;
+        await db.query(`INSERT INTO cart_items (cart_id, product_variant_id, quantity, created_at, updated_at)
+            VALUES (?, ?, 3, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)), (?, ?, 7, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`,
+        { replacements: [cartId, cartVariantId, cartId, variantId] });
+        const input = { checkoutKey: `checkout-cart-${suffix}`, branchId,
+            items: [{ variantId: cartVariantId, quantity: 2 }], recipientName: "Nguyen A",
+            recipientPhone: "0900000000", voucherCode: null };
+        const created = await service.checkoutOnlinePickup(actor, input);
+        expect(created.kind).toBe("created");
+        if (created.kind !== "created") throw new Error("Cart checkout fixture failed.");
+        expect((await one<{ quantity: number }>("SELECT quantity FROM cart_items WHERE cart_id = ? AND product_variant_id = ?",
+            [cartId, cartVariantId])).quantity).toBe(1);
+        expect((await one<{ quantity: number }>("SELECT quantity FROM cart_items WHERE cart_id = ? AND product_variant_id = ?",
+            [cartId, variantId])).quantity).toBe(7);
+        expect(await service.checkoutOnlinePickup(actor, input)).toEqual({ kind: "replayed", orderId: created.orderId });
+        expect((await one<{ quantity: number }>("SELECT quantity FROM cart_items WHERE cart_id = ? AND product_variant_id = ?",
+            [cartId, cartVariantId])).quantity).toBe(1);
+        const failed = await service.checkoutOnlinePickup(actor, { ...input, checkoutKey: `checkout-cart-fail-${suffix}`,
+            items: [{ variantId: cartVariantId, quantity: 3 }] });
+        expect(failed).toEqual({ kind: "insufficient_stock" });
+        expect((await one<{ quantity: number }>("SELECT quantity FROM cart_items WHERE cart_id = ? AND product_variant_id = ?",
+            [cartId, cartVariantId])).quantity).toBe(1);
+        const cartMutation = new CartMutationV2Service({ repository:
+            new SequelizeCartMutationV2Repository(createSalesV2Persistence(db)) });
+        const [add, concurrentCheckout] = await Promise.all([
+            cartMutation.add(actor, { productVariantId: cartVariantId, quantity: 1 }),
+            service.checkoutOnlinePickup(actor, { ...input, checkoutKey: `checkout-cart-race-${suffix}`,
+                items: [{ variantId: cartVariantId, quantity: 1 }] }),
+        ]);
+        expect(add.kind).toBe("added");
+        expect(concurrentCheckout.kind).toBe("created");
+        expect((await one<{ quantity: number }>("SELECT quantity FROM cart_items WHERE cart_id = ? AND product_variant_id = ?",
+            [cartId, cartVariantId])).quantity).toBe(1);
+        const consumeLast = await service.checkoutOnlinePickup(actor, { ...input,
+            checkoutKey: `checkout-cart-last-${suffix}`, items: [{ variantId: cartVariantId, quantity: 1 }] });
+        expect(consumeLast.kind).toBe("created");
+        expect(Number((await one<{ count: string }>("SELECT COUNT(*) AS count FROM cart_items WHERE cart_id = ? AND product_variant_id = ?",
+            [cartId, cartVariantId])).count)).toBe(0);
+        expect((await one<{ quantity: number }>("SELECT quantity FROM cart_items WHERE cart_id = ? AND product_variant_id = ?",
+            [cartId, variantId])).quantity).toBe(7);
     });
 
     it("rolls back an already-inserted order when the voucher is ineligible at its locked claim", async () => {

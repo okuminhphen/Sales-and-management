@@ -349,7 +349,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     transactional outbox trong cùng transaction. Checkout key và voucher code
     được canonicalize theo collation MySQL; retry cùng intent replay, payload
     khác bị từ chối. Unit 3/3 và MySQL `_test` 4/4 kiểm tra rollback voucher/
-    tồn kho cùng tranh đơn vị cuối. Chưa mount HTTP; delivery/POS còn lại.
+    tồn kho cùng tranh đơn vị cuối. Checkout cũng trừ đúng số lượng đã mua
+    khỏi cart (nếu có) trong cùng transaction; dòng khác, lượng vừa thêm và
+    retry không bị xóa nhầm. MySQL `_test` kiểm tra partial/full consume,
+    rollback và checkout cạnh tranh với cart add. Full suite 523 pass, 6 skip;
+    chưa mount HTTP; delivery/POS còn lại.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
     Lát confirm online pickup nội bộ đã yêu cầu completed payments đủ total
