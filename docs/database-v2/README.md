@@ -708,6 +708,16 @@ tối đa 100 tin; không trả sender account, dedup key, hash hoặc metadata 
 Lát này không broadcast Socket, không publish outbox và không enqueue AI nên
 không thể vô tình mở chat runtime khi policy handoff/retention chưa được chốt.
 
+Factory HTTP V2 riêng giữ envelope `EM/EC/DT` với ba path compatibility:
+`POST /conversation/create`, `POST /message/send/:conversationId` và
+`GET /message/get/:conversationId`. DTO Zod strict chỉ nhận `clientMessageId` +
+plain-text `message` khi gửi; actor, sender type, role, customer ID và metadata
+không phải input hợp lệ. V2 auth xây access context lại từ DB, audit chỉ ghi
+action/account/resource/outcome chứ không ghi body. Factory được compose tại
+`apps/api/src/routes/conversation-v2.ts`, nhưng `routes/api.ts` và Socket legacy
+không import/mount file này. HTTP mock và một request qua transaction MySQL thật
+đều đã kiểm chứng boundary này.
+
 Kiểm chứng MySQL `_test`: concurrent open chỉ tạo một conversation + một event;
 8 writer cho cùng conversation có sequence 1..8, retry song song cùng key chỉ
 ghi một message, ownership customer B bị ẩn. Unit, API typecheck và build đều

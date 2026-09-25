@@ -38,8 +38,11 @@ là tạo một write-path V2 duy nhất; Socket chỉ là adapter gọi cùng u
    cursor phân trang có giới hạn. Một payload đổi nội dung nhưng dùng lại key phải
    fail-closed. Ghi message xong mới trả event nội bộ; chưa publish Socket/AI.
 3. **T36.3 — HTTP V2 không mount**: DTO Zod strict, V2 JWT + DB access context,
-   legacy envelope tương thích và audit không chứa body/PII. Chỉ compose router
-   factory riêng cho test; runtime legacy chưa import/mount nó.
+   legacy envelope tương thích và audit không chứa body/PII. Factory V2 giữ ba
+   path compatibility `POST /conversation/create`, `POST /message/send/:conversationId`
+   và `GET /message/get/:conversationId`; không dùng `GET` để tạo state, không
+   nhận userId/sender/role từ browser. Chỉ compose router riêng cho test; runtime
+   legacy chưa import/mount nó.
 4. **T36.4 — Socket bridge và staff handoff**: thực hiện sau khi common writer,
    role scope và handoff policy đủ test. Socket phải re-authorize mỗi command,
    persist trước emit, không tin room membership. Không sửa Socket legacy trong

@@ -493,9 +493,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     đồng thời có seq 1..8, retry 5 request cùng key chỉ ghi một row, key đổi
     payload conflict, history `beforeSeq` chronological/bounded và customer B
     không thấy/gửi được hội thoại A. Chưa gọi Socket/AI hay publish outbox.
-  - [ ] T36.3 — HTTP factory V2 riêng: DTO Zod strict, V2 JWT/access context,
+  - [x] T36.3 — HTTP factory V2 riêng: DTO Zod strict, V2 JWT/access context,
     envelope legacy và audit không body/PII. Factory chỉ dùng test/composition V2,
-    không import hoặc mount vào runtime legacy trước cutover.
+    không import hoặc mount vào runtime legacy trước cutover. Giữ `POST /conversation/create`,
+    `POST /message/send/:conversationId`, `GET /message/get/:conversationId`; mock HTTP
+    4/4 và request qua router với transaction MySQL thật đạt. `senderType`, actor,
+    role hay field lạ bị Zod strict chặn trước use case; search import xác nhận legacy
+    `routes/api.ts`/Socket không mount factory.
   - [ ] T36.4 — Socket bridge và staff handoff sau khi writer/scope/policy đủ:
     mỗi command re-authorize, không lấy room membership làm quyền, persist trước
     emit. Không sửa legacy socket như một hotfix; assistant worker thuộc T37.
