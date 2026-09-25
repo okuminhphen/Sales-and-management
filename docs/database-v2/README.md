@@ -656,6 +656,15 @@ serialization an toàn. Focused test 5/5, API typecheck/build và toàn bộ API
 539 pass, 6 skip đạt. Slice này chưa tạo shipment lúc checkout, chưa book carrier,
 callback hoặc state transition; tất cả vẫn chưa mount runtime legacy.
 
+Primitive `DeliveryShipmentV2Service` tạo một shipment `pending` bền vững cho
+delivery order đang `pending/unfulfilled`. Nó nhận snapshot recipient, địa chỉ,
+vị trí và COD từ orchestration tin cậy, khóa order trước shipment, giới hạn COD
+không vượt total và là số VND nguyên. `provider_request_key` idempotent: retry
+cùng payload replay, payload khác hoặc dùng lại key bị từ chối. Repository có thể
+nhận transaction của checkout để rollback nguyên tử; không gọi carrier, không
+book vận đơn và không phát outbox một mình. MySQL focused 3/3, API typecheck/build
+và full API suite 542 pass, 6 skip đạt.
+
 ## Payment method V2 — T34 foundation
 
 Adapter `GET /payment-methods` V2 giữ đường dẫn và envelope `EM/EC/DT` hiện hữu,

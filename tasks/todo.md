@@ -423,6 +423,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     MySQL delivery fixture và HTTP contract test đạt; API typecheck/build và full
     suite 539 pass, 6 skip. Chưa tạo shipment checkout, carrier booking/callback/
     state transition hoặc mount runtime.
+  - [x] Primitive tạo shipment delivery `pending`: lock order, chỉ nhận delivery
+    order `pending/unfulfilled`, snapshot recipient/location/COD từ trusted
+    orchestration, COD nguyên VND không vượt total. Idempotency theo provider
+    request key replay đúng payload và chặn key/payload khác; repository nhận
+    outer transaction để checkout rollback nguyên tử. MySQL 3/3 kiểm tra create/
+    replay, pickup/conflict và rollback; API typecheck/build và full suite 542
+    pass, 6 skip. Chưa được checkout gọi hoặc mount HTTP.
 - [ ] T36 — Conversation/message state và Socket contract V2.
 - [ ] T37 — Notification/behavior/chat proxy identity V2.
   - Acceptance cho T21–T37: route/envelope hiện hữu giữ tối đa; actor/scope từ JWT+DB; DTO Zod đầy đủ; mỗi slice có RED test và real-DB integration test.
