@@ -216,7 +216,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     không có attempt pending/processing/completed. Lock order → payment → item
     → inventory → reservation; chỉ đổi hold sang `released`, không cộng stock.
     MySQL test chặn payment chưa rõ, rollback transaction và idempotent replay.
-    Chưa có expire worker; refund/partial-payment policy thuộc T34/T35.
+    Expiry worker V2 đã quét hold online quá hạn dưới cùng thứ tự lock và chỉ
+    expire khi payment đều `failed`/`cancelled`; payment unresolved giữ hold để
+    đối soát. Refund/partial-payment policy vẫn thuộc T34/T35.
   - [x] Consume order hold nội bộ khi fulfillment `shipping`/`fulfilled` và
     hold đã confirm: lock order → item → inventory → reservation; giảm stock,
     chuyển hold `consumed`, ghi movement typed `order_item_id` cùng transaction.
@@ -412,7 +414,8 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     V2 được harden `regex → pipe → BigInt` trên các DTO đang dùng để ID text luôn
     trả 400, không ném 500. Chưa mount runtime legacy; handover vẫn chờ policy
     xác thực người nhận.
-    Không tự động hủy order khi hết 15 phút vì policy này chưa được chốt.
+    Online hold hết hạn sau 15 phút đã được expiry worker chuyển sang `expired`;
+    đây chỉ là nhả hàng, không tự động hủy order. Chính sách auto-cancel order,
     COD/delivery, cancel sau thu tiền và handover còn chờ các lát T33/T34/T35.
   - [x] Publisher V2 opt-in: MySQL `FOR UPDATE SKIP LOCKED` claim và lease
     fenced bằng attempts; allowlist `catalog.product.*` + ba event order,

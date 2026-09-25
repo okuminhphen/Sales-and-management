@@ -655,10 +655,10 @@ MySQL checkout/confirm/cancel 6/6, API typecheck/build và full suite 512 pass,
 
 MySQL regression còn xác minh nhân viên hủy đơn pickup chưa thu tiền sau khi
 worker đã đổi hold thành `expired`: voucher được release, order đổi sang
-`cancelled`, nhưng không cộng stock hoặc ghi movement lần hai. Đây là thao tác
-hủy có chủ đích; hệ thống chưa tự hủy order khi hết 15 phút vì policy đó vẫn
-chờ quyết định. Checkpoint mới nhất: full API suite 529 pass, 6 skip;
-typecheck/build đạt.
+`cancelled`, nhưng không cộng stock hoặc ghi movement lần hai. Hold online quá
+15 phút đã được worker nhả theo policy đã duyệt; đó không đồng nghĩa tự hủy
+order. Auto-cancel order sau expiry vẫn là policy riêng chưa được bật. Checkpoint
+mới nhất: full API suite 529 pass, 6 skip; typecheck/build đạt.
 
 HTTP lifecycle V2 riêng giữ hai action nội bộ `POST /order/:orderId/confirm`
 và `POST /order/:orderId/cancel`; chưa mount runtime legacy. Cả hai yêu cầu JWT
