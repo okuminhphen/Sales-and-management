@@ -334,7 +334,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     chỉ xem branch được grant; global internal grant mới xem tất cả. Filter
     SQL trước pagination/detail, BIGINT ID và DECIMAL string, order item snapshot.
     Unit 3/3, MySQL `_test` 1/1; API typecheck/build và full suite 491 pass,
-    6 skip. Chưa mount HTTP runtime; legacy/Web contract mapping thuộc T39/T40.
+    6 skip. Đã có HTTP read adapter V2 riêng cho `/order/read`,
+    `/order/read/:userId`, `/order/branch/:branchId`: DTO BIGINT/pagination,
+    envelope legacy, scope DB-derived, MySQL HTTP test và full suite 526 pass,
+    6 skip. Chưa mount runtime; payment/shipment display cần T34/T35 và
+    Web contract mapping thuộc T39/T40.
   - [x] Lát cắt tính tiền checkout: phân bổ voucher theo tỷ trọng dòng hàng
     bằng BigInt/largest remainder, tie-break theo thứ tự dòng chuẩn hóa;
     giá catalog DECIMAL được làm tròn đến đồng trước khi chụp unit price;

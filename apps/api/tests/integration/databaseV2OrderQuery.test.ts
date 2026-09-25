@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import express from "express";
+import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { QueryTypes, Sequelize } from "sequelize";
 import { env } from "../../src/config/env.js";
@@ -6,6 +8,8 @@ import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { OrderQueryV2Service } from "../../src/modules/commerce/application/order-query-v2.service.js";
 import { SequelizeOrderQueryV2Repository } from "../../src/modules/commerce/persistence/order-query-v2.repository.js";
+import { createOrderReadV2Router } from "../../src/modules/commerce/interfaces/http/order-read-v2.routes.js";
+import type { V2AuthenticatedRequest } from "../../src/modules/identity-access/interfaces/http/v2-auth.middleware.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 const runDatabaseV2Tests = process.env.RUN_DATABASE_V2_TESTS === "true";
@@ -100,5 +104,23 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 order read scope on MySQL", ()
         expect(await service.detail(branchStaff, createdIds[0])).toEqual({ kind: "order_not_found" });
         expect((await service.detail(owner, createdIds[2])).kind).toBe("order");
         expect(await service.detail(owner, createdIds[1])).toEqual({ kind: "order_not_found" });
+        const ownerApp = express();
+        ownerApp.use("/api/v1", createOrderReadV2Router({ query: service, auth: (req, _res, next) => {
+            (req as V2AuthenticatedRequest).v2AccessContext = owner;
+            next();
+        } }));
+        const ownerResponse = await request(ownerApp).get("/api/v1/order/read/999?page=1&limit=10");
+        expect(ownerResponse.status).toBe(200);
+        expect(ownerResponse.body.pagination.totalItems).toBe(2);
+        expect(ownerResponse.body.DT.map((row: { id: string }) => row.id).sort())
+            .toEqual([createdIds[0], createdIds[2]].sort());
+        const staffApp = express();
+        staffApp.use("/api/v1", createOrderReadV2Router({ query: service, auth: (req, _res, next) => {
+            (req as V2AuthenticatedRequest).v2AccessContext = branchStaff;
+            next();
+        } }));
+        await request(staffApp).get(`/api/v1/order/branch/${branchIds[0]}`).expect(403);
+        const staffResponse = await request(staffApp).get(`/api/v1/order/branch/${branchIds[1]}`);
+        expect(staffResponse.body.DT.map((row: { id: string }) => row.id)).toEqual([createdIds[1]]);
     });
 });
