@@ -599,9 +599,19 @@ consume từng reservation trước commit; cuối cùng fulfillment là `fulfil
 `order_handover` đã được ghi. Vì vậy không tồn tại pending hold 15 phút sau khi giao dịch tại
 quầy kết thúc; lỗi ở tiền mặt, stock hoặc bất kỳ item nào rollback cả order, payment, hold,
 movement, history và outbox. Retry cùng key/intention chỉ replay order đã có; payload khác
-bị chặn conflict. Hiện chỉ hỗ trợ **một khoản CASH đầy đủ**; QR, split tender, hóa đơn/thiết bị
-POS và endpoint HTTP thuộc lát cắt sau, không được coi client report là bằng chứng đã thu tiền.
+bị chặn conflict. Hiện chỉ hỗ trợ **một khoản CASH đầy đủ**; QR, split tender và hóa đơn/thiết bị
+POS thuộc lát cắt sau, không được coi client report là bằng chứng đã thu tiền.
 Focused unit 2/2 và MySQL `_test` 4/4 (rollback, retry đồng thời và staff deactivation) đạt.
+
+HTTP factory V2 hiện đã nối vào composition router V2 riêng, vẫn **không mount vào runtime
+legacy**. Nó giữ path tương thích `POST /order/in-store`, yêu cầu JWT V2/DB-derived access
+context, DTO `.strict()` chỉ nhận `checkoutKey`, `branchId` và danh sách `variantId/quantity`.
+Mọi field `price`, `totalPrice`, `paymentMethodId`, payment status hoặc field lạ đều trả 400
+trước use-case. Thành công/replay trả envelope cũ `EM/EC/DT.id`; lỗi quyền, input, conflict và
+hạ tầng map thành 403/400/409/503 không lộ chi tiết persistence. Mutation audit chỉ ghi actor,
+order ID, request ID và outcome — không ghi body hay thông tin payment. HTTP contract mock 3/3
+và request qua router với MySQL transaction thật đã đạt; việc mount legacy/Web POS thuộc
+checkpoint cutover T40, không được bật sớm.
 
 Checkout chỉ trừ những số lượng đã mua khỏi giỏ trong chính transaction đó;
 item khác và lượng vừa thêm không bị xóa nhầm. Retry cùng key không trừ giỏ

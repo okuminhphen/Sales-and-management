@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import express from "express";
+import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { QueryTypes, Sequelize } from "sequelize";
 import { env } from "../../src/config/env.js";
@@ -6,11 +8,14 @@ import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { PosCashCheckoutV2Service } from "../../src/modules/commerce/application/pos-cash-checkout-v2.service.js";
 import { SequelizePosCashCheckoutV2Repository } from "../../src/modules/commerce/persistence/pos-cash-checkout-v2.repository.js";
+import { createPosCashCheckoutV2Router } from "../../src/modules/commerce/interfaces/http/pos-cash-checkout-v2.routes.js";
+import type { V2AuthenticatedRequest } from "../../src/modules/identity-access/interfaces/http/v2-auth.middleware.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 POS cash checkout on MySQL", () => {
     let db: Sequelize;
     let service: PosCashCheckoutV2Service;
+    let httpApp: express.Express;
     let actor: V2AccessContext;
     let branchId: string;
     let variantId: string;
@@ -39,6 +44,15 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 POS cash check
         const employeeId = (await one<{ id: string }>("SELECT id FROM employees WHERE account_id = ?", [accountId])).id;
         actor = { accountId, customerId: null, employeeId, grants: [{ roleCode: "SALES_STAFF",
             scope: { type: "branch", branchId }, permissions: ["order.manage.branch"] }] };
+        httpApp = express();
+        httpApp.use(express.json());
+        httpApp.use("/api/v1", createPosCashCheckoutV2Router({
+            auth: (request, _response, next) => {
+                (request as V2AuthenticatedRequest).v2AccessContext = actor;
+                next();
+            },
+            checkout: service,
+        }));
         await db.query("INSERT INTO categories (code, name, slug, created_at, updated_at) VALUES (?, 'POS category', ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [`PC-${suffix}`, `pos-category-${suffix}`] });
         const categoryId = (await one<{ id: string }>("SELECT id FROM categories WHERE code = ?", [`PC-${suffix}`])).id;
         await db.query("INSERT INTO products (category_id, name, slug, base_price, status, created_at, updated_at) VALUES (?, 'POS product', ?, '99.5000', 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [categoryId, `pos-product-${suffix}`] });
@@ -106,5 +120,23 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 POS cash check
             checkoutKey: `pos-cash-inactive-${suffix}`, branchId, items: [{ variantId, quantity: 1 }],
         })).resolves.toEqual({ kind: "checkout_unavailable" });
         await db.query("UPDATE employees SET status = 'active', updated_at = UTC_TIMESTAMP(3) WHERE id = ?", { replacements: [actor.employeeId!] });
+    });
+
+    it("keeps the V2 HTTP legacy envelope while executing the actual MySQL transaction", async () => {
+        const stockBefore = (await one<{ stock: number }>(
+            "SELECT stock FROM inventories WHERE branch_id = ? AND product_variant_id = ?", [branchId, variantId],
+        )).stock;
+        const response = await request(httpApp).post("/api/v1/order/in-store").send({
+            checkoutKey: `pos-http-${suffix}`, branchId, items: [{ variantId, quantity: 1 }],
+        }).expect(200);
+        expect(response.body).toMatchObject({ EM: "Create in-store order successfully", EC: "0",
+            DT: { id: expect.any(String) } });
+        const orderId = response.body.DT.id as string;
+        expect((await one<{ status: string; fulfillmentStatus: string }>(
+            "SELECT status, fulfillment_status AS fulfillmentStatus FROM orders WHERE id = ?", [orderId],
+        ))).toEqual({ status: "completed", fulfillmentStatus: "fulfilled" });
+        expect((await one<{ stock: number }>(
+            "SELECT stock FROM inventories WHERE branch_id = ? AND product_variant_id = ?", [branchId, variantId],
+        )).stock).toBe(stockBefore - 1);
     });
 });

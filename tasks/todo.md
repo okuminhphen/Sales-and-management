@@ -377,7 +377,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     payment vì schema cấm amount 0. Retry cùng intent replay, key/payload khác
     conflict; stock failure, cạnh tranh cùng key và employee bị deactivate đều
     được MySQL `_test` kiểm tra (unit 2/2, MySQL 4/4). QR/split tender, phần cứng
-    POS và HTTP adapter chưa được mở.
+    POS chưa được mở. HTTP factory V2 riêng đã giữ `POST /order/in-store`, auth
+    DB-derived, DTO strict chỉ có checkout key/branch/variant/quantity và audit
+    không log body/payment; `price`, `totalPrice`, method/status payment hay field
+    lạ bị reject trước use-case. Nó đã được compose trong `order-v2.ts` riêng,
+    tuyệt đối chưa mount runtime legacy. Mock HTTP 3/3 và request HTTP qua MySQL
+    transaction thật đạt. QR/split tender và phần cứng POS vẫn chưa có.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
     Lát confirm online pickup nội bộ đã yêu cầu completed payments đủ total
@@ -404,7 +409,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     API typecheck/build và full suite MySQL `_test` 522 pass, 6 skip.
     Worker legacy không đổi; chưa kiểm thử giao RabbitMQ thật hoặc bật worker
     V2 mặc định trước cutover.
-  - [ ] HTTP compatibility, checkout delivery, POS HTTP adapter/QR-split tender, handover, MySQL concurrency/
+  - [ ] HTTP compatibility (mount/cutover), checkout delivery, POS QR-split tender, handover, MySQL concurrency/
     error-path và full regression trước khi đóng T33.
 - [ ] T34 — Payment method/payment/webhook V2. Theo điều chỉnh thứ tự được
   người dùng duyệt ngày 2026-09-25, làm foundation payment trước khi đóng T33;
