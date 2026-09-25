@@ -19,6 +19,7 @@ const order: OrderSummary = { id: serializeEntityId("9223372036854775807"), code
     discountAmount: serializeMoney("10.0000"), shippingFee: serializeMoney("0.0000"),
     totalAmount: serializeMoney("90.0000"),
     customerName: "Nguyen A", customerEmail: null, customerPhone: "0900000000",
+    shipment: null,
     placedAt: "2026-09-25T00:00:00.000Z", items: [{ id: serializeEntityId("12"),
         productId: serializeEntityId("7"), skuSnapshot: "SKU-1", imageSnapshot: ["/snapshot.jpg"],
         productNameSnapshot: "Áo", sizeNameSnapshot: "M", quantity: 1,

@@ -61,14 +61,15 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 order read scope on MySQL", ()
             const key = `order-query-${index}-${suffix}`;
             const customerId = customerIds[index === 2 ? 0 : index];
             const branchId = branchIds[index === 1 ? 1 : 0];
+            const fulfillmentType = index === 2 ? "delivery" : "store_pickup";
             await sequelize.query(
                 `INSERT INTO orders (code, checkout_key, customer_id, fulfillment_branch_id,
                     channel, fulfillment_type, fulfillment_status, status, currency,
                     subtotal_amount, discount_amount, shipping_fee, total_amount,
                     customer_name, placed_at, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, 'online', 'store_pickup', 'unfulfilled', 'pending', 'VND',
+                 VALUES (?, ?, ?, ?, 'online', ?, 'unfulfilled', 'pending', 'VND',
                     '25.0000', '0.0000', '0.0000', '25.0000', ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`,
-                { replacements: [key, key, customerId, branchId, `Buyer ${index}`] },
+                { replacements: [key, key, customerId, branchId, fulfillmentType, `Buyer ${index}`] },
             );
             const orderId = (await one<{ id: string }>("SELECT id FROM orders WHERE checkout_key = ?", [key])).id;
             createdIds.push(orderId);
@@ -81,6 +82,15 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 order read scope on MySQL", ()
                 { replacements: [orderId, `SKU-${index}-${suffix}`, JSON.stringify([`/snapshot-${index}.jpg`])] },
             );
         }
+        await sequelize.query(
+            `INSERT INTO shipments (order_id, provider, provider_request_key, tracking_number,
+                recipient_name, recipient_phone, shipping_address, status, carrier_fee, cod_amount,
+                created_at, updated_at)
+             VALUES (?, 'test-carrier', ?, 'TRACK-ORDER-QUERY', 'Recipient', '0900000000',
+                'Private delivery address', 'shipping', '12.0000', '25.0000',
+                UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`,
+            { replacements: [createdIds[2], `shipment-order-query-${suffix}`] },
+        );
         const owner: V2AccessContext = {
             accountId: "1", customerId: customerIds[0]!, employeeId: null,
             grants: [{ roleCode: "CUSTOMER", scope: { type: "global" }, permissions: ["order.read.own"] }],
@@ -99,6 +109,10 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 order read scope on MySQL", ()
         expect(ownPage.page.orders[0]?.items[0]).toMatchObject({ productId: null,
             imageSnapshot: ["/snapshot-2.jpg"] });
         expect(ownPage.page.orders[0]?.totalAmount).toBe("25.0000");
+        expect(ownPage.page.orders[0]).toMatchObject({ shipment: {
+            provider: "test-carrier", status: "shipping", trackingNumber: "TRACK-ORDER-QUERY",
+            codAmount: "25.0000", shippedAt: null, deliveredAt: null, returnedAt: null,
+        } });
         const branchPage = await service.listBranch(branchStaff, branchIds[1], 1, 10);
         expect(branchPage.kind).toBe("orders");
         if (branchPage.kind !== "orders") throw new Error("Expected branch orders.");
@@ -119,6 +133,11 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 order read scope on MySQL", ()
             .toEqual([createdIds[0], createdIds[2]].sort());
         const ownDetailResponse = await request(ownerApp).get(`/api/v1/order/${createdIds[2]}`);
         expect(ownDetailResponse.body.DT.id).toBe(createdIds[2]);
+        expect(ownDetailResponse.body.DT.shipment).toMatchObject({ status: "shipping",
+            trackingNumber: "TRACK-ORDER-QUERY", codAmount: "25.0000" });
+        expect(ownDetailResponse.body.DT.shipment).not.toHaveProperty("providerRequestKey");
+        expect(ownDetailResponse.body.DT.shipment).not.toHaveProperty("carrierFee");
+        expect(ownDetailResponse.body.DT.shipment).not.toHaveProperty("shippingAddress");
         await request(ownerApp).get(`/api/v1/order/${createdIds[1]}`).expect(404);
         const staffApp = express();
         staffApp.use("/api/v1", createOrderReadV2Router({ query: service, auth: (req, _res, next) => {

@@ -4,7 +4,7 @@ import {
     serializeDatabaseEntityId, serializeMoney, type EntityId,
 } from "../../../shared/contracts/database-scalars.js";
 import type {
-    OrderPage, OrderQueryV2Repository, OrderReadScope, OrderSummary,
+    OrderPage, OrderQueryV2Repository, OrderReadScope, OrderSummary, ShipmentSummary,
 } from "../application/order-query-v2.service.js";
 
 type OrderRow = {
@@ -20,8 +20,20 @@ type ItemRow = {
     quantity: number; unitPrice: string;
     discountAmount: string; lineTotal: string;
 };
+type ShipmentRow = {
+    id: unknown; orderId: unknown; provider: string; status: string; trackingNumber: string | null;
+    codAmount: string; shippedAt: Date | string | null; deliveredAt: Date | string | null;
+    returnedAt: Date | string | null;
+};
 
 const timestamp = (value: Date | string): string => new Date(value).toISOString();
+const timestampOrNull = (value: Date | string | null): string | null => value === null ? null : timestamp(value);
+const shipmentStatus = (value: string): ShipmentSummary["status"] => {
+    if (["pending", "booked", "shipping", "delivered", "failed", "returning", "returned", "cancelled"].includes(value)) {
+        return value as ShipmentSummary["status"];
+    }
+    throw new Error("Invalid shipment status.");
+};
 
 /** Scope stays in the SQL WHERE clause, before LIMIT/OFFSET or detail lookup. */
 export class SequelizeOrderQueryV2Repository implements OrderQueryV2Repository {
@@ -91,6 +103,13 @@ export class SequelizeOrderQueryV2Repository implements OrderQueryV2Repository {
              WHERE order_id IN (${orderIds.map(() => "?").join(", ")}) ORDER BY id ASC`,
             { replacements: orderIds, type: QueryTypes.SELECT },
         );
+        const shipments = await this.persistence.sequelize.query<ShipmentRow>(
+            `SELECT id, order_id AS orderId, provider, status, tracking_number AS trackingNumber,
+                    cod_amount AS codAmount, shipped_at AS shippedAt, delivered_at AS deliveredAt,
+                    returned_at AS returnedAt
+             FROM shipments WHERE order_id IN (${orderIds.map(() => "?").join(", ")})`,
+            { replacements: orderIds, type: QueryTypes.SELECT },
+        );
         const itemsByOrder = new Map<EntityId, OrderSummary["items"][number][]>();
         for (const item of items) {
             const orderId = serializeDatabaseEntityId(item.orderId);
@@ -103,6 +122,17 @@ export class SequelizeOrderQueryV2Repository implements OrderQueryV2Repository {
                 quantity: item.quantity, unitPrice: serializeMoney(item.unitPrice),
                 discountAmount: serializeMoney(item.discountAmount), lineTotal: serializeMoney(item.lineTotal) });
             itemsByOrder.set(orderId, values);
+        }
+        const shipmentByOrder = new Map<EntityId, ShipmentSummary>();
+        for (const shipment of shipments) {
+            const orderId = serializeDatabaseEntityId(shipment.orderId);
+            if (shipmentByOrder.has(orderId)) throw new Error("Duplicate shipment for order.");
+            shipmentByOrder.set(orderId, {
+                id: serializeDatabaseEntityId(shipment.id), provider: shipment.provider,
+                status: shipmentStatus(shipment.status), trackingNumber: shipment.trackingNumber,
+                codAmount: serializeMoney(shipment.codAmount), shippedAt: timestampOrNull(shipment.shippedAt),
+                deliveredAt: timestampOrNull(shipment.deliveredAt), returnedAt: timestampOrNull(shipment.returnedAt),
+            });
         }
         return rows.map((row) => {
             if (row.channel !== "online" && row.channel !== "in_store") throw new Error("Invalid order channel.");
@@ -119,6 +149,7 @@ export class SequelizeOrderQueryV2Repository implements OrderQueryV2Repository {
                 shippingFee: serializeMoney(row.shippingFee), totalAmount: serializeMoney(row.totalAmount),
                 customerName: row.customerName, customerEmail: row.customerEmail,
                 customerPhone: row.customerPhone, placedAt: timestamp(row.placedAt),
+                shipment: shipmentByOrder.get(id) ?? null,
                 items: itemsByOrder.get(id) ?? [] };
         });
     }

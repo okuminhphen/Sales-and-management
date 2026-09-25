@@ -641,6 +641,21 @@ chưa bật trong Compose và chưa kiểm chứng publish tới RabbitMQ thật
 unit fake broker và integration MySQL `_test`.
 API typecheck/build và full suite 522 pass, 6 skip tại checkpoint này.
 
+## Shipment read V2 — T35 foundation
+
+Order read V2 lấy shipment theo một query cho toàn bộ trang đơn (không tạo N+1).
+Response chỉ trả dữ liệu cần theo dõi đơn: `id`, provider, status, tracking number,
+COD còn cần thu và các mốc vận hành. Không select/serialize `provider_request_key`,
+provider order ID, snapshot địa chỉ/số điện thoại người nhận hoặc `carrier_fee`, vì đó
+là khóa nội bộ, PII hoặc chi phí nội bộ. Phạm vi quyền vẫn lấy từ access context V2
+đã kiểm tra ở query order: customer chỉ thấy đơn của mình, nhân viên chỉ thấy branch
+được cấp quyền. Pickup/POS không có shipment trả `null`.
+
+MySQL integration tạo delivery shipment thật và HTTP compatibility test kiểm tra
+serialization an toàn. Focused test 5/5, API typecheck/build và toàn bộ API suite
+539 pass, 6 skip đạt. Slice này chưa tạo shipment lúc checkout, chưa book carrier,
+callback hoặc state transition; tất cả vẫn chưa mount runtime legacy.
+
 ## Payment method V2 — T34 foundation
 
 Adapter `GET /payment-methods` V2 giữ đường dẫn và envelope `EM/EC/DT` hiện hữu,

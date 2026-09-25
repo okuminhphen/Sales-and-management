@@ -416,6 +416,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 - [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
   Làm foundation shipment cần cho T33 trước, giữ những policy return/refund còn
   mở ở trạng thái fail-closed; quay lại T33 khi dependency đã có test MySQL.
+  - [x] Shipment read model trên order V2: batch query theo trang, BIGINT/DECIMAL
+    string và shipment `null` cho pickup/POS. Chỉ serialize provider/status/tracking,
+    COD và timestamp; không lộ provider request key, provider order ID, recipient
+    snapshot hoặc carrier fee. Scope tiếp tục lấy từ order/access context V2.
+    MySQL delivery fixture và HTTP contract test đạt; API typecheck/build và full
+    suite 539 pass, 6 skip. Chưa tạo shipment checkout, carrier booking/callback/
+    state transition hoặc mount runtime.
 - [ ] T36 — Conversation/message state và Socket contract V2.
 - [ ] T37 — Notification/behavior/chat proxy identity V2.
   - Acceptance cho T21–T37: route/envelope hiện hữu giữ tối đa; actor/scope từ JWT+DB; DTO Zod đầy đủ; mỗi slice có RED test và real-DB integration test.

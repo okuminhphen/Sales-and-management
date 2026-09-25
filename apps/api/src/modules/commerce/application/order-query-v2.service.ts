@@ -6,12 +6,19 @@ import {
 } from "../../../shared/contracts/database-scalars.js";
 
 export type OrderReadScope = { customerId: EntityId | null; branchIds: readonly EntityId[] | null };
+export type ShipmentSummary = {
+    id: EntityId; provider: string; status: "pending" | "booked" | "shipping" | "delivered"
+        | "failed" | "returning" | "returned" | "cancelled";
+    trackingNumber: string | null; codAmount: Money;
+    shippedAt: string | null; deliveredAt: string | null; returnedAt: string | null;
+};
 export type OrderSummary = {
     id: EntityId; code: string; customerId: EntityId | null; fulfillmentBranchId: EntityId;
     channel: "online" | "in_store"; fulfillmentType: "delivery" | "store_pickup" | "carry_out";
     fulfillmentStatus: string; status: string; subtotalAmount: Money; discountAmount: Money;
     shippingFee: Money; totalAmount: Money; customerName: string | null;
     customerEmail: string | null; customerPhone: string | null; placedAt: string;
+    shipment: ShipmentSummary | null;
     items: readonly { id: EntityId; productId: EntityId | null; skuSnapshot: string;
         productNameSnapshot: string; sizeNameSnapshot: string; imageSnapshot: unknown | null;
         quantity: number; unitPrice: Money;
