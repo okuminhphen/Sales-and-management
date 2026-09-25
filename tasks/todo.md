@@ -335,6 +335,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     SQL trước pagination/detail, BIGINT ID và DECIMAL string, order item snapshot.
     Unit 3/3, MySQL `_test` 1/1; API typecheck/build và full suite 491 pass,
     6 skip. Chưa mount HTTP runtime; legacy/Web contract mapping thuộc T39/T40.
+  - [x] Lát cắt tính tiền checkout: phân bổ voucher theo tỷ trọng dòng hàng
+    bằng BigInt/largest remainder, tie-break theo thứ tự dòng chuẩn hóa;
+    không nhận tiền lẻ dưới 1 VND hoặc vượt DECIMAL(19,4). Unit 6/6.
+    API typecheck/build và full suite MySQL `_test` 498 pass, 6 skip.
+    Chưa tạo order/hold và chưa mount runtime.
   - [ ] Checkout idempotent, giá/discount snapshot, phân bổ discount từng item;
     claim voucher T32 + reserve inventory T29 trong một outer transaction.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,

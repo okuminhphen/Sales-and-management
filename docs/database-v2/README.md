@@ -553,6 +553,15 @@ Checkout, status/history, voucher/inventory transaction và outbox của T33 v�
 chưa hoàn thành. Không dùng read slice này làm bằng chứng rằng luồng đặt hàng
 V2 đã sẵn sàng chạy end-to-end.
 
+Lát cắt pricing nội bộ đã phân bổ discount voucher theo tỷ trọng giá trị từng
+dòng bằng BigInt, làm tròn theo largest remainder và chia phần dư theo thứ tự
+dòng đầu vào đã chuẩn hóa. Tổng `order_items.discount_amount` bằng đúng discount
+của order; từng `line_total` là giá snapshot nhân số lượng trừ discount dòng.
+Chỉ nhận số VND nguyên và kiểm tra giới hạn DECIMAL(19,4). Unit 6/6 đạt;
+API typecheck/build và full suite MySQL `_test` 498 pass, 6 skip.
+Checkout transaction/HTTP chưa được nối. Thời hạn giữ hàng là policy còn mở
+trong spec, không tự đặt TTL production khi triển khai checkout.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
