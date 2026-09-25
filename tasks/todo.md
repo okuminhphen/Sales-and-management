@@ -406,6 +406,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [ ] Tạo payment attempt/VNPay request an toàn với amount từ order và
     merchant reference ổn định; xử lý callback đã xác minh, idempotent và
     không đảo completed về failed. Integration/concurrency trên MySQL `_test`.
+    Primitive reserve attempt VNPay nội bộ đã có: order/method/payment locks,
+    DECIMAL BigInt, request key ổn định, owner từ V2 context, active hold
+    còn hạn và method active cho attempt mới. Retry cùng key được replay cả
+    khi method đã tắt; không tạo thêm attempt khi số tiền còn lại đã được
+    giữ/thu. MySQL test 6/6 gồm cạnh tranh khi tắt method (RED→GREEN),
+    typecheck/build và full API suite 539 pass, 6 skip. Chưa có URL, callback,
+    reconcile hoặc HTTP adapter nên mục này vẫn mở và primitive chưa mount.
 - [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
   Làm foundation shipment cần cho T33 trước, giữ những policy return/refund còn
   mở ở trạng thái fail-closed; quay lại T33 khi dependency đã có test MySQL.

@@ -653,6 +653,21 @@ transition V2; không coi lát đọc này là hoàn thành T34.
 Focused MySQL HTTP test 2/2, API typecheck/build và full suite 533 pass,
 6 skip.
 
+Primitive nội bộ VNPay attempt khóa order, payment method rồi payment, lấy customer từ V2
+access context và đối chiếu owner/channel/status trong MySQL. Nó tính số còn
+phải thu từ `total_amount` trừ tổng payment `pending/processing/completed`
+bằng BigInt trên DECIMAL(19,4); `merchant_reference = vnpay:<orderId>:<requestKey>`
+ổn định qua retry. Một order không có đủ active hold chưa hết hạn sẽ bị từ chối
+trước khi tạo attempt. Retry cùng key đọc lại attempt kể cả method vừa bị
+deactivate; attempt mới cần method active. Method row được đọc `FOR SHARE`
+để việc tắt VNPay đồng thời không tạo attempt dựa trên trạng thái cũ mà
+không tuần tự hóa mọi đơn thanh toán. Test
+MySQL kiểm tra replay, tranh cùng order, tranh với thao tác tắt VNPay,
+partial payment, ownership, hold thiếu/hết hạn và không vượt hạn mức.
+Primitive chưa tạo URL, gọi provider, xử lý callback hoặc reconcile attempt
+pending; tuyệt đối chưa mount để nhận traffic production. Focused MySQL
+6/6 và toàn bộ API suite 539 pass, 6 skip; typecheck/build đạt.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
