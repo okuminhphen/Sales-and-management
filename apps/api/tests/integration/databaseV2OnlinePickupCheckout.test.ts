@@ -131,6 +131,41 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
         expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM orders WHERE checkout_key = ?", [key])).n)).toBe(0);
     });
 
+    it("rolls back an earlier item hold when a later checkout item has no available stock", async () => {
+        const firstSize = `OC-PARTIAL-A-${suffix}`;
+        const secondSize = `OC-PARTIAL-B-${suffix}`;
+        await db.query("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)), (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [firstSize, secondSize] });
+        const firstSizeId = (await one<{ id: string }>("SELECT id FROM sizes WHERE name = ?", [firstSize])).id;
+        const secondSizeId = (await one<{ id: string }>("SELECT id FROM sizes WHERE name = ?", [secondSize])).id;
+        const productId = (await one<{ id: string }>("SELECT product_id AS id FROM product_variants WHERE id = ?", [variantId])).id;
+        const firstSku = `OC-PARTIAL-A-${suffix}`;
+        const secondSku = `OC-PARTIAL-B-${suffix}`;
+        await db.query(`INSERT INTO product_variants (product_id, size_id, sku, status, created_at, updated_at)
+            VALUES (?, ?, ?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)),
+                   (?, ?, ?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`, {
+            replacements: [productId, firstSizeId, firstSku, productId, secondSizeId, secondSku],
+        });
+        const firstVariantId = (await one<{ id: string }>("SELECT id FROM product_variants WHERE sku = ?", [firstSku])).id;
+        const secondVariantId = (await one<{ id: string }>("SELECT id FROM product_variants WHERE sku = ?", [secondSku])).id;
+        await db.query(`INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at)
+            VALUES (?, ?, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)),
+                   (?, ?, 0, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`, {
+            replacements: [branchId, firstVariantId, branchId, secondVariantId],
+        });
+        const key = `checkout-partial-stock-${suffix}`;
+        const result = await service.checkoutOnlinePickup(actor, { checkoutKey: key, branchId,
+            items: [{ variantId: firstVariantId, quantity: 1 }, { variantId: secondVariantId, quantity: 1 }],
+            recipientName: "Nguyen A", recipientPhone: "0900000000", voucherCode });
+        expect(result).toEqual({ kind: "insufficient_stock" });
+        expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM orders WHERE checkout_key = ?", [key])).n)).toBe(0);
+        expect(Number((await one<{ n: string }>(`SELECT COUNT(*) AS n FROM inventory_reservations r
+            JOIN inventories i ON i.id = r.inventory_id WHERE i.product_variant_id IN (?, ?)`,
+        [firstVariantId, secondVariantId])).n)).toBe(0);
+        expect((await one<{ stock: number }>("SELECT stock FROM inventories WHERE branch_id = ? AND product_variant_id = ?",
+            [branchId, firstVariantId])).stock).toBe(1);
+    });
+
     it("consumes only purchased quantities from the buyer cart atomically and only once", async () => {
         const sizeName = `OC-CART-${suffix}`;
         await db.query("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [sizeName] });
