@@ -208,6 +208,39 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
         expect(Number(createdCount.n)).toBe(1);
     });
 
+    it("replays two concurrent requests with the same checkout key without duplicate holds or cart consumption", async () => {
+        const sizeName = `OC-RETRY-${suffix}`;
+        await db.query("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [sizeName] });
+        const sizeId = (await one<{ id: string }>("SELECT id FROM sizes WHERE name = ?", [sizeName])).id;
+        const productId = (await one<{ id: string }>("SELECT product_id AS id FROM product_variants WHERE id = ?", [variantId])).id;
+        const sku = `OC-RETRY-${suffix}`;
+        await db.query("INSERT INTO product_variants (product_id, size_id, sku, status, created_at, updated_at) VALUES (?, ?, ?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [productId, sizeId, sku] });
+        const retryVariantId = (await one<{ id: string }>("SELECT id FROM product_variants WHERE sku = ?", [sku])).id;
+        await db.query("INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [branchId, retryVariantId] });
+        await db.query(`INSERT INTO carts (customer_id, created_at, updated_at)
+            VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3)) ON DUPLICATE KEY UPDATE id = id`,
+        { replacements: [actor.customerId] });
+        const cartId = (await one<{ id: string }>("SELECT id FROM carts WHERE customer_id = ?", [actor.customerId])).id;
+        await db.query("INSERT INTO cart_items (cart_id, product_variant_id, quantity, created_at, updated_at) VALUES (?, ?, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [cartId, retryVariantId] });
+        const input = { checkoutKey: `checkout-retry-${suffix}`, branchId,
+            items: [{ variantId: retryVariantId, quantity: 1 }], recipientName: "Nguyen A",
+            recipientPhone: "0900000000", voucherCode: null };
+        const results = await Promise.all([service.checkoutOnlinePickup(actor, input), service.checkoutOnlinePickup(actor, input)]);
+        expect(results.map((result) => result.kind).sort()).toEqual(["created", "replayed"]);
+        const orderId = results.find((result) => result.kind === "created");
+        if (!orderId || !('orderId' in orderId)) throw new Error("Concurrent checkout did not create an order.");
+        expect(Number((await one<{ count: string }>("SELECT COUNT(*) AS count FROM orders WHERE checkout_key = ?", [input.checkoutKey])).count)).toBe(1);
+        expect(Number((await one<{ count: string }>(`SELECT COUNT(*) AS count FROM inventory_reservations WHERE order_item_id IN
+            (SELECT id FROM order_items WHERE order_id = ?)`, [orderId.orderId])).count)).toBe(1);
+        expect(Number((await one<{ count: string }>("SELECT COUNT(*) AS count FROM outbox_events WHERE aggregate_type = 'order' AND aggregate_id = ?",
+            [orderId.orderId])).count)).toBe(1);
+        expect(Number((await one<{ count: string }>("SELECT COUNT(*) AS count FROM cart_items WHERE cart_id = ? AND product_variant_id = ?",
+            [cartId, retryVariantId])).count)).toBe(0);
+    });
+
     it("cancels only after payment attempts are terminal, releasing voucher and hold atomically", async () => {
         const sizeName = `OC-CANCEL-${suffix}`;
         await db.query("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [sizeName] });

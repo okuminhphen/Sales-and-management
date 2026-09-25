@@ -360,6 +360,8 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     khỏi cart (nếu có) trong cùng transaction; dòng khác, lượng vừa thêm và
     retry không bị xóa nhầm. MySQL `_test` kiểm tra partial/full consume,
     rollback và checkout cạnh tranh với cart add. Full suite 523 pass, 6 skip;
+    cùng-key checkout cạnh tranh cũng chỉ tạo một order/hold/outbox và trừ cart
+    một lần (MySQL test chạy lặp 5 lần). Full suite 528 pass, 6 skip;
     chưa mount HTTP; delivery/POS còn lại.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
