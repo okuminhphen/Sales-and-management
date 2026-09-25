@@ -14,7 +14,7 @@ type VoucherRow = {
     id: unknown; code: string; discountType: "fixed" | "percent"; discountValue: string;
     minOrderAmount: string; maxDiscountAmount: string | null;
     usageLimit: number | null; perCustomerLimit: number | null;
-    appliesToChannel: string; branchScope: string; status: string; inWindow: number;
+    appliesToChannel: string; branchScope: string; status: string; inWindow: unknown;
 };
 type RedemptionRow = {
     id: unknown; voucherId: unknown; status: string; discountAmount: string;
@@ -44,16 +44,6 @@ export class SequelizeVoucherClaimV2Repository {
         if (!order || order.status !== "pending" || order.fulfillmentStatus !== "unfulfilled"
             || order.currency !== "VND") return { kind: "order_not_eligible" };
 
-        // The order lock serializes competing codes for the same checkout. A replay must
-        // use the original snapshot even if the current voucher was later deactivated.
-        const prior = (await sql.query<RedemptionRow>(
-            `SELECT id, voucher_id AS voucherId, status, discount_amount AS discountAmount,
-                    voucher_code_snapshot AS voucherCodeSnapshot
-             FROM voucher_redemptions WHERE order_id = ?`,
-            { replacements: [input.orderId], transaction: this.transaction, type: QueryTypes.SELECT },
-        ))[0];
-        if (prior && prior.voucherCodeSnapshot !== input.code) return { kind: "order_already_has_voucher" };
-
         const voucher = (await sql.query<VoucherRow>(
             `SELECT id, code, discount_type AS discountType, discount_value AS discountValue,
                     min_order_amount AS minOrderAmount, max_discount_amount AS maxDiscountAmount,
@@ -65,8 +55,17 @@ export class SequelizeVoucherClaimV2Repository {
         ))[0];
         if (!voucher) return { kind: "voucher_not_eligible" };
         const voucherId = serializeDatabaseEntityId(voucher.id);
+        // Lock order -> voucher -> redemption. The current read also sees a
+        // concurrent committed claim even if checkout has an older snapshot.
+        const prior = (await sql.query<RedemptionRow>(
+            `SELECT id, voucher_id AS voucherId, status, discount_amount AS discountAmount,
+                    voucher_code_snapshot AS voucherCodeSnapshot
+             FROM voucher_redemptions WHERE order_id = ? FOR UPDATE`,
+            { replacements: [input.orderId], transaction: this.transaction, type: QueryTypes.SELECT },
+        ))[0];
         if (prior) {
-            if (serializeDatabaseEntityId(prior.voucherId) !== voucherId || prior.status !== "reserved"
+            if (prior.voucherCodeSnapshot !== input.code
+                || serializeDatabaseEntityId(prior.voucherId) !== voucherId || prior.status !== "reserved"
                 || serializeMoney(prior.discountAmount) !== serializeMoney(order.discountAmount)) {
                 return { kind: "order_already_has_voucher" };
             }
@@ -74,7 +73,9 @@ export class SequelizeVoucherClaimV2Repository {
                 discountAmount: serializeMoney(prior.discountAmount) };
         }
 
-        if (voucher.status !== "active" || !voucher.inWindow
+        // mysql2 may return computed booleans as "0"/"1" with bigNumberStrings.
+        const inWindow = voucher.inWindow === 1 || voucher.inWindow === "1";
+        if (voucher.status !== "active" || !inWindow
             || (voucher.appliesToChannel !== "all" && voucher.appliesToChannel !== order.channel)
             || BigInt(serializeMoney(order.subtotalAmount).replace(".", ""))
                 < BigInt(serializeMoney(voucher.minOrderAmount).replace(".", ""))) {
