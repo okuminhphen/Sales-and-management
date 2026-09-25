@@ -858,6 +858,24 @@ trên portal VNPay. Không dùng browser return hoặc custom webhook header là
 nguồn xác nhận thanh toán. Reconciliation và runtime mount vẫn là việc còn lại
 của T34.
 
+## Web identity contract V2 — T38.1
+
+Web có type độc lập `identity-v2.ts` và parser thuần ở
+`apps/web/src/services/identity-v2.contract.ts`. Parser coi `DT` của API là dữ liệu
+không tin cậy: mọi ID V2 phải là decimal string trong phạm vi `UNSIGNED BIGINT`, nên
+không chấp nhận JavaScript `number` hoặc chuỗi sai định dạng. Điều này tránh mất chính
+xác với ID lớn hơn `Number.MAX_SAFE_INTEGER`.
+
+Customer login bắt buộc `userId` bằng `customerId` và role đúng `CUSTOMER`; backoffice login bắt
+buộc `adminId` bằng `accountId`, role phải nằm trong `roleGrants` và không thể là `CUSTOMER`. Profile cho phép
+`customerId`/`employeeId` là `null`, nhưng vẫn kiểm tra role scope `global` hoặc `branch`
+với `branchId` string. Parser trả `null` khi contract sai để caller fail-closed thay vì
+đưa dữ liệu không đúng vào Redux/UI.
+
+T38.1 **chưa** thay `EntityId` legacy, không ghi session, không đổi giao diện và không gọi router
+V2. Router identity V2 vẫn chưa mount trong runtime legacy; việc nối service/state là lát kế tiếp
+sau khi có integration contract phù hợp.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

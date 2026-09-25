@@ -87,6 +87,19 @@ strict kiểm tra cursor keyset, limit, BIGINT path ID và body rỗng; response
 log content/body/PII. Test HTTP phải chạy với persistence MySQL `_test`, chứng minh
 route chưa mount legacy, strict input, allowlist và ownership/read-state thật.
 
+## T38.1 — web identity contract boundary
+
+Lát đầu T38 chỉ bổ sung type và parser thuần cho response identity V2 ở Web. Mọi BIGINT
+`accountId`/`customerId`/`employeeId`/`branchId` phải là decimal string hợp lệ trong
+`UNSIGNED BIGINT`; không nhận JavaScript `number` để tránh mất chính xác. Parser kiểm tra alias
+compatibility (`userId = customerId`, `adminId = accountId`), nullable profile link và role grant
+scope; customer chỉ nhận role `CUSTOMER`, backoffice reject role đó. Đây là boundary cho dữ liệu API không tin cậy, không
+phải type-cast trực tiếp từ Axios.
+
+Lát này không thay `EntityId` legacy, không ghi session, không đổi Redux/UI, không gọi hoặc mount
+router V2. Việc nối login/profile sau cutover chỉ được làm khi response service, session storage và
+route V2 có contract integration tương ứng; do đó runtime hiện tại không thay đổi.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
