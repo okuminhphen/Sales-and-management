@@ -349,8 +349,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     transactional outbox trong cùng transaction. Checkout key và voucher code
     được canonicalize theo collation MySQL; retry cùng intent replay, payload
     khác bị từ chối. Unit 3/3 và MySQL `_test` 4/4 kiểm tra rollback voucher/
-    tồn kho cùng tranh đơn vị cuối. Chưa mount HTTP; delivery/POS và publisher
-    outbox V2 còn lại.
+    tồn kho cùng tranh đơn vị cuối. Chưa mount HTTP; delivery/POS còn lại.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
     Lát confirm online pickup nội bộ đã yêu cầu completed payments đủ total
@@ -365,8 +364,17 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     store_pickup; CUSTOMER branch grant không thể vượt quyền nội bộ.
     COD/delivery, cancel sau thu tiền và handover
     còn chờ các lát T33/T34/T35 tương ứng.
-  - [ ] Transactional outbox, HTTP compatibility, MySQL concurrency/error-path
-    và full regression trước khi đóng T33.
+  - [x] Publisher V2 opt-in: MySQL `FOR UPDATE SKIP LOCKED` claim và lease
+    fenced bằng attempts; allowlist `catalog.product.*` + ba event order,
+    không nuốt job media cleanup. RabbitMQ confirm + mandatory-return + timeout;
+    sai JSON shape được quarantine, failure retry sau lease 60 giây, tối đa
+    20 attempts. Unit fake broker và MySQL `_test` kiểm tra ACK/NACK,
+    unroutable, claim cạnh tranh, stale worker, pre-commit visibility.
+    API typecheck/build và full suite MySQL `_test` 522 pass, 6 skip.
+    Worker legacy không đổi; chưa kiểm thử giao RabbitMQ thật hoặc bật worker
+    V2 mặc định trước cutover.
+  - [ ] HTTP compatibility, checkout delivery/POS, handover, MySQL concurrency/
+    error-path và full regression trước khi đóng T33.
 - [ ] T34 — Payment method/payment/webhook V2.
 - [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
 - [ ] T36 — Conversation/message state và Socket contract V2.

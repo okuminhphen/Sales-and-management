@@ -572,7 +572,7 @@ history, claim voucher, tạo active hold theo từng item, rồi ghi event
 nào đều rollback toàn bộ. `checkout_key` được lowercase và voucher code uppercase
 trước khi lưu/so sánh để nhất quán MySQL collation; retry cùng intent trả order
 cũ, payload khác trả conflict. Không gọi RabbitMQ trong transaction. Chưa mount
-HTTP V2, chưa làm delivery/POS; publisher outbox V2 còn thuộc phần tiếp theo T33.
+HTTP V2, chưa làm delivery/POS.
 
 Confirm online pickup nội bộ chỉ chấp nhận payment `completed` đủ `total_amount`
 (hoặc đơn 0 đồng), không có refund đang xử lý. Nó khóa order → voucher → payment
@@ -592,6 +592,25 @@ Replay của confirm/cancel chỉ áp dụng cho `store_pickup`; phân quyền b
 loại `CUSTOMER` kể cả khi grant bị cấu hình nhầm. Unit cancellation 2/2,
 MySQL checkout/confirm/cancel 6/6, API typecheck/build và full suite 512 pass,
 6 skip.
+
+Publisher outbox V2 là worker **opt-in**, tách khỏi `outbox:publish` legacy.
+Nó chỉ claim event `catalog.product.upserted/deleted` và
+`commerce.order.created/confirmed/cancelled`; các row `catalog.*.media_*`
+vẫn do worker cleanup riêng xử lý. Claim dưới `FOR UPDATE SKIP LOCKED`, lease
+60 giây và attempts là fencing token để worker cũ không đánh dấu nhầm event
+sau khi worker khác đã reclaim. Publish RabbitMQ yêu cầu broker confirm,
+`mandatory` routing và timeout 15 giây; ACK nhưng không queue nhận vẫn là
+failure. EventId trong body/messageId giữ nguyên qua retry; consumer phải
+deduplicate. Row payload sai shape được quarantine (`attempts=20`), không
+chặn các event phía sau. Sau 20 lần thử thất bại, cần vận hành xem
+`last_error` và quyết định requeue; không tự xóa event.
+
+Chỉ sau khi database V2 và các durable consumer queue tương ứng sẵn sàng mới
+chạy `V2_OUTBOX_PUBLISHER_ENABLED=true` với lệnh
+`npm run outbox:publish:v2 --workspace @sales/api`. Chưa thay worker legacy,
+chưa bật trong Compose và chưa kiểm chứng publish tới RabbitMQ thật; hiện có
+unit fake broker và integration MySQL `_test`.
+API typecheck/build và full suite 522 pass, 6 skip tại checkpoint này.
 
 ## Giới hạn và kiểm thử chung còn lại
 

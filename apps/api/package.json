@@ -23,6 +23,8 @@
     "db:migrate:prod": "node dist/database/migrate.js up",
     "db:seed:prod": "node dist/database/seed.js",
     "outbox:publish": "tsx src/workers/run-outbox-publisher.ts",
+    "outbox:publish:v2": "tsx src/workers/run-outbox-publisher-v2.ts",
+    "outbox:publish:v2:prod": "node dist/workers/run-outbox-publisher-v2.js",
     "banner-media:cleanup": "tsx src/workers/run-banner-media-cleanup.ts",
     "banner-media:cleanup:prod": "node dist/workers/run-banner-media-cleanup.js",
     "inventory-reservation:expire": "tsx src/workers/run-inventory-reservation-expiry.ts",
