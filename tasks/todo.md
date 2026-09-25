@@ -479,6 +479,23 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     replay, pickup/conflict và rollback; API typecheck/build và full suite 542
     pass, 6 skip. Chưa được checkout gọi hoặc mount HTTP.
 - [ ] T36 — Conversation/message state và Socket contract V2.
+  - [x] T36.1 — Nền conversation customer V2: authenticated customer chỉ mở/đọc
+    conversation active của chính mình. Transaction khóa customer để bảo đảm tối
+    đa một conversation chưa đóng; khởi tạo `open/bot` chỉ là persistence baseline,
+    tuyệt đối không gọi AI hay tạo `assistant_runs`. Unit + MySQL `_test`; chưa
+    mount runtime legacy. Unit 3/3 và MySQL 2/2 kiểm tra 5 open đồng thời chỉ
+    tạo một conversation + một `created` event, không tạo AI run; account inactive
+    fail-closed. API typecheck/build đạt.
+  - [ ] T36.2 — Common message/history use case V2: ownership customer, khóa
+    conversation, `seq` tăng đơn điệu, `dedup_key` + SHA-256 request hash,
+    pagination cursor bounded. Retry cùng payload replay; cùng key khác payload
+    conflict; persist trước mọi publish. Unit + MySQL `_test`; chưa gọi Socket/AI.
+  - [ ] T36.3 — HTTP factory V2 riêng: DTO Zod strict, V2 JWT/access context,
+    envelope legacy và audit không body/PII. Factory chỉ dùng test/composition V2,
+    không import hoặc mount vào runtime legacy trước cutover.
+  - [ ] T36.4 — Socket bridge và staff handoff sau khi writer/scope/policy đủ:
+    mỗi command re-authorize, không lấy room membership làm quyền, persist trước
+    emit. Không sửa legacy socket như một hotfix; assistant worker thuộc T37.
 - [ ] T37 — Notification/behavior/chat proxy identity V2.
   - Acceptance cho T21–T37: route/envelope hiện hữu giữ tối đa; actor/scope từ JWT+DB; DTO Zod đầy đủ; mỗi slice có RED test và real-DB integration test.
   - Verify từng task: focused unit/integration + API typecheck; mỗi 2–3 task chạy API build/checkpoint regression.

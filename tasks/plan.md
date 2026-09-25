@@ -23,6 +23,32 @@ schema -> typed persistence -> identity/catalog -> inventory -> commerce/payment
        -> communication/personalization -> web/AI consumers -> cutover/cleanup
 ```
 
+## T36 — lát cắt triển khai hội thoại/message V2
+
+T36 giữ hoàn toàn độc lập với REST và Socket legacy cho đến T40 cutover. Mục tiêu
+là tạo một write-path V2 duy nhất; Socket chỉ là adapter gọi cùng use case, không
+được tự ghi `messages` hoặc dùng membership của Socket room làm quyền truy cập.
+
+1. **T36.1 — nền conversation customer**: repository/application V2 cho customer
+   đã xác thực mở hoặc đọc conversation đang hoạt động của chính mình. Khóa theo
+   customer trong transaction để chỉ có một active conversation; trạng thái khởi
+   tạo `open/bot` chỉ là persistence baseline, không gọi AI hoặc tạo assistant run.
+2. **T36.2 — message/history chung**: customer ownership, transaction khóa
+   conversation, sequence tăng đơn điệu, `dedup_key` + SHA-256 request hash,
+   cursor phân trang có giới hạn. Một payload đổi nội dung nhưng dùng lại key phải
+   fail-closed. Ghi message xong mới trả event nội bộ; chưa publish Socket/AI.
+3. **T36.3 — HTTP V2 không mount**: DTO Zod strict, V2 JWT + DB access context,
+   legacy envelope tương thích và audit không chứa body/PII. Chỉ compose router
+   factory riêng cho test; runtime legacy chưa import/mount nó.
+4. **T36.4 — Socket bridge và staff handoff**: thực hiện sau khi common writer,
+   role scope và handoff policy đủ test. Socket phải re-authorize mỗi command,
+   persist trước emit, không tin room membership. Không sửa Socket legacy trong
+   lát nền này; AI worker/assistant run thuộc T37.
+
+Mỗi lát theo RED → GREEN → refactor, có unit và MySQL `_test` thật. Nếu một policy
+vận hành (handoff, retention, AI availability) chưa được phê duyệt, V2 giữ factory
+unmounted/fail-closed thay vì tự suy đoán hành vi runtime.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
