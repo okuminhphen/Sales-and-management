@@ -338,7 +338,8 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     `/order/read/:userId`, `/order/branch/:branchId`: DTO BIGINT/pagination,
     envelope legacy, scope DB-derived, MySQL HTTP test và full suite 526 pass,
     6 skip. Chưa mount runtime; payment/shipment display cần T34/T35 và
-    Web contract mapping thuộc T39/T40.
+    Web contract mapping thuộc T39/T40. Adapter read lấy thêm product ID và
+    ảnh từ `order_items` snapshot, không phụ thuộc catalog hiện tại.
   - [x] Lát cắt tính tiền checkout: phân bổ voucher theo tỷ trọng dòng hàng
     bằng BigInt/largest remainder, tie-break theo thứ tự dòng chuẩn hóa;
     giá catalog DECIMAL được làm tròn đến đồng trước khi chụp unit price;

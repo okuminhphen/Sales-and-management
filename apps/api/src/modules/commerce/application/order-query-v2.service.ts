@@ -12,8 +12,9 @@ export type OrderSummary = {
     fulfillmentStatus: string; status: string; subtotalAmount: Money; discountAmount: Money;
     shippingFee: Money; totalAmount: Money; customerName: string | null;
     customerEmail: string | null; customerPhone: string | null; placedAt: string;
-    items: readonly { id: EntityId; skuSnapshot: string; productNameSnapshot: string;
-        sizeNameSnapshot: string; quantity: number; unitPrice: Money;
+    items: readonly { id: EntityId; productId: EntityId | null; skuSnapshot: string;
+        productNameSnapshot: string; sizeNameSnapshot: string; imageSnapshot: unknown | null;
+        quantity: number; unitPrice: Money;
         discountAmount: Money; lineTotal: Money }[];
 };
 export type OrderPage = { orders: readonly OrderSummary[]; page: number; limit: number; totalItems: number };

@@ -10,9 +10,9 @@ export type OrderReadDtoV2 = {
     status: string; customerName: string | null; customerEmail: string | null;
     customerPhone: string | null;
     ordersDetails: readonly {
-        id: EntityId; orderId: EntityId; skuSnapshot: string;
+        id: EntityId; orderId: EntityId; productId: EntityId | null; skuSnapshot: string;
         productName: string; productSize: string; quantity: number;
-        priceAtOrder: Money; discountAmount: Money; totalPrice: Money;
+        productImage: unknown | null; priceAtOrder: Money; discountAmount: Money; totalPrice: Money;
     }[];
 };
 

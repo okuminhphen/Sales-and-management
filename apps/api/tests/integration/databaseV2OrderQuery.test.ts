@@ -74,11 +74,11 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 order read scope on MySQL", ()
             createdIds.push(orderId);
             await sequelize.query(
                 `INSERT INTO order_items (order_id, product_id, product_variant_id,
-                    sku_snapshot, product_name_snapshot, size_name_snapshot, unit_price,
+                    sku_snapshot, product_name_snapshot, size_name_snapshot, image_snapshot, unit_price,
                     discount_amount, quantity, line_total, created_at)
-                 VALUES (?, NULL, NULL, ?, 'Snapshot product', 'M', '25.0000', '0.0000', 1,
+                 VALUES (?, NULL, NULL, ?, 'Snapshot product', 'M', ?, '25.0000', '0.0000', 1,
                     '25.0000', UTC_TIMESTAMP(3))`,
-                { replacements: [orderId, `SKU-${index}-${suffix}`] },
+                { replacements: [orderId, `SKU-${index}-${suffix}`, JSON.stringify([`/snapshot-${index}.jpg`])] },
             );
         }
         const owner: V2AccessContext = {
@@ -96,6 +96,8 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 order read scope on MySQL", ()
         expect(ownPage.page.totalItems).toBe(2);
         expect(ownPage.page.orders).toHaveLength(1);
         expect(ownPage.page.orders[0]?.items[0]?.skuSnapshot).toBe(`SKU-2-${suffix}`);
+        expect(ownPage.page.orders[0]?.items[0]).toMatchObject({ productId: null,
+            imageSnapshot: ["/snapshot-2.jpg"] });
         expect(ownPage.page.orders[0]?.totalAmount).toBe("25.0000");
         const branchPage = await service.listBranch(branchStaff, branchIds[1], 1, 10);
         expect(branchPage.kind).toBe("orders");
@@ -112,6 +114,7 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 order read scope on MySQL", ()
         const ownerResponse = await request(ownerApp).get("/api/v1/order/read/999?page=1&limit=10");
         expect(ownerResponse.status).toBe(200);
         expect(ownerResponse.body.pagination.totalItems).toBe(2);
+        expect(ownerResponse.body.DT[0].ordersDetails[0].productImage).toEqual(["/snapshot-2.jpg"]);
         expect(ownerResponse.body.DT.map((row: { id: string }) => row.id).sort())
             .toEqual([createdIds[0], createdIds[2]].sort());
         const staffApp = express();

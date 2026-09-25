@@ -15,8 +15,9 @@ type OrderRow = {
     placedAt: Date | string;
 };
 type ItemRow = {
-    id: unknown; orderId: unknown; skuSnapshot: string; productNameSnapshot: string;
-    sizeNameSnapshot: string; quantity: number; unitPrice: string;
+    id: unknown; orderId: unknown; productId: unknown | null; skuSnapshot: string;
+    productNameSnapshot: string; sizeNameSnapshot: string; imageSnapshotText: string | null;
+    quantity: number; unitPrice: string;
     discountAmount: string; lineTotal: string;
 };
 
@@ -82,9 +83,9 @@ export class SequelizeOrderQueryV2Repository implements OrderQueryV2Repository {
         if (rows.length === 0) return [];
         const orderIds = rows.map((row) => serializeDatabaseEntityId(row.id));
         const items = await this.persistence.sequelize.query<ItemRow>(
-            `SELECT id, order_id AS orderId, sku_snapshot AS skuSnapshot,
+            `SELECT id, order_id AS orderId, product_id AS productId, sku_snapshot AS skuSnapshot,
                     product_name_snapshot AS productNameSnapshot,
-                    size_name_snapshot AS sizeNameSnapshot, quantity,
+                    size_name_snapshot AS sizeNameSnapshot, CAST(image_snapshot AS CHAR) AS imageSnapshotText, quantity,
                     unit_price AS unitPrice, discount_amount AS discountAmount,
                     line_total AS lineTotal FROM order_items
              WHERE order_id IN (${orderIds.map(() => "?").join(", ")}) ORDER BY id ASC`,
@@ -94,8 +95,11 @@ export class SequelizeOrderQueryV2Repository implements OrderQueryV2Repository {
         for (const item of items) {
             const orderId = serializeDatabaseEntityId(item.orderId);
             const values = itemsByOrder.get(orderId) ?? [];
-            values.push({ id: serializeDatabaseEntityId(item.id), skuSnapshot: item.skuSnapshot,
+            values.push({ id: serializeDatabaseEntityId(item.id),
+                productId: item.productId === null ? null : serializeDatabaseEntityId(item.productId),
+                skuSnapshot: item.skuSnapshot,
                 productNameSnapshot: item.productNameSnapshot, sizeNameSnapshot: item.sizeNameSnapshot,
+                imageSnapshot: item.imageSnapshotText === null ? null : JSON.parse(item.imageSnapshotText) as unknown,
                 quantity: item.quantity, unitPrice: serializeMoney(item.unitPrice),
                 discountAmount: serializeMoney(item.discountAmount), lineTotal: serializeMoney(item.lineTotal) });
             itemsByOrder.set(orderId, values);

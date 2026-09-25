@@ -13,7 +13,8 @@ const displayOrder = (order: OrderSummary): OrderReadDtoV2 => ({
     customerName: order.customerName, customerEmail: order.customerEmail,
     customerPhone: order.customerPhone,
     ordersDetails: order.items.map((item) => ({
-        id: item.id, orderId: order.id, skuSnapshot: item.skuSnapshot,
+        id: item.id, orderId: order.id, productId: item.productId,
+        productImage: item.imageSnapshot, skuSnapshot: item.skuSnapshot,
         productName: item.productNameSnapshot, productSize: item.sizeNameSnapshot,
         quantity: item.quantity, priceAtOrder: item.unitPrice,
         discountAmount: item.discountAmount, totalPrice: item.lineTotal,
