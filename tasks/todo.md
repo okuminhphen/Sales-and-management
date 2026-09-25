@@ -344,6 +344,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [ ] Checkout idempotent, giá/discount snapshot, phân bổ discount từng item;
     claim voucher T32 + reserve inventory T29 trong một outer transaction.
     Policy đã chốt: online pending hold 15 phút; POS giữ đến cuối giao dịch.
+    Lát cắt online store pickup nội bộ đã tạo order/item/history snapshot,
+    claim voucher, reserve từng item và ghi `commerce.order.created` vào V2
+    transactional outbox trong cùng transaction. Checkout key và voucher code
+    được canonicalize theo collation MySQL; retry cùng intent replay, payload
+    khác bị từ chối. Unit 3/3 và MySQL `_test` 4/4 kiểm tra rollback voucher/
+    tồn kho cùng tranh đơn vị cuối. Chưa mount HTTP; delivery/POS và publisher
+    outbox V2 còn lại.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
   - [ ] Transactional outbox, HTTP compatibility, MySQL concurrency/error-path

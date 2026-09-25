@@ -16,6 +16,7 @@ const wholeDong = (value: string): bigint => {
 };
 const roundedDong = (value: string): bigint => (scaledMoney(value) + SCALE / 2n) / SCALE;
 const toMoney = (dong: bigint): Money => serializeMoney(`${dong}.0000`);
+export const roundCatalogUnitPriceV2 = (value: string): Money => toMoney(roundedDong(value));
 
 /** Allocate a whole-VND voucher discount by largest remainder; ties follow canonical input order. */
 export const allocateOrderDiscountV2 = (items: readonly PricedLine[], discount: string): Allocation => {

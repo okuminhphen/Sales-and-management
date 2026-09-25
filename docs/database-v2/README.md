@@ -565,6 +565,15 @@ Checkout transaction/HTTP chưa được nối. Người dùng đã chốt onlin
 hàng 15 phút; POS giữ đến khi kết thúc giao dịch tại quầy, không để hold pending
 tồn tại lâu dài. Thời hạn pickup/no-show/COD cancellation vẫn là policy mở.
 
+Lát cắt checkout online `store_pickup` nội bộ hiện dùng một outer transaction:
+kiểm tra account/customer active, chụp product/size/SKU/ảnh/giá, tạo order và
+history, claim voucher, tạo active hold theo từng item, rồi ghi event
+`commerce.order.created` vào `outbox_events`. Bất kỳ voucher hoặc stock failure
+nào đều rollback toàn bộ. `checkout_key` được lowercase và voucher code uppercase
+trước khi lưu/so sánh để nhất quán MySQL collation; retry cùng intent trả order
+cũ, payload khác trả conflict. Không gọi RabbitMQ trong transaction. Chưa mount
+HTTP V2, chưa làm delivery/POS; publisher outbox V2 còn thuộc phần tiếp theo T33.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
