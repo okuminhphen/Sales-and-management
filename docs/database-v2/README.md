@@ -574,6 +574,14 @@ trước khi lưu/so sánh để nhất quán MySQL collation; retry cùng inten
 cũ, payload khác trả conflict. Không gọi RabbitMQ trong transaction. Chưa mount
 HTTP V2, chưa làm delivery/POS; publisher outbox V2 còn thuộc phần tiếp theo T33.
 
+Confirm online pickup nội bộ chỉ chấp nhận payment `completed` đủ `total_amount`
+(hoặc đơn 0 đồng), không có refund đang xử lý. Nó khóa order → voucher → payment
+→ inventory, rồi ghi status/history, redeem voucher, bỏ expiry của toàn bộ hold
+và thêm `commerce.order.confirmed` vào outbox cùng transaction. Hold hết hạn
+làm rollback cả status lẫn voucher. COD/delivery, cancel và bàn giao hàng chưa
+được nối trong lát này. Unit 2/2, MySQL checkout/confirm 4/4, API
+typecheck/build và full suite 508 pass, 6 skip.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

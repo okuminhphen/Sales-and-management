@@ -353,6 +353,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     outbox V2 còn lại.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
+    Lát confirm online pickup nội bộ đã yêu cầu completed payments đủ total
+    hoặc đơn 0 đồng, từ chối refund chưa đóng, rồi đổi status, redeem voucher,
+    confirm toàn bộ hold, ghi history/outbox atomically. Test MySQL kiểm tra
+    chưa thu tiền, hold hết hạn rollback và retry không ghi lặp. Unit 2/2,
+    MySQL checkout/confirm 4/4, API typecheck/build và full suite 508 pass,
+    6 skip. COD/delivery, cancel và handover còn chờ các lát T33/T34/T35
+    tương ứng.
   - [ ] Transactional outbox, HTTP compatibility, MySQL concurrency/error-path
     và full regression trước khi đóng T33.
 - [ ] T34 — Payment method/payment/webhook V2.

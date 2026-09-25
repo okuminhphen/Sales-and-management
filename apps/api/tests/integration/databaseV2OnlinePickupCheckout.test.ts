@@ -6,11 +6,14 @@ import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { OrderCheckoutV2Service } from "../../src/modules/commerce/application/order-checkout-v2.service.js";
 import { SequelizeOrderCheckoutV2Repository } from "../../src/modules/commerce/persistence/order-checkout-v2.repository.js";
+import { OrderConfirmationV2Service } from "../../src/modules/commerce/application/order-confirmation-v2.service.js";
+import { SequelizeOrderConfirmationV2Repository } from "../../src/modules/commerce/persistence/order-confirmation-v2.repository.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup checkout on MySQL", () => {
     let db: Sequelize;
     let service: OrderCheckoutV2Service;
+    let confirmation: OrderConfirmationV2Service;
     let actor: V2AccessContext;
     let branchId: string;
     let variantId: string;
@@ -32,6 +35,8 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
         await db.authenticate();
         service = new OrderCheckoutV2Service({ repository:
             new SequelizeOrderCheckoutV2Repository(createSalesV2Persistence(db)) });
+        confirmation = new OrderConfirmationV2Service({ repository:
+            new SequelizeOrderConfirmationV2Repository(createSalesV2Persistence(db)) });
         const email = `checkout-${suffix}@example.test`;
         await db.query("INSERT INTO accounts (email, status, created_at, updated_at) VALUES (?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [email] });
         const accountId = (await one<{ id: string }>("SELECT id FROM accounts WHERE email = ?", [email])).id;
@@ -77,6 +82,35 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
         expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM inventory_reservations WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)", [first.orderId])).n)).toBe(1);
         expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM voucher_redemptions WHERE order_id = ?", [first.orderId])).n)).toBe(1);
         expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM outbox_events WHERE aggregate_type = 'order' AND aggregate_id = ?", [first.orderId])).n)).toBe(1);
+        const manager: V2AccessContext = { accountId: actor.accountId, customerId: null, employeeId: null,
+            grants: [{ roleCode: "SUPER_ADMIN", scope: { type: "global" }, permissions: ["order.manage.global"] }] };
+        expect(await confirmation.confirm(manager, first.orderId)).toEqual({ kind: "payment_not_settled" });
+        expect((await one<{ status: string }>("SELECT status FROM orders WHERE id = ?", [first.orderId])).status).toBe("pending");
+        await db.query("INSERT INTO payment_methods (code, name, is_active, created_at, updated_at) VALUES (?, 'Test prepaid', 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [`OC-PAY-${suffix}`] });
+        const methodId = (await one<{ id: string }>("SELECT id FROM payment_methods WHERE code = ?", [`OC-PAY-${suffix}`])).id;
+        await db.query(`INSERT INTO payments (order_id, payment_method_id, provider, merchant_reference, amount,
+            status, paid_at, created_at, updated_at) VALUES (?, ?, 'test', ?, '90.0000', 'completed',
+            UTC_TIMESTAMP(3), UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))`,
+        { replacements: [first.orderId, methodId, `OC-PAY-${suffix}`] });
+        await db.query(`UPDATE inventory_reservations SET expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 SECOND
+            WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`,
+        { replacements: [first.orderId] });
+        expect(await confirmation.confirm(manager, first.orderId)).toEqual({ kind: "reservation_expired" });
+        expect((await one<{ status: string }>("SELECT status FROM orders WHERE id = ?", [first.orderId])).status).toBe("pending");
+        expect((await one<{ status: string }>("SELECT status FROM voucher_redemptions WHERE order_id = ?", [first.orderId])).status).toBe("reserved");
+        await db.query(`UPDATE inventory_reservations SET expires_at = UTC_TIMESTAMP(3) + INTERVAL 10 MINUTE
+            WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`,
+        { replacements: [first.orderId] });
+        expect(await confirmation.confirm(manager, first.orderId)).toEqual({ kind: "confirmed", orderId: first.orderId });
+        expect(await confirmation.confirm(manager, first.orderId)).toEqual({ kind: "replayed", orderId: first.orderId });
+        expect((await one<{ status: string }>("SELECT status FROM voucher_redemptions WHERE order_id = ?", [first.orderId])).status).toBe("redeemed");
+        const hold = await one<{ confirmedAt: Date | null; expiresAt: Date | null }>(
+            `SELECT confirmed_at AS confirmedAt, expires_at AS expiresAt FROM inventory_reservations
+             WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`, [first.orderId]);
+        expect(hold.confirmedAt).not.toBeNull();
+        expect(hold.expiresAt).toBeNull();
+        expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM outbox_events WHERE aggregate_type = 'order' AND aggregate_id = ?", [first.orderId])).n)).toBe(2);
     });
 
     it("rolls back order, voucher and event when stock is unavailable", async () => {
