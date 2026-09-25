@@ -59,8 +59,21 @@ describe("V2 order discount allocation", () => {
             .lines).toEqual([{ discountAmount: "0.0000", lineTotal: "0.0000" }]);
     });
 
-    it("rejects fractional VND, invalid quantities, over-discount, and DECIMAL overflow", () => {
-        expect(() => allocateOrderDiscountV2([{ unitPrice: "1.5000", quantity: 1 }], "0.0000")).toThrow();
+    it("rounds a fractional catalog unit price to VND before multiplying quantity", () => {
+        expect(allocateOrderDiscountV2([
+            { unitPrice: "1.5000", quantity: 2 },
+            { unitPrice: "0.4999", quantity: 1 },
+        ], "1.0000")).toEqual({
+            subtotalAmount: "4.0000", discountAmount: "1.0000", totalAmount: "3.0000",
+            lines: [
+                { discountAmount: "1.0000", lineTotal: "3.0000" },
+                { discountAmount: "0.0000", lineTotal: "0.0000" },
+            ],
+        });
+    });
+
+    it("rejects fractional discounts, invalid quantities, over-discount, and DECIMAL overflow", () => {
+        expect(() => allocateOrderDiscountV2([{ unitPrice: "1.0000", quantity: 1 }], "0.5000")).toThrow();
         expect(() => allocateOrderDiscountV2([{ unitPrice: "1.0000", quantity: 0 }], "0.0000")).toThrow();
         expect(() => allocateOrderDiscountV2([{ unitPrice: "1.0000", quantity: 1 }], "2.0000")).toThrow();
         expect(() => allocateOrderDiscountV2([{ unitPrice: "999999999999999.0000", quantity: 2 }], "0.0000")).toThrow();

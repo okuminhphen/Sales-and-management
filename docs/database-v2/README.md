@@ -555,12 +555,15 @@ V2 đã sẵn sàng chạy end-to-end.
 
 Lát cắt pricing nội bộ đã phân bổ discount voucher theo tỷ trọng giá trị từng
 dòng bằng BigInt, làm tròn theo largest remainder và chia phần dư theo thứ tự
-dòng đầu vào đã chuẩn hóa. Tổng `order_items.discount_amount` bằng đúng discount
-của order; từng `line_total` là giá snapshot nhân số lượng trừ discount dòng.
-Chỉ nhận số VND nguyên và kiểm tra giới hạn DECIMAL(19,4). Unit 6/6 đạt;
-API typecheck/build và full suite MySQL `_test` 498 pass, 6 skip.
-Checkout transaction/HTTP chưa được nối. Thời hạn giữ hàng là policy còn mở
-trong spec, không tự đặt TTL production khi triển khai checkout.
+dòng đầu vào đã chuẩn hóa. Giá catalog DECIMAL được làm tròn half-up đến đồng
+theo từng unit trước khi nhân số lượng và chụp vào order item. Tổng
+`order_items.discount_amount` bằng đúng discount của order; từng `line_total`
+là giá snapshot nhân số lượng trừ discount dòng. Discount đầu vào phải là số
+VND nguyên và mọi tổng đều kiểm tra giới hạn DECIMAL(19,4). Unit 7/7,
+API typecheck/build và full suite MySQL `_test` 499 pass, 6 skip.
+Checkout transaction/HTTP chưa được nối. Người dùng đã chốt online pending giữ
+hàng 15 phút; POS giữ đến khi kết thúc giao dịch tại quầy, không để hold pending
+tồn tại lâu dài. Thời hạn pickup/no-show/COD cancellation vẫn là policy mở.
 
 ## Giới hạn và kiểm thử chung còn lại
 
