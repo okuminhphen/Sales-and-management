@@ -554,6 +554,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [x] T39.1 — Scalar/common public catalog boundary: signed BIGINT + canonical DECIMAL parser
     dùng chung, product V2 allowlist và safe HTTP(S) image. Unit Web 16/16 focused đạt; chưa đổi
     `ProductDto`/Axios/UI hoặc mount catalog V2.
+  - [x] T39.2 — Own-cart read response boundary: type/parser thuần validate full success envelope
+    `GET /cart/read/:userId`, item allowlist, pagination và safe catalog image. ID/money giữ string
+    signed BIGINT/DECIMAL(19,4), quantity/page có bound và metadata page nhất quán; payload sai
+    fail-closed. Unit Web focused 12/12 (scalar/catalog/cart) + typecheck đạt; chưa đổi
+    `CartItem`/localStorage/Axios/Redux/UI hay mount cart V2.
 - [ ] T40 — AI MySQL catalog repository dùng products/product_variants V2.
 - [ ] T41 — AI personalization queries dùng customer/behavior V2; không đổi RAG/model.
 - [ ] T42 — Full rehearsal Node + Python + critical smoke flows trên DB V2 test.

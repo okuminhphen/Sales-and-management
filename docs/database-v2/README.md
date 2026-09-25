@@ -898,6 +898,20 @@ money không canonical, ID overflow và URL media unsafe trả `null` để cons
 T39.1 chưa thay `ProductDto` legacy, chưa gọi Axios/router V2 và chưa render UI mới. Catalog V2 vẫn
 độc lập khỏi runtime legacy cho đến checkpoint cutover.
 
+## Web own-cart response contract V2 — T39.2
+
+`apps/web/src/types/cart-v2.ts` và `services/cart-v2.contract.ts` kiểm tra response thành công của
+`GET /cart/read/:userId` trước khi Web có thể lưu hoặc render. Chỉ các field item tương thích
+`id`, `productId`, `productVariantId`, `name`, `price`, `images`, `size`, `quantity` và
+`catalogActive` được map; ID là signed BIGINT string, `price` là `DECIMAL(19,4)` canonical, ảnh
+chỉ HTTP(S) và quantity là integer dương bounded. Pagination phải có `page`, `limit`,
+`totalItems`, `totalPages` hợp lệ và `totalPages = ceil(totalItems / limit)`.
+
+Parser trả `null` khi envelope không thành công hoặc có ID dạng JSON number, money/media/quantity
+không hợp lệ hay metadata mâu thuẫn. Nó dùng chung validator ảnh catalog, nhưng **chưa** đổi
+`CartItem`/localStorage legacy, gọi Axios, ghi Redux hoặc render UI. Router cart V2 vẫn chưa mount;
+không được wire runtime khi URL compatibility còn trùng route legacy.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

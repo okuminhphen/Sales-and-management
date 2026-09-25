@@ -12,7 +12,8 @@ const parseText = (value: unknown, maximum: number): string | null =>
 const parseDescription = (value: unknown): string | null | undefined =>
   value === null ? null : parseText(value, 5_000) ?? undefined;
 
-const parseImage = (value: unknown): V2CatalogImage | null => {
+/** Validates one public image returned by a V2 catalog-backed read model. */
+export const parseV2CatalogImage = (value: unknown): V2CatalogImage | null => {
   if (!isRecord(value)) return null;
   const url = parseText(value.url, 2_000);
   if (!url) return null;
@@ -26,7 +27,7 @@ const parseImage = (value: unknown): V2CatalogImage | null => {
 
 const parseImages = (value: unknown): readonly V2CatalogImage[] | null => {
   if (!Array.isArray(value)) return null;
-  const images = value.map(parseImage);
+  const images = value.map(parseV2CatalogImage);
   return images.every((image): image is V2CatalogImage => image !== null) ? images : null;
 };
 

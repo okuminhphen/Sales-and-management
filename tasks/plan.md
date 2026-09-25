@@ -124,6 +124,20 @@ identity để catalog/cart/order/admin không phụ thuộc chéo module. Publi
 HTTP(S). Nó fail-closed với JSON number, money không canonical, ID ngoài range và media unsafe.
 Lát này chưa đổi `ProductDto` legacy, Axios service hoặc UI; catalog V2 cũng chưa mount runtime.
 
+## T39.2 — web own-cart read response boundary
+
+Web bổ sung contract thuần cho toàn bộ response thành công `GET /cart/read/:userId` V2. Contract
+allowlist từng item (`id`, `productId`, `productVariantId`, `name`, `price`, `images`, `size`,
+`quantity`, `catalogActive`) và metadata phân trang. ID phải là signed BIGINT string, `price` là
+`DECIMAL(19,4)` canonical, ảnh chỉ HTTP(S), quantity là integer dương trong giới hạn MySQL và
+`totalPages` phải nhất quán với `totalItems`/`limit`. Payload sai trả `null` trước khi có thể vào
+state/render.
+
+T39.2 chỉ tái sử dụng validator ảnh public của catalog và thêm type/parser/test Web; không thay
+`CartItem`/localStorage legacy, không gửi request bằng Axios, không ghi Redux và không mount router
+V2. Các route V2 hiện có URL compatibility trùng legacy, nên wiring runtime chỉ được làm ở lát
+cutover có integration contract rõ ràng.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
