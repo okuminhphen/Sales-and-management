@@ -368,6 +368,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     API suite 530 pass, 6 skip; typecheck/build đạt. Ca MySQL nhiều món xác
     minh rollback hold/order khi món sau hết hàng (10/10 focused tests);
     full API suite sau lát T34 đạt 533 pass, 6 skip.
+    HTTP factory V2 riêng hiện giữ `POST /order/create`: V2 JWT/DB-derived customer context,
+    DTO strict chỉ nhận checkout key/branch/contact snapshot/voucher/variant/quantity; mọi
+    `price`, total, payment hay customer ID từ browser bị reject trước use-case. Nó trả envelope
+    cũ `EM/EC/DT.orderId`, audit không log body/PII/payment và được compose trong `order-v2.ts`
+    riêng, tuyệt đối chưa mount legacy. Mock HTTP 3/3 và request HTTP qua MySQL transaction thật
+    đạt; delivery checkout vẫn chưa mở.
     POS cash carry-out nội bộ đã có transaction riêng: chỉ employee active ở đúng
     branch có `order.manage.branch` (hoặc global hợp lệ), không nhận price/amount
     từ browser, dùng payment method server-side `CASH` và thu đủ tổng snapshot.

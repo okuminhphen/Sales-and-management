@@ -1,10 +1,13 @@
 import crypto from "node:crypto";
+import express from "express";
+import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { QueryTypes, Sequelize } from "sequelize";
 import { env } from "../../src/config/env.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
 import { OrderCheckoutV2Service } from "../../src/modules/commerce/application/order-checkout-v2.service.js";
+import { createOnlinePickupCheckoutV2Router } from "../../src/modules/commerce/interfaces/http/online-pickup-checkout-v2.routes.js";
 import { SequelizeOrderCheckoutV2Repository } from "../../src/modules/commerce/persistence/order-checkout-v2.repository.js";
 import { OrderConfirmationV2Service } from "../../src/modules/commerce/application/order-confirmation-v2.service.js";
 import { SequelizeOrderConfirmationV2Repository } from "../../src/modules/commerce/persistence/order-confirmation-v2.repository.js";
@@ -15,10 +18,12 @@ import { SequelizeCartMutationV2Repository } from "../../src/modules/commerce/pe
 import { SequelizeInventoryReservationExpiryV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-reservation-expiry-v2.repository.js";
 import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
+import type { V2AuthenticatedRequest } from "../../src/modules/identity-access/interfaces/http/v2-auth.middleware.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup checkout on MySQL", () => {
     let db: Sequelize;
     let service: OrderCheckoutV2Service;
+    let httpApp: express.Express;
     let confirmation: OrderConfirmationV2Service;
     let cancellation: OrderCancellationV2Service;
     let actor: V2AccessContext;
@@ -52,6 +57,15 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
         await db.query("INSERT INTO customers (account_id, full_name, status, loyalty_points, created_at, updated_at) VALUES (?, 'Checkout test', 'active', 0, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [accountId] });
         const customerId = (await one<{ id: string }>("SELECT id FROM customers WHERE account_id = ?", [accountId])).id;
         actor = { accountId, customerId, employeeId: null, grants: [] };
+        httpApp = express();
+        httpApp.use(express.json());
+        httpApp.use("/api/v1", createOnlinePickupCheckoutV2Router({
+            auth: (request, _response, next) => {
+                (request as V2AuthenticatedRequest).v2AccessContext = actor;
+                next();
+            },
+            checkout: service,
+        }));
         await db.query("INSERT INTO branches (code, name, address, type, created_at, updated_at) VALUES (?, 'Checkout branch', 'Test', 'branch', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [`OC-${suffix}`] });
         branchId = (await one<{ id: string }>("SELECT id FROM branches WHERE code = ?", [`OC-${suffix}`])).id;
         await db.query("INSERT INTO categories (code, name, slug, created_at, updated_at) VALUES (?, 'Checkout category', ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [`OC-${suffix}`, `checkout-category-${suffix}`] });
@@ -379,5 +393,30 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
                 expect(await confirmation.confirm(manager, orderId)).toEqual({ kind: "order_not_pending" });
             }
         }
+    });
+
+    it("keeps the V2 HTTP envelope while executing the actual MySQL checkout transaction", async () => {
+        const sizeName = `OC-HTTP-${suffix}`;
+        await db.query("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [sizeName] });
+        const sizeId = (await one<{ id: string }>("SELECT id FROM sizes WHERE name = ?", [sizeName])).id;
+        const productId = (await one<{ id: string }>("SELECT product_id AS id FROM product_variants WHERE id = ?", [variantId])).id;
+        const sku = `OC-HTTP-${suffix}`;
+        await db.query("INSERT INTO product_variants (product_id, size_id, sku, status, created_at, updated_at) VALUES (?, ?, ?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [productId, sizeId, sku] });
+        const httpVariantId = (await one<{ id: string }>("SELECT id FROM product_variants WHERE sku = ?", [sku])).id;
+        await db.query("INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [branchId, httpVariantId] });
+        const response = await request(httpApp).post("/api/v1/order/create").send({
+            checkoutKey: `checkout-http-${suffix}`, branchId, recipientName: "Nguyen HTTP",
+            recipientPhone: "0901234567", voucherCode: null, items: [{ variantId: httpVariantId, quantity: 1 }],
+        }).expect(200);
+        expect(response.body).toMatchObject({ EM: "Create order successfully", EC: "0",
+            DT: { orderId: expect.any(String) } });
+        const orderId = response.body.DT.orderId as string;
+        expect((await one<{ status: string; fulfillmentStatus: string }>(
+            "SELECT status, fulfillment_status AS fulfillmentStatus FROM orders WHERE id = ?", [orderId],
+        ))).toEqual({ status: "pending", fulfillmentStatus: "unfulfilled" });
+        expect((await one<{ status: string }>(`SELECT status FROM inventory_reservations WHERE order_item_id IN
+            (SELECT id FROM order_items WHERE order_id = ?)`, [orderId]))).toEqual({ status: "active" });
     });
 });

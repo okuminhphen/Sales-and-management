@@ -583,10 +583,20 @@ history, claim voucher, tạo active hold theo từng item, rồi ghi event
 `commerce.order.created` vào `outbox_events`. Bất kỳ voucher hoặc stock failure
 nào đều rollback toàn bộ. `checkout_key` được lowercase và voucher code uppercase
 trước khi lưu/so sánh để nhất quán MySQL collation; retry cùng intent trả order
-cũ, payload khác trả conflict. Không gọi RabbitMQ trong transaction. Chưa mount
-HTTP V2, chưa làm delivery/POS.
+cũ, payload khác trả conflict. Không gọi RabbitMQ trong transaction.
 
-Lát cắt POS tiền mặt nội bộ cũng đã có nhưng **chưa mount HTTP**. Chỉ nhân viên active
+HTTP factory V2 riêng giữ compatibility path `POST /order/create`, nhưng vẫn **không mount
+vào runtime legacy**. Nó bắt buộc JWT V2/access context lấy lại từ DB và DTO `.strict()` chỉ
+nhận checkout key, branch, contact snapshot, voucher code cùng variant/quantity. Browser không
+được gửi giá, tổng tiền, payment state/method hay customer ID; mọi field như vậy bị reject 400
+trước use-case. Thành công/replay trả envelope cũ `EM/EC/DT.orderId`; conflict, stock/voucher
+unavailable và lỗi hạ tầng lần lượt được map 409/503 không lộ persistence. Audit mutation chỉ
+ghi actor, order ID, request ID và outcome, tuyệt đối không ghi contact/body/payment. HTTP mock
+3/3 và một request HTTP chạy transaction MySQL thật đã đạt. Route factory nằm trong composition
+V2 riêng; việc mount legacy/Web checkout chỉ thuộc checkpoint cutover T40. Delivery/POS vẫn
+không được suy đoán hay bật runtime legacy ngoài các lát cắt đã nêu.
+
+Lát cắt POS tiền mặt nội bộ cũng đã có nhưng **chưa mount vào runtime HTTP legacy**. Chỉ nhân viên active
 có quyền `order.manage.branch` trên đúng branch (hoặc global grant hợp lệ) mới tạo được
 đơn `in_store/carry_out`; repository kiểm tra lại employee/account/branch dưới transaction
 để chống thay đổi quyền giữa lúc request chạy. Browser chỉ gửi `checkoutKey`, branch và
