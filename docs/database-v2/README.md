@@ -518,6 +518,27 @@ test đã đạt; HTTP/MySQL integration và hồi quy API đã chạy lại th�
 Web hiện còn giả định ID number và luồng complete không body, cần cập nhật ở
 T39 trước cutover T40.
 
+## Voucher quota V2 — T32 hoàn tất ở primitive nội bộ
+
+T32 thêm phép tính discount VND bằng BigInt, làm tròn đến đồng và giới hạn bởi
+subtotal/max discount. Checkout T33 còn phải phân bổ discount xuống từng
+`order_items`; không dùng phép toán JS Number cho DECIMAL.
+
+Claim voucher chạy trong transaction do checkout sở hữu và khóa theo thứ tự
+`order → voucher → redemption`. Nó kiểm tra khoảng hiệu lực, trạng thái, kênh,
+chi nhánh, minimum subtotal, customer identity khi có giới hạn cá nhân và
+discount snapshot trên order. Quota được đếm từ `reserved + redeemed` dưới
+voucher row lock; `COUNT ... FOR UPDATE` là current read để không dùng snapshot
+MySQL cũ của outer transaction. Selected branch không có assignment bị từ chối.
+Retry cùng order là idempotent; một order không đổi voucher qua đường claim.
+
+Xác nhận order chuyển redemption sang `redeemed`; hủy trước bàn giao chuyển
+`reserved/redeemed` sang `released` và giữ row audit. Return sau bán không tự
+trả quota. Cả hai dùng transaction của order chủ quản, không tự commit riêng.
+T32 chưa tạo route công khai và chưa mount runtime: T33 phải nối claim/redeem/
+release vào các use-case checkout/confirm/cancel. Test unit 4/4, MySQL `_test`
+12/12, API typecheck/build và toàn bộ suite 488 pass, 6 skip.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

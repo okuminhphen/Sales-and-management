@@ -316,7 +316,19 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     Docker Desktop/MySQL `_test` đã chạy lại được: 31/31 test tập trung đạt;
     toàn bộ API suite 472 pass, 6 skip. Typecheck/build và fake-service HTTP
     test đã đạt ở checkpoint code trước đó. Runtime legacy chưa mount V2.
-- [ ] T32 — Voucher claim/release service V2.
+- [x] T32 — Voucher claim/release service V2.
+  - [x] Tính discount VND bằng BigInt, round đến đồng, cap theo subtotal/max;
+    không dùng JS Number cho DECIMAL. Checkout T33 sẽ phân bổ theo từng dòng.
+  - [x] Claim trong outer transaction: khóa order → voucher → redemption, kiểm tra
+    hiệu lực, channel/branch, min subtotal, customer identity, discount snapshot
+    và quota reserved + redeemed. Selected branch rỗng fail-closed; retry cùng
+    order không tạo redemption thứ hai. MySQL current read ngăn snapshot cũ
+    cho phép hai checkout giữ suất cuối.
+  - [x] Redeem khi order confirmed; release khi hủy trước bàn giao, idempotent
+    dưới cùng thứ tự lock. Released row được giữ để audit, không hoàn quota sau
+    bán/return. Unit 4/4 và MySQL integration 12/12 đạt; API typecheck/build,
+    full suite 488 pass, 6 skip. Chưa mount runtime; T33 nối các primitive này
+    vào checkout/cancel/confirm transaction chủ quản.
 - [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
 - [ ] T34 — Payment method/payment/webhook V2.
 - [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
