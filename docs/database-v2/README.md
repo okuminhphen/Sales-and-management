@@ -743,6 +743,26 @@ ownership và giữ audit assignee nguồn) cùng API typecheck/build đều đ�
 suite chạy với migration V2 `_test`: 599 pass, 6 skip; hai integration test hạ tầng
 được skip theo cấu hình, không được tính là chứng nhận Socket/RabbitMQ runtime.
 
+## Notification own-read V2 — T37.1
+
+T37.1 tạo boundary riêng cho notification của **chính account đang active**. Cả
+list, unread count và mark-read đều dùng `recipient_account_id` từ V2 access context;
+không nhận `userId`, role hay recipient từ browser. Query MySQL join lại `accounts`
+với `status = 'active'`, vì vậy account bị inactive nhận danh sách rỗng, unread bằng
+0 và mutation trả not-found thay vì rò rỉ trạng thái notification.
+
+Danh sách newest-first dùng keyset cursor gồm `createdAt` và BIGINT `id`; cursor phải
+đầy đủ cả hai giá trị, giới hạn 1–100 và timestamp UTC canonical. Response chỉ có
+`id`, `type`, `title`, `content`, `readAt`, `createdAt`; cột JSON `data` tuyệt đối
+không đi qua application port. Mark-read thực hiện trong transaction với row lock và
+idempotent (`marked` hoặc `already_read`).
+
+Slice này **không tạo notification**, không dispatch outbox, Socket, email/push, không
+thay route legacy và không mount runtime. Trigger/payload typed/realtime chỉ được mở
+ở lát sau khi policy và contract được duyệt. Kiểm chứng hiện có: unit 3/3, MySQL
+`_test` 2/2 (owner A/B, cursor, raw-data exclusion, unread/read idempotency và inactive
+fail-closed) cùng API typecheck đạt.
+
 ## Shipment read V2 — T35 foundation
 
 Order read V2 lấy shipment theo một query cho toàn bộ trang đơn (không tạo N+1).

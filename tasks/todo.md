@@ -517,6 +517,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
       dùng `SUPER_ADMIN` hoặc membership room legacy thay cho permission/resource
       authorization DB-derived.
 - [ ] T37 — Notification/behavior/chat proxy identity V2.
+  - [x] T37.1 — Notification own-read primitive: account active chỉ đọc/count/mark-read
+    notification có `recipient_account_id` của chính account từ V2 context. Pagination
+    cursor `createdAt` + BIGINT id bounded; response allowlist và không expose raw
+    notification `data`. Không tạo/dispatch notification, không Socket/email/push,
+    không behavior/chat proxy hay runtime mount ở lát này. Có 3 unit tests và 2 MySQL
+    `_test` integration tests cho input cursor bounded, ownership A/B, read idempotent,
+    inactive account fail-closed và không return JSON `data`.
   - Acceptance cho T21–T37: route/envelope hiện hữu giữ tối đa; actor/scope từ JWT+DB; DTO Zod đầy đủ; mỗi slice có RED test và real-DB integration test.
   - Verify từng task: focused unit/integration + API typecheck; mỗi 2–3 task chạy API build/checkpoint regression.
 - [ ] Checkpoint 3 — Existing API critical flows đạt hoàn toàn trên DB V2 test.

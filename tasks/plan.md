@@ -60,6 +60,22 @@ Mỗi lát theo RED → GREEN → refactor, có unit và MySQL `_test` thật. N
 vận hành (handoff, retention, AI availability) chưa được phê duyệt, V2 giữ factory
 unmounted/fail-closed thay vì tự suy đoán hành vi runtime.
 
+## T37.1 — notification recipient primitives V2
+
+Lát đầu T37 chỉ thay ranh giới dữ liệu cho notification sẵn có: account active đọc
+phân trang notification mà `recipient_account_id` đúng account đó, đếm unread và
+đánh dấu đã đọc idempotent. `userId`/role/recipient từ client không được nhận hoặc
+tin cậy; cả query lẫn mutation đều recheck account active trong MySQL. Cursor dùng
+`createdAt` + BIGINT `id` để thứ tự newest-first ổn định và response chỉ trả
+allowlist display (`id`, type, title, content, readAt, createdAt), không trả raw
+`data` JSON khi schema payload chưa được định nghĩa.
+
+Lát này không tạo notification, không phát Socket/email/push, không sửa behavior,
+không thay route legacy và không mount runtime. Trigger từ handoff/order/inventory,
+retention, payload typed, dispatch/outbox và realtime thuộc lát riêng sau khi policy
+được chốt. Kiểm thử cần gồm ownership A/B, cursor bounded, unread/read idempotency
+và account bị inactive fail-closed.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
