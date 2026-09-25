@@ -541,17 +541,21 @@ release vào các use-case checkout/confirm/cancel. Test unit 4/4, MySQL `_test`
 
 ## Order V2 — T33 đang triển khai
 
-Read model đầu tiên trả order và snapshot item với BIGINT ID/DECIMAL string.
+Read model trả order và snapshot item với BIGINT ID/DECIMAL string, gồm cả
+product ID và ảnh đã chụp trên `order_items` thay vì đọc lại catalog hiện tại.
 Quyền đọc lấy từ access context DB-derived: customer chỉ đọc đơn của chính
 mình; nhân viên đọc branch được cấp quyền; chỉ internal global grant được đọc
 toàn bộ. Repository đặt bộ lọc trong SQL trước phân trang và detail, nên đơn
-ngoài phạm vi hiện như không tồn tại. Unit 3/3, MySQL `_test` 1/1, API
-typecheck/build và full suite 491 pass, 6 skip. Đây chưa phải contract HTTP
-đã mount; mapping với Web legacy còn ở T39/T40.
+ngoài phạm vi hiện như không tồn tại. HTTP adapter V2 tách biệt đã có các path
+`/order/read`, `/order/read/:userId`, `/order/branch/:branchId` và
+`/order/:orderId`, với DTO BIGINT/pagination và envelope tương thích tối đa.
+Path `:userId` không cấp quyền theo ID trình duyệt gửi mà dùng customer trong
+access context. Test HTTP và MySQL đã kiểm tra scope; adapter **chưa mount**
+vào runtime legacy. Payment/shipment display chờ T34/T35, còn mapping Web
+legacy thuộc T39/T40.
 
-Checkout, status/history, voucher/inventory transaction và outbox của T33 vẫn
-chưa hoàn thành. Không dùng read slice này làm bằng chứng rằng luồng đặt hàng
-V2 đã sẵn sàng chạy end-to-end.
+Đây vẫn chưa phải luồng đặt hàng V2 chạy end-to-end. Không bật các route V2
+trước cutover khi payment/fulfillment và frontend contract chưa khớp.
 
 Lát cắt pricing nội bộ đã phân bổ discount voucher theo tỷ trọng giá trị từng
 dòng bằng BigInt, làm tròn theo largest remainder và chia phần dư theo thứ tự
@@ -574,6 +578,13 @@ trước khi lưu/so sánh để nhất quán MySQL collation; retry cùng inten
 cũ, payload khác trả conflict. Không gọi RabbitMQ trong transaction. Chưa mount
 HTTP V2, chưa làm delivery/POS.
 
+Checkout chỉ trừ những số lượng đã mua khỏi giỏ trong chính transaction đó;
+item khác và lượng vừa thêm không bị xóa nhầm. Retry cùng key không trừ giỏ
+lần hai. Test MySQL kiểm tra partial/full consume, rollback, cạnh tranh với
+cart add và hai checkout đồng thời cùng key (một order/hold/outbox). Race
+cùng key đã chạy lặp năm lần. Sau lát cắt này full API suite đạt 528 pass,
+6 skip, API typecheck/build đạt; không đồng nghĩa HTTP checkout đã sẵn sàng.
+
 Confirm online pickup nội bộ chỉ chấp nhận payment `completed` đủ `total_amount`
 (hoặc đơn 0 đồng), không có refund đang xử lý. Nó khóa order → voucher → payment
 → inventory, rồi ghi status/history, redeem voucher, bỏ expiry của toàn bộ hold
@@ -592,6 +603,13 @@ Replay của confirm/cancel chỉ áp dụng cho `store_pickup`; phân quyền b
 loại `CUSTOMER` kể cả khi grant bị cấu hình nhầm. Unit cancellation 2/2,
 MySQL checkout/confirm/cancel 6/6, API typecheck/build và full suite 512 pass,
 6 skip.
+
+MySQL regression còn xác minh nhân viên hủy đơn pickup chưa thu tiền sau khi
+worker đã đổi hold thành `expired`: voucher được release, order đổi sang
+`cancelled`, nhưng không cộng stock hoặc ghi movement lần hai. Đây là thao tác
+hủy có chủ đích; hệ thống chưa tự hủy order khi hết 15 phút vì policy đó vẫn
+chờ quyết định. Checkpoint mới nhất: full API suite 529 pass, 6 skip;
+typecheck/build đạt.
 
 Publisher outbox V2 là worker **opt-in**, tách khỏi `outbox:publish` legacy.
 Nó chỉ claim event `catalog.product.upserted/deleted` và

@@ -12,6 +12,8 @@ import { OrderCancellationV2Service } from "../../src/modules/commerce/applicati
 import { SequelizeOrderCancellationV2Repository } from "../../src/modules/commerce/persistence/order-cancellation-v2.repository.js";
 import { CartMutationV2Service } from "../../src/modules/commerce/application/cart-mutation-v2.service.js";
 import { SequelizeCartMutationV2Repository } from "../../src/modules/commerce/persistence/cart-mutation-v2.repository.js";
+import { SequelizeInventoryReservationExpiryV2Repository } from "../../src/modules/inventory-transfer/persistence/inventory-reservation-expiry-v2.repository.js";
+import { serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 import type { V2AccessContext } from "../../src/modules/identity-access/application/access-context.js";
 
 describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup checkout on MySQL", () => {
@@ -285,6 +287,41 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
             [branchId, cancelVariantId])).stock).toBe(1);
         expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM outbox_events WHERE aggregate_type = 'order' AND aggregate_id = ?",
             [checkout.orderId])).n)).toBe(2);
+    });
+
+    it("cancels an unpaid pickup after its hold expired without restoring stock twice", async () => {
+        const sizeName = `OC-EXPIRE-${suffix}`;
+        await db.query("INSERT INTO sizes (name, created_at, updated_at) VALUES (?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))", { replacements: [sizeName] });
+        const sizeId = (await one<{ id: string }>("SELECT id FROM sizes WHERE name = ?", [sizeName])).id;
+        const productId = (await one<{ id: string }>("SELECT product_id AS id FROM product_variants WHERE id = ?", [variantId])).id;
+        const sku = `OC-EXPIRE-${suffix}`;
+        await db.query("INSERT INTO product_variants (product_id, size_id, sku, status, created_at, updated_at) VALUES (?, ?, ?, 'active', UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [productId, sizeId, sku] });
+        const expiringVariantId = (await one<{ id: string }>("SELECT id FROM product_variants WHERE sku = ?", [sku])).id;
+        await db.query("INSERT INTO inventories (branch_id, product_variant_id, stock, created_at, updated_at) VALUES (?, ?, 1, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))",
+            { replacements: [branchId, expiringVariantId] });
+        const checkout = await service.checkoutOnlinePickup(actor, { checkoutKey: `checkout-expire-${suffix}`, branchId,
+            items: [{ variantId: expiringVariantId, quantity: 1 }], recipientName: "Nguyen A",
+            recipientPhone: "0900000000", voucherCode });
+        expect(checkout.kind).toBe("created");
+        if (checkout.kind !== "created") throw new Error("Expiry checkout fixture failed.");
+        const holdId = (await one<{ id: string }>(`SELECT id FROM inventory_reservations WHERE order_item_id IN
+            (SELECT id FROM order_items WHERE order_id = ?)`, [checkout.orderId])).id;
+        await db.query("UPDATE inventory_reservations SET expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 SECOND WHERE id = ?",
+            { replacements: [holdId] });
+        const expiry = new SequelizeInventoryReservationExpiryV2Repository(createSalesV2Persistence(db));
+        expect(await expiry.expireCandidate(serializeEntityId(holdId))).toEqual({ kind: "expired" });
+        const manager: V2AccessContext = { accountId: actor.accountId, customerId: null, employeeId: null,
+            grants: [{ roleCode: "SUPER_ADMIN", scope: { type: "global" }, permissions: ["order.manage.global"] }] };
+        expect(await cancellation.cancel(manager, checkout.orderId, "Giữ hàng quá hạn"))
+            .toEqual({ kind: "cancelled", orderId: checkout.orderId });
+        expect((await one<{ status: string }>("SELECT status FROM orders WHERE id = ?", [checkout.orderId])).status).toBe("cancelled");
+        expect((await one<{ status: string }>("SELECT status FROM voucher_redemptions WHERE order_id = ?", [checkout.orderId])).status).toBe("released");
+        expect((await one<{ status: string }>("SELECT status FROM inventory_reservations WHERE id = ?", [holdId])).status).toBe("expired");
+        expect((await one<{ stock: number }>("SELECT stock FROM inventories WHERE branch_id = ? AND product_variant_id = ?",
+            [branchId, expiringVariantId])).stock).toBe(1);
+        expect(Number((await one<{ count: string }>("SELECT COUNT(*) AS count FROM inventory_movements WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)",
+            [checkout.orderId])).count)).toBe(0);
     });
 
     it("does not report replay for an unsupported delivery order", async () => {

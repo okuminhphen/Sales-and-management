@@ -375,8 +375,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     cùng transaction; processing/completed bị chặn. Unit 2/2, MySQL 2/2,
     API typecheck/build và full suite 512 pass, 6 skip. Replay chỉ cho
     store_pickup; CUSTOMER branch grant không thể vượt quyền nội bộ.
-    COD/delivery, cancel sau thu tiền và handover
-    còn chờ các lát T33/T34/T35 tương ứng.
+    MySQL kiểm tra thêm manual cancellation sau khi expiry worker đã chuyển
+    hold sang `expired`: voucher release, order cancelled, stock và movement
+    không bị cộng/trừ lần hai. Full suite 529 pass, 6 skip, typecheck/build đạt.
+    Không tự động hủy order khi hết 15 phút vì policy này chưa được chốt.
+    COD/delivery, cancel sau thu tiền và handover còn chờ các lát T33/T34/T35.
   - [x] Publisher V2 opt-in: MySQL `FOR UPDATE SKIP LOCKED` claim và lease
     fenced bằng attempts; allowlist `catalog.product.*` + ba event order,
     không nuốt job media cleanup. RabbitMQ confirm + mandatory-return + timeout;
