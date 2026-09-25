@@ -9,11 +9,16 @@ import type {
 type OrderRow = { customerId: unknown | null; branchId: unknown; channel: string; status: string;
     fulfillmentStatus: string; totalAmount: string };
 type PaymentRow = { id: unknown; merchantReference: string; amount: string; status: string;
-    provider: string; methodId: unknown };
+    provider: string; methodId: unknown; createdAt: Date | string };
 const scaled = (value: string): bigint => BigInt(serializeMoney(value).replace(".", ""));
 const moneyFromScaled = (value: bigint): Money => {
     const digits = value.toString().padStart(5, "0");
     return serializeMoney(`${digits.slice(0, -4)}.${digits.slice(-4)}`);
+};
+const serializeCreatedAt = (value: Date | string): Date => {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) throw new TypeError("Payment created_at is invalid.");
+    return date;
 };
 
 /** Owns order -> payment locks and commits the intent before any provider call. */
@@ -49,7 +54,7 @@ export class SequelizeVnPayAttemptV2Repository implements VnPayAttemptV2Reposito
         const merchantReference = `vnpay:${input.orderId}:${input.requestKey}`;
         const payments = await sql.query<PaymentRow>(
             `SELECT id, payment_method_id AS methodId, provider, merchant_reference AS merchantReference,
-                    amount, status FROM payments WHERE order_id = ? ORDER BY id ASC FOR UPDATE`,
+                    amount, status, created_at AS createdAt FROM payments WHERE order_id = ? ORDER BY id ASC FOR UPDATE`,
             { replacements: [input.orderId], transaction, type: QueryTypes.SELECT },
         );
         const existing = payments.find((payment) => payment.merchantReference === merchantReference);
@@ -59,7 +64,7 @@ export class SequelizeVnPayAttemptV2Repository implements VnPayAttemptV2Reposito
             }
             return { kind: "replayed", paymentId: serializeDatabaseEntityId(existing.id), merchantReference,
                 amount: serializeMoney(existing.amount), status: existing.status as Extract<VnPayAttemptV2Result,
-                    { kind: "created" | "replayed" }>["status"] };
+                    { kind: "created" | "replayed" }>["status"], createdAt: serializeCreatedAt(existing.createdAt) };
         }
         if (!(method.isActive === true || method.isActive === 1 || method.isActive === "1")) {
             return { kind: "payment_unavailable" };
@@ -83,8 +88,13 @@ export class SequelizeVnPayAttemptV2Repository implements VnPayAttemptV2Reposito
             { replacements: [input.orderId, methodId, merchantReference, amount],
                 transaction, type: QueryTypes.INSERT },
         );
+        const created = (await sql.query<{ createdAt: Date | string }>(
+            "SELECT created_at AS createdAt FROM payments WHERE id = ? FOR SHARE",
+            { replacements: [id], transaction, type: QueryTypes.SELECT },
+        ))[0];
+        if (!created) throw new Error("Created VNPay attempt could not be read.");
         return { kind: "created", paymentId: serializeDatabaseEntityId(id), merchantReference,
-            amount, status: "pending" };
+            amount, status: "pending", createdAt: serializeCreatedAt(created.createdAt) };
     }
 
     private async hasPayableHolds(orderId: string, branchId: string, transaction: Transaction): Promise<boolean> {

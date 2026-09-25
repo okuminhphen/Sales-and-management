@@ -8,7 +8,7 @@ export type ReserveVnPayAttempt = {
 };
 export type VnPayAttemptV2Result =
     | { kind: "created" | "replayed"; paymentId: EntityId; merchantReference: string;
-        amount: Money; status: "pending" | "processing" | "completed" | "failed" | "cancelled" }
+        amount: Money; status: "pending" | "processing" | "completed" | "failed" | "cancelled"; createdAt: Date }
     | { kind: "forbidden" | "order_not_payable" | "payment_in_progress" | "payment_unavailable" };
 export interface VnPayAttemptV2Repository {
     reserve: (input: ReserveVnPayAttempt) => Promise<VnPayAttemptV2Result>;

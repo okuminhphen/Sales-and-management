@@ -685,12 +685,21 @@ bằng BigInt trên DECIMAL(19,4); `merchant_reference = vnpay:<orderId>:<reques
 trước khi tạo attempt. Retry cùng key đọc lại attempt kể cả method vừa bị
 deactivate; attempt mới cần method active. Method row được đọc `FOR SHARE`
 để việc tắt VNPay đồng thời không tạo attempt dựa trên trạng thái cũ mà
-không tuần tự hóa mọi đơn thanh toán. Test
-MySQL kiểm tra replay, tranh cùng order, tranh với thao tác tắt VNPay,
-partial payment, ownership, hold thiếu/hết hạn và không vượt hạn mức.
-Primitive chưa tạo URL, gọi provider, xử lý callback hoặc reconcile attempt
-pending; tuyệt đối chưa mount để nhận traffic production. Focused MySQL
-6/6 và toàn bộ API suite 539 pass, 6 skip; typecheck/build đạt.
+không tuần tự hóa mọi đơn thanh toán. Test MySQL kiểm tra replay, tranh cùng
+order, tranh với thao tác tắt VNPay, partial payment, ownership, hold thiếu/hết
+hạn và không vượt hạn mức.
+
+`VnPayPaymentRequestV2Service` chỉ ký URL sau khi attempt đã được commit: không
+nhận amount từ browser. External reference `vnp_TxnRef = V2<paymentId>` chỉ có
+chữ-số, ngắn hơn giới hạn provider và xác định duy nhất payment attempt; thời
+điểm `created_at` của attempt được dùng lại để retry tạo đúng URL/expiry, không
+tạo giao dịch provider mới. Adapter HMAC-SHA512 canonical-sort, dùng mốc GMT+7,
+chỉ chấp nhận tiền VND nguyên (x100 theo contract VNPay), IP/locale/bank code
+hợp lệ và callback có chữ ký, merchant, reference, amount hợp lệ. Callback mới
+chỉ được parse/xác thực in-memory; chưa ghi `payment_events`, chưa đổi trạng
+thái payment/order, reconcile hoặc mount HTTP. Unit gateway/request 5/5,
+MySQL attempt 6/6, API typecheck/build và full suite 547 pass, 6 skip đạt;
+không gọi VNPay thật hoặc log secret.
 
 ## Giới hạn và kiểm thử chung còn lại
 

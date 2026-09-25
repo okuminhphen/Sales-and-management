@@ -410,9 +410,16 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     DECIMAL BigInt, request key ổn định, owner từ V2 context, active hold
     còn hạn và method active cho attempt mới. Retry cùng key được replay cả
     khi method đã tắt; không tạo thêm attempt khi số tiền còn lại đã được
-    giữ/thu. MySQL test 6/6 gồm cạnh tranh khi tắt method (RED→GREEN),
-    typecheck/build và full API suite 539 pass, 6 skip. Chưa có URL, callback,
-    reconcile hoặc HTTP adapter nên mục này vẫn mở và primitive chưa mount.
+    giữ/thu. MySQL test 6/6 gồm cạnh tranh khi tắt method (RED→GREEN).
+  - [x] Gateway/request primitive VNPay không gọi mạng: URL nhận amount và
+    `created_at` đã persist của payment attempt, đổi tiền nguyên VND sang
+    `vnp_Amount` x100 bằng BigInt; `vnp_TxnRef = V2<paymentId>` ngắn, chỉ
+    chữ-số và ổn định qua retry. HMAC-SHA512 canonical-sort, timezone GMT+7,
+    expiry 15 phút, IP/locale/bank code và callback signature/amount/reference
+    đều fail-closed. Unit 5/5, MySQL attempt 6/6, API typecheck/build và full
+    API suite 547 pass, 6 skip đạt.
+    Chưa có HTTP adapter, callback persistence/idempotency, reconcile hay mount
+    runtime nên mục T34 vẫn mở.
 - [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
   Làm foundation shipment cần cho T33 trước, giữ những policy return/refund còn
   mở ở trạng thái fail-closed; quay lại T33 khi dependency đã có test MySQL.
