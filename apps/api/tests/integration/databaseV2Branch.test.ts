@@ -87,19 +87,18 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 branch aggregate on MySQL", ()
             kind: "branch",
             branch: { address: "3 Updated Integration Street" },
         });
-        // The shared _test database retains rows from prior runs; the new branch
-        // need not be on the first page of a code-sorted directory.
-        const firstPage = await service.list(actor);
-        expect(firstPage).toMatchObject({ kind: "branches", page: { limit: 20 } });
-        if (firstPage.kind !== "branches") return;
-        const pages = [firstPage.page];
-        for (let page = 2; page <= firstPage.page.totalPages; page += 1) {
-            const result = await service.list(actor, { page });
-            expect(result.kind).toBe("branches");
-            if (result.kind !== "branches") return;
-            pages.push(result.page);
-        }
-        expect(pages.flatMap((page) => page.branches)).toEqual(
+        // The shared _test database retains prior rows. Query the one sorted page
+        // containing this fixture instead of linearly fetching every page.
+        const ranks = await sequelize.query<{ total: unknown }>(
+            "SELECT COUNT(*) AS total FROM branches WHERE code <= ?",
+            { replacements: [code], type: QueryTypes.SELECT },
+        );
+        const rank = Number(ranks[0]?.total);
+        expect(Number.isSafeInteger(rank)).toBe(true);
+        const result = await service.list(actor, { page: Math.ceil(rank / 20) });
+        expect(result).toMatchObject({ kind: "branches", page: { limit: 20 } });
+        if (result.kind !== "branches") return;
+        expect(result.page.branches).toEqual(
             expect.arrayContaining([expect.objectContaining({ id: created.branch.id, code })]),
         );
     });
