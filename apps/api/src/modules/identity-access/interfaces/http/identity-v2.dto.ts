@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { v2EntityId as entityId } from "../../../../shared/contracts/v2-entity-id.dto.js";
 
 const password = z.string().min(8).max(128);
 export const registerV2Body = z.object({
@@ -17,7 +18,6 @@ export const backofficeLoginV2Body = z.object({
     password: z.string().min(1).max(128),
 }).strict();
 
-const entityId = z.string().regex(/^[1-9]\d{0,19}$/).pipe(z.string().refine((value) => BigInt(value) <= 18446744073709551615n));
 export const ownCustomerParamsV2 = z.object({ id: entityId }).strict();
 export const ownCustomerUpdateParamsV2 = z.object({ userId: entityId }).strict();
 export const ownCustomerPatchV2 = z.object({

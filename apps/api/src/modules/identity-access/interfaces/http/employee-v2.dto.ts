@@ -1,7 +1,6 @@
 import { z } from "zod";
+import { v2EntityId as entityId } from "../../../../shared/contracts/v2-entity-id.dto.js";
 
-const entityId = z.string().regex(/^[1-9]\d{0,19}$/)
-    .pipe(z.string().refine((value) => BigInt(value) <= 18446744073709551615n));
 const nullableText = (maximum: number) => z.string().trim().min(1).max(maximum).nullable();
 const date = z.string().datetime().transform((value) => new Date(value)).nullable();
 const money = z.string().regex(/^(0|[1-9]\d{0,14})(\.\d{1,4})?$/).nullable();

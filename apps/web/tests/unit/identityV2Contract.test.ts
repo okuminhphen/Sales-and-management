@@ -47,6 +47,17 @@ describe("identity V2 response contract", () => {
     })).toBeNull();
   });
 
+  it("rejects IDs outside the signed MySQL BIGINT schema range", () => {
+    expect(parseV2CustomerSession({
+      token: "signed-token",
+      accountId: "9223372036854775808",
+      customerId: "43",
+      userId: "43",
+      email: "customer@example.com",
+      userRole: { name: "CUSTOMER" },
+    })).toBeNull();
+  });
+
   it("rejects a non-customer role from the customer session boundary", () => {
     expect(parseV2CustomerSession({
       token: "signed-token",

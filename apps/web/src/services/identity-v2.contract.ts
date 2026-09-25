@@ -8,8 +8,8 @@ import type {
   V2RoleScope,
 } from "../types/identity-v2";
 
-const ENTITY_ID_PATTERN = /^[1-9]\d{0,19}$/;
-const MAX_UNSIGNED_BIGINT = 18_446_744_073_709_551_615n;
+const ENTITY_ID_PATTERN = /^[1-9]\d{0,18}$/;
+const MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807n;
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -22,7 +22,7 @@ const parseText = (value: unknown): string | null =>
 /** Rejects numeric and lossy identifiers before a V2 response reaches application state. */
 export const parseV2EntityId = (value: unknown): V2EntityId | null => {
   if (typeof value !== "string" || !ENTITY_ID_PATTERN.test(value)) return null;
-  if (BigInt(value) > MAX_UNSIGNED_BIGINT) return null;
+  if (BigInt(value) > MAX_SIGNED_BIGINT) return null;
   return value as V2EntityId;
 };
 

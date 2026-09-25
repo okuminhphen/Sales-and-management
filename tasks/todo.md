@@ -547,6 +547,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [x] T38.2 — Own-customer profile response boundary: map `userId` -> `customerId` và
     `fullname` -> `fullName` sau strict parsing ID/email/nullable field. Unit Web 9/9 đạt; chưa
     gửi patch, gọi Axios/Redux hay đổi runtime UI.
+  - [x] T38.3 — Signed-BIGINT consistency: thay ba DTO identity-access copy-paste bằng
+    `v2EntityId` chung đúng migration DDL và đưa parser Web về cùng range. Unit API 6/6 + Web
+    10/10 đạt; overflow ID bị chặn trước service/database.
 - [ ] T39 — Web catalog/cart/order/admin contract cho ID string và DECIMAL money.
 - [ ] T40 — AI MySQL catalog repository dùng products/product_variants V2.
 - [ ] T41 — AI personalization queries dùng customer/behavior V2; không đổi RAG/model.

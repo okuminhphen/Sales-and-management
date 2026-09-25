@@ -862,7 +862,7 @@ của T34.
 
 Web có type độc lập `identity-v2.ts` và parser thuần ở
 `apps/web/src/services/identity-v2.contract.ts`. Parser coi `DT` của API là dữ liệu
-không tin cậy: mọi ID V2 phải là decimal string trong phạm vi `UNSIGNED BIGINT`, nên
+không tin cậy: mọi ID V2 phải là decimal string trong phạm vi signed MySQL `BIGINT`, nên
 không chấp nhận JavaScript `number` hoặc chuỗi sai định dạng. Điều này tránh mất chính
 xác với ID lớn hơn `Number.MAX_SAFE_INTEGER`.
 
@@ -877,7 +877,13 @@ Transport trả `userId` và `fullname`; Web chỉ map thành `customerId` và `
 kiểm tra ID, email và các trường nullable `username`/`fullname`/`phone`. Đây không thay thế
 ownership check của API: endpoint vẫn phải lấy customer từ V2 access context/MySQL.
 
-T38.1/T38.2 **chưa** thay `EntityId` legacy, không ghi session, không đổi giao diện và không gọi router
+Migration baseline V2 khai báo entity bằng signed MySQL `BIGINT`, nên range public là
+`1..9223372036854775807`. DTO identity, branch và employee dùng chung
+`apps/api/src/shared/contracts/v2-entity-id.dto.ts`; parser Web cũng áp dụng cùng range.
+Không được dùng `UNSIGNED` range hoặc JSON number ở bất cứ V2 boundary nào, vì sẽ chấp nhận
+request không thể lưu trong schema thật hoặc làm mất độ chính xác.
+
+T38.1/T38.2/T38.3 **chưa** thay `EntityId` legacy, không ghi session, không đổi giao diện và không gọi router
 V2. Router identity V2 vẫn chưa mount trong runtime legacy; việc nối service/state là lát kế tiếp
 sau khi có integration contract phù hợp.
 

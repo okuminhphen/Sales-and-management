@@ -91,7 +91,7 @@ route chưa mount legacy, strict input, allowlist và ownership/read-state thậ
 
 Lát đầu T38 chỉ bổ sung type và parser thuần cho response identity V2 ở Web. Mọi BIGINT
 `accountId`/`customerId`/`employeeId`/`branchId` phải là decimal string hợp lệ trong
-`UNSIGNED BIGINT`; không nhận JavaScript `number` để tránh mất chính xác. Parser kiểm tra alias
+signed MySQL `BIGINT`; không nhận JavaScript `number` để tránh mất chính xác. Parser kiểm tra alias
 compatibility (`userId = customerId`, `adminId = accountId`), nullable profile link và role grant
 scope; customer chỉ nhận role `CUSTOMER`, backoffice reject role đó. Đây là boundary cho dữ liệu API không tin cậy, không
 phải type-cast trực tiếp từ Axios.
@@ -107,6 +107,14 @@ và field transport `fullname`. Web map response này thành aggregate `V2Custom
 `customerId` và `fullName`, chỉ sau khi kiểm tra account/customer ID string, email và từng field
 nullable (`username`, `fullname`, `phone`). Đây chỉ là response mapper; ownership vẫn do access
 context MySQL ở API thực thi. Không nhận patch từ UI, không nối Axios/Redux và không mount runtime.
+
+## T38.3 — thống nhất signed BIGINT ở identity-access HTTP boundary
+
+DDL baseline V2 khai báo tất cả entity ID là MySQL `BIGINT` có dấu, do đó giá trị public hợp lệ là
+`1..9223372036854775807`, không phải range `UNSIGNED`. DTO identity, branch và employee dùng chung
+`v2EntityId` để không còn copy regex/range khác nhau; Web parser dùng cùng policy. Regression test
+kiểm tra cả cực đại hợp lệ và giá trị overflow. Không thay migration/schema hay API path, chỉ chặn
+input vốn không thể lưu trong cột thật.
 
 ## Task list
 
