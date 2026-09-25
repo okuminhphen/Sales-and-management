@@ -872,7 +872,12 @@ buộc `adminId` bằng `accountId`, role phải nằm trong `roleGrants` và kh
 với `branchId` string. Parser trả `null` khi contract sai để caller fail-closed thay vì
 đưa dữ liệu không đúng vào Redux/UI.
 
-T38.1 **chưa** thay `EntityId` legacy, không ghi session, không đổi giao diện và không gọi router
+Own customer profile dùng response compatibility `/user/:id` hoặc `/user/update/:userId`.
+Transport trả `userId` và `fullname`; Web chỉ map thành `customerId` và `fullName` sau khi
+kiểm tra ID, email và các trường nullable `username`/`fullname`/`phone`. Đây không thay thế
+ownership check của API: endpoint vẫn phải lấy customer từ V2 access context/MySQL.
+
+T38.1/T38.2 **chưa** thay `EntityId` legacy, không ghi session, không đổi giao diện và không gọi router
 V2. Router identity V2 vẫn chưa mount trong runtime legacy; việc nối service/state là lát kế tiếp
 sau khi có integration contract phù hợp.
 

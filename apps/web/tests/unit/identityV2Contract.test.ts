@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseV2BackofficeSession,
+  parseV2CustomerProfile,
   parseV2CustomerSession,
   parseV2OwnProfile,
 } from "../../src/services/identity-v2.contract";
@@ -124,5 +125,43 @@ describe("identity V2 response contract", () => {
       employeeId: null,
       roles: [{ roleCode: "INTERNAL", scope: { type: "global" } }],
     });
+  });
+
+  it("keeps an own customer profile on the V2 string ID contract", () => {
+    const profile = parseV2CustomerProfile({
+      userId: "9007199254740993",
+      accountId: "9007199254740992",
+      email: "customer@example.com",
+      username: "customer",
+      fullname: null,
+      phone: null,
+    });
+
+    expect(profile).toMatchObject({
+      customerId: "9007199254740993",
+      accountId: "9007199254740992",
+      fullName: null,
+      phone: null,
+    });
+  });
+
+  it("rejects a lossy customer profile ID or invalid nullable field", () => {
+    expect(parseV2CustomerProfile({
+      userId: 42,
+      accountId: "7",
+      email: "customer@example.com",
+      username: "customer",
+      fullname: null,
+      phone: null,
+    })).toBeNull();
+
+    expect(parseV2CustomerProfile({
+      userId: "42",
+      accountId: "7",
+      email: "customer@example.com",
+      username: "customer",
+      fullname: null,
+      phone: 123,
+    })).toBeNull();
   });
 });

@@ -39,3 +39,12 @@ export interface V2OwnProfile {
   employeeId: V2EntityId | null;
   roles: readonly V2RoleGrant[];
 }
+
+export interface V2CustomerProfile {
+  accountId: V2EntityId;
+  customerId: V2EntityId;
+  email: string;
+  username: string | null;
+  fullName: string | null;
+  phone: string | null;
+}

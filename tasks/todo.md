@@ -544,6 +544,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [x] T38.1 — Identity response boundary: type V2 tách legacy và parser fail-closed cho
     customer/backoffice session + own profile. BIGINT giữ string chính xác; alias và role/scope
     được kiểm tra trước Redux/UI. Unit Web 7/7 đạt; chưa gọi endpoint/mount hoặc đổi session/UI.
+  - [x] T38.2 — Own-customer profile response boundary: map `userId` -> `customerId` và
+    `fullname` -> `fullName` sau strict parsing ID/email/nullable field. Unit Web 9/9 đạt; chưa
+    gửi patch, gọi Axios/Redux hay đổi runtime UI.
 - [ ] T39 — Web catalog/cart/order/admin contract cho ID string và DECIMAL money.
 - [ ] T40 — AI MySQL catalog repository dùng products/product_variants V2.
 - [ ] T41 — AI personalization queries dùng customer/behavior V2; không đổi RAG/model.

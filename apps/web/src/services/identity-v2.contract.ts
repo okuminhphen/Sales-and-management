@@ -1,5 +1,6 @@
 import type {
   V2BackofficeSession,
+  V2CustomerProfile,
   V2CustomerSession,
   V2EntityId,
   V2OwnProfile,
@@ -27,6 +28,9 @@ export const parseV2EntityId = (value: unknown): V2EntityId | null => {
 
 const parseNullableEntityId = (value: unknown): V2EntityId | null | undefined =>
   value === null ? null : parseV2EntityId(value) ?? undefined;
+
+const parseNullableText = (value: unknown): string | null | undefined =>
+  value === null ? null : parseText(value) ?? undefined;
 
 const parseRoleScope = (value: unknown): V2RoleScope | null => {
   if (!isRecord(value) || typeof value.type !== "string") return null;
@@ -100,4 +104,21 @@ export const parseV2OwnProfile = (value: unknown): V2OwnProfile | null => {
 
   if (!accountId || customerId === undefined || employeeId === undefined || !roles) return null;
   return { accountId, customerId, employeeId, roles };
+};
+
+/** Maps the compatibility `/user/:id` payload into the V2 customer aggregate. */
+export const parseV2CustomerProfile = (value: unknown): V2CustomerProfile | null => {
+  if (!isRecord(value)) return null;
+
+  const customerId = parseV2EntityId(value.userId);
+  const accountId = parseV2EntityId(value.accountId);
+  const email = parseEmail(value.email);
+  const username = parseNullableText(value.username);
+  const fullName = parseNullableText(value.fullname);
+  const phone = parseNullableText(value.phone);
+
+  if (!customerId || !accountId || !email || username === undefined || fullName === undefined || phone === undefined) {
+    return null;
+  }
+  return { customerId, accountId, email, username, fullName, phone };
 };

@@ -100,6 +100,14 @@ Lát này không thay `EntityId` legacy, không ghi session, không đổi Redux
 router V2. Việc nối login/profile sau cutover chỉ được làm khi response service, session storage và
 route V2 có contract integration tương ứng; do đó runtime hiện tại không thay đổi.
 
+## T38.2 — web own-customer profile response boundary
+
+Route compatibility V2 `GET /user/:id`/`PUT /user/update/:userId` trả `userId` (customer ID)
+và field transport `fullname`. Web map response này thành aggregate `V2CustomerProfile` dùng
+`customerId` và `fullName`, chỉ sau khi kiểm tra account/customer ID string, email và từng field
+nullable (`username`, `fullname`, `phone`). Đây chỉ là response mapper; ownership vẫn do access
+context MySQL ở API thực thi. Không nhận patch từ UI, không nối Axios/Redux và không mount runtime.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
