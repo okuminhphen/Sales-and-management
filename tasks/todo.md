@@ -368,6 +368,16 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     API suite 530 pass, 6 skip; typecheck/build đạt. Ca MySQL nhiều món xác
     minh rollback hold/order khi món sau hết hàng (10/10 focused tests);
     full API suite sau lát T34 đạt 533 pass, 6 skip.
+    POS cash carry-out nội bộ đã có transaction riêng: chỉ employee active ở đúng
+    branch có `order.manage.branch` (hoặc global hợp lệ), không nhận price/amount
+    từ browser, dùng payment method server-side `CASH` và thu đủ tổng snapshot.
+    Nó ghi `pending → confirmed → completed/fulfilled`, reserve→confirm→consume
+    stock cùng payment/history/outbox trong một commit nên không để pending hold
+    POS sau giao dịch. Khách vãng lai giữ `customer_id = NULL`; tổng 0 không tạo
+    payment vì schema cấm amount 0. Retry cùng intent replay, key/payload khác
+    conflict; stock failure, cạnh tranh cùng key và employee bị deactivate đều
+    được MySQL `_test` kiểm tra (unit 2/2, MySQL 4/4). QR/split tender, phần cứng
+    POS và HTTP adapter chưa được mở.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
     Lát confirm online pickup nội bộ đã yêu cầu completed payments đủ total
@@ -394,7 +404,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     API typecheck/build và full suite MySQL `_test` 522 pass, 6 skip.
     Worker legacy không đổi; chưa kiểm thử giao RabbitMQ thật hoặc bật worker
     V2 mặc định trước cutover.
-  - [ ] HTTP compatibility, checkout delivery/POS, handover, MySQL concurrency/
+  - [ ] HTTP compatibility, checkout delivery, POS HTTP adapter/QR-split tender, handover, MySQL concurrency/
     error-path và full regression trước khi đóng T33.
 - [ ] T34 — Payment method/payment/webhook V2. Theo điều chỉnh thứ tự được
   người dùng duyệt ngày 2026-09-25, làm foundation payment trước khi đóng T33;

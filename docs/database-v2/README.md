@@ -86,8 +86,9 @@ npm run db:v2:seed --workspace @sales/api
 Runner yêu cầu `SUPER_ADMIN_EMAIL` hợp lệ và `SUPER_ADMIN_PASSWORD` dài tối thiểu 12 ký tự.
 Giá trị thật chỉ đặt trong `.env`/secret store, không commit. Nếu email đã tồn tại, seed không
 đổi mật khẩu, trạng thái hay dữ liệu tài khoản hiện có; nó chỉ bảo đảm role `SUPER_ADMIN` global
-của email cấu hình. Seed tạo/cập nhật 6 role chuẩn, permission catalog, hai payment method
-`COD` và `VNPAY`; toàn bộ permission nền chỉ được gán cho `SUPER_ADMIN`. Các role nghiệp vụ
+của email cấu hình. Seed tạo/cập nhật 6 role chuẩn, permission catalog, ba payment method
+`CASH`, `COD` và `VNPAY`; toàn bộ permission nền chỉ được gán cho `SUPER_ADMIN`. `CASH` chỉ
+dành cho tiền đã thu tại quầy POS, không đồng nghĩa với `COD` (thu tiền khi giao hàng). Các role nghiệp vụ
 không được cấp quyền ngầm, vì mapping least-privilege và scope branch sẽ được áp dụng cùng
 authorization V2 ở T23.
 
@@ -584,6 +585,23 @@ nào đều rollback toàn bộ. `checkout_key` được lowercase và voucher c
 trước khi lưu/so sánh để nhất quán MySQL collation; retry cùng intent trả order
 cũ, payload khác trả conflict. Không gọi RabbitMQ trong transaction. Chưa mount
 HTTP V2, chưa làm delivery/POS.
+
+Lát cắt POS tiền mặt nội bộ cũng đã có nhưng **chưa mount HTTP**. Chỉ nhân viên active
+có quyền `order.manage.branch` trên đúng branch (hoặc global grant hợp lệ) mới tạo được
+đơn `in_store/carry_out`; repository kiểm tra lại employee/account/branch dưới transaction
+để chống thay đổi quyền giữa lúc request chạy. Browser chỉ gửi `checkoutKey`, branch và
+variant/quantity; giá, tổng phải thu, method `CASH`, người thu tiền và merchant reference
+đều do server quyết định. Với tổng dương, payment `cash/completed` được tạo cùng transaction;
+đơn tổng bằng 0 không tạo payment vì schema cấm payment amount bằng 0.
+
+POS tạo order snapshot và history `pending → confirmed → completed`, reserve rồi confirm và
+consume từng reservation trước commit; cuối cùng fulfillment là `fulfilled` và stock/movement
+`order_handover` đã được ghi. Vì vậy không tồn tại pending hold 15 phút sau khi giao dịch tại
+quầy kết thúc; lỗi ở tiền mặt, stock hoặc bất kỳ item nào rollback cả order, payment, hold,
+movement, history và outbox. Retry cùng key/intention chỉ replay order đã có; payload khác
+bị chặn conflict. Hiện chỉ hỗ trợ **một khoản CASH đầy đủ**; QR, split tender, hóa đơn/thiết bị
+POS và endpoint HTTP thuộc lát cắt sau, không được coi client report là bằng chứng đã thu tiền.
+Focused unit 2/2 và MySQL `_test` 4/4 (rollback, retry đồng thời và staff deactivation) đạt.
 
 Checkout chỉ trừ những số lượng đã mua khỏi giỏ trong chính transaction đó;
 item khác và lượng vừa thêm không bị xóa nhầm. Retry cùng key không trừ giỏ

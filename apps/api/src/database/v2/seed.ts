@@ -67,6 +67,7 @@ export const PERMISSION_SEEDS: readonly Omit<SeedRecord, "name">[] = [
 ];
 
 export const PAYMENT_METHOD_SEEDS: readonly SeedRecord[] = [
+    { code: "CASH", name: "Tiền mặt tại quầy", description: "Thanh toán tiền mặt đã thu tại quầy POS." },
     { code: "COD", name: "COD", description: "Thanh toán tiền mặt khi nhận hàng." },
     { code: "VNPAY", name: "VNPAY", description: "Thanh toán trực tuyến qua VNPay." },
 ];
