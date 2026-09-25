@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
+import express, { type RequestHandler } from "express";
 import { QueryTypes, Sequelize } from "sequelize";
+import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { env } from "../../src/config/env.js";
 import { runV2Migrations } from "../../src/database/v2/migrate.js";
 import { createSalesV2Persistence } from "../../src/database/v2/models.js";
+import { NotificationV2Service } from "../../src/modules/communication-ai/application/notification-v2.service.js";
+import { createNotificationV2Router } from "../../src/modules/communication-ai/interfaces/http/notification-v2.routes.js";
 import { SequelizeNotificationV2Repository } from "../../src/modules/communication-ai/persistence/notification-v2.repository.js";
+import type { V2AuthenticatedRequest } from "../../src/modules/identity-access/interfaces/http/v2-auth.middleware.js";
 import { serializeDatabaseEntityId, serializeEntityId } from "../../src/shared/contracts/database-scalars.js";
 
 const runDatabaseV2Tests = process.env.RUN_DATABASE_V2_TESTS === "true";
@@ -118,6 +123,40 @@ describe.skipIf(!runDatabaseV2Tests)("Notification V2 own-read persistence on My
             accountId: serializeEntityId(accountB), beforeCreatedAt: null, beforeId: null, limit: 10,
         });
         expect(other).toMatchObject({ kind: "notifications", page: { notifications: [{ id: notificationB }] } });
+    });
+
+    it("executes the isolated HTTP factory with V2 identity and strict input validation", async () => {
+        const auth: RequestHandler = (req, _res, next) => {
+            (req as V2AuthenticatedRequest).v2AccessContext = {
+                accountId: accountB, customerId: null, employeeId: null, grants: [],
+            };
+            next();
+        };
+        const app = express();
+        app.use(express.json());
+        app.use("/api/v1", createNotificationV2Router({ auth,
+            notifications: new NotificationV2Service({
+                repository: new SequelizeNotificationV2Repository(createSalesV2Persistence(db)),
+            }),
+        }));
+
+        await request(app).get("/api/v1/notifications/my?limit=1").expect(200).expect((response) => {
+            expect(response.body).toMatchObject({ EM: "Get notifications successfully", EC: 0,
+                DT: [{ id: notificationB, type: "system" }], pagination: { nextCursor: null } });
+            expect(response.body.DT[0]).not.toHaveProperty("data");
+        });
+        await request(app).get("/api/v1/notifications/count").expect(200)
+            .expect({ EM: "Get unread notification count successfully", EC: 0, DT: 1 });
+        await request(app).get("/api/v1/notifications/my?limit=1&unexpected=true").expect(400);
+        await request(app).patch(`/api/v1/notifications/${notificationB}/read`).send({ unexpected: true }).expect(400);
+        await request(app).patch(`/api/v1/notifications/${notificationB}/read`).send({}).expect(200)
+            .expect({ EM: "Mark notification as read successfully", EC: 0,
+                DT: { notificationId: notificationB, alreadyRead: false } });
+        await request(app).patch(`/api/v1/notifications/${notificationB}/read`).send({}).expect(200)
+            .expect({ EM: "Mark notification as read successfully", EC: 0,
+                DT: { notificationId: notificationB, alreadyRead: true } });
+        await request(app).get("/api/v1/notifications/count").expect(200)
+            .expect({ EM: "Get unread notification count successfully", EC: 0, DT: 0 });
     });
 
     it("counts, marks only the owned row idempotently, and fails closed after account deactivation", async () => {

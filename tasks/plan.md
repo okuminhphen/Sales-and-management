@@ -76,6 +76,17 @@ retention, payload typed, dispatch/outbox và realtime thuộc lát riêng sau k
 được chốt. Kiểm thử cần gồm ownership A/B, cursor bounded, unread/read idempotency
 và account bị inactive fail-closed.
 
+## T37.2 — notification HTTP factory V2 không mount
+
+Nối riêng ba compatibility path đã tồn tại (`GET /notifications/my`, `GET
+/notifications/count`, `PATCH /notifications/:notificationId/read`) vào T37.1 mà
+không import vào `routes/api.ts`. Mỗi request lấy account active từ V2 JWT/context;
+không nhận `userId`, recipient, role hay payload notification từ browser. DTO Zod
+strict kiểm tra cursor keyset, limit, BIGINT path ID và body rỗng; response giữ envelope
+`EM/EC/DT` nhưng chỉ serialize allowlist notification. Chỉ mutation audit action, không
+log content/body/PII. Test HTTP phải chạy với persistence MySQL `_test`, chứng minh
+route chưa mount legacy, strict input, allowlist và ownership/read-state thật.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task

@@ -527,6 +527,13 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     không behavior/chat proxy hay runtime mount ở lát này. Có 3 unit tests và 2 MySQL
     `_test` integration tests cho input cursor bounded, ownership A/B, read idempotent,
     inactive account fail-closed và không return JSON `data`.
+  - [x] T37.2 — Notification HTTP factory V2 riêng: giữ path compatibility
+    `/notifications/my`, `/notifications/count`, `/:notificationId/read` với V2
+    JWT/context, DTO strict và envelope allowlist. Chỉ audit mutation, không mount
+    `routes/api.ts`, không nhận `userId`/recipient/role/browser payload và có MySQL
+    `_test` HTTP contract. MySQL integration kiểm tra list/count/mark qua account B,
+    body/query lạ bị 400, không lộ `data`; search import xác nhận API legacy/Socket
+    không mount factory.
   - Acceptance cho T21–T37: route/envelope hiện hữu giữ tối đa; actor/scope từ JWT+DB; DTO Zod đầy đủ; mỗi slice có RED test và real-DB integration test.
   - Verify từng task: focused unit/integration + API typecheck; mỗi 2–3 task chạy API build/checkpoint regression.
 - [ ] Checkpoint 3 — Existing API critical flows đạt hoàn toàn trên DB V2 test.

@@ -763,6 +763,14 @@ thay route legacy và không mount runtime. Trigger/payload typed/realtime chỉ
 `_test` 2/2 (owner A/B, cursor, raw-data exclusion, unread/read idempotency và inactive
 fail-closed) cùng API typecheck đạt.
 
+T37.2 đặt một HTTP factory V2 riêng với ba path compatibility `GET /notifications/my`,
+`GET /notifications/count`, `PATCH /notifications/:notificationId/read`. V2 JWT middleware
+derive lại account active từ MySQL; client không thể chọn recipient, `userId` hay role.
+Query cursor/path ID/body đều qua Zod strict; chỉ action mark-read có audit và audit không
+chứa notification content/body. Factory chưa được import vào `routes/api.ts` hoặc Socket
+legacy. MySQL `_test` kiểm chứng list/count/mark bằng account riêng, reject field lạ và
+allowlist response; API typecheck/build đạt.
+
 ## Shipment read V2 — T35 foundation
 
 Order read V2 lấy shipment theo một query cho toàn bộ trang đơn (không tạo N+1).
