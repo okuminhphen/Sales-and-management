@@ -1,5 +1,5 @@
 import type { RequestHandler, Response } from "express";
-import type { OrderListV2Result, OrderQueryV2Service, OrderSummary } from "../../application/order-query-v2.service.js";
+import type { OrderDetailV2Result, OrderListV2Result, OrderQueryV2Service, OrderSummary } from "../../application/order-query-v2.service.js";
 import type { V2AuthenticatedRequest } from "../../../identity-access/interfaces/http/v2-auth.middleware.js";
 import type { OrderReadDtoV2 } from "./order-read-v2.dto.js";
 
@@ -36,8 +36,19 @@ const sendList = (response: Response, result: OrderListV2Result): void => {
     }
 };
 
+const sendDetail = (response: Response, result: OrderDetailV2Result): void => {
+    switch (result.kind) {
+        case "order": response.status(200).json({ EM: "Get order successfully", EC: 0,
+            DT: displayOrder(result.order) }); return;
+        case "forbidden": response.status(403).json({ EM: "Order access denied", EC: 3, DT: null }); return;
+        case "invalid_order": response.status(400).json({ EM: "Invalid order ID", EC: 1, DT: null }); return;
+        case "order_not_found": response.status(404).json({ EM: "Order not found", EC: 1, DT: null }); return;
+        case "order_unavailable": response.status(503).json({ EM: "Order service unavailable", EC: -1, DT: null }); return;
+    }
+};
+
 export const createOrderReadV2Controller = (query: OrderQueryV2Service): {
-    own: RequestHandler; branch: RequestHandler; all: RequestHandler;
+    own: RequestHandler; branch: RequestHandler; all: RequestHandler; detail: RequestHandler;
 } => {
     const contextOf = (request: Parameters<RequestHandler>[0]) =>
         (request as V2AuthenticatedRequest).v2AccessContext;
@@ -61,6 +72,11 @@ export const createOrderReadV2Controller = (query: OrderQueryV2Service): {
             const context = contextOf(request);
             if (!context) { unauthenticated(response); return; }
             sendList(response, await query.listAll(context, Number(request.query.page), Number(request.query.limit)));
+        },
+        detail: async (request, response) => {
+            const context = contextOf(request);
+            if (!context) { unauthenticated(response); return; }
+            sendDetail(response, await query.detail(context, request.params.orderId));
         },
     };
 };

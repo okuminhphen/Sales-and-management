@@ -27,19 +27,24 @@ const order: OrderSummary = { id: serializeEntityId("9223372036854775807"), code
 
 const setup = (context: V2AccessContext) => {
     const scopes: unknown[] = [];
+    const detailScopes: unknown[] = [];
     const query = new OrderQueryV2Service({ repository: {
         list: async (scope, page, limit) => {
             scopes.push(scope);
             return { orders: [order], page, limit, totalItems: 1 };
         },
-        detail: async () => null,
+        detail: async (id, scope) => {
+            detailScopes.push({ id, scope });
+            return id === order.id && (scope.customerId === order.customerId
+                || scope.branchIds === null || scope.branchIds.includes(order.fulfillmentBranchId)) ? order : null;
+        },
     } });
     const app = express();
     app.use("/api/v1", createOrderReadV2Router({ query, auth: (req, _res, next) => {
         (req as V2AuthenticatedRequest).v2AccessContext = context;
         next();
     } }));
-    return { app, scopes };
+    return { app, scopes, detailScopes };
 };
 
 describe("Order V2 HTTP read compatibility", () => {
@@ -68,5 +73,18 @@ describe("Order V2 HTTP read compatibility", () => {
         await request(app).get("/api/v1/order/read/900719925474099300000").expect(400);
         await request(app).get("/api/v1/order/read/3?page=0").expect(400);
         expect(scopes).toEqual([]);
+    });
+
+    it("returns a visible order detail but hides other branch orders as not found", async () => {
+        const { app: ownerApp } = setup(own);
+        const ownDetail = await request(ownerApp).get(`/api/v1/order/${order.id}`);
+        expect(ownDetail.status).toBe(200);
+        expect(ownDetail.body).toMatchObject({ EC: 0, DT: { id: order.id,
+            ordersDetails: [{ productId: "7", productImage: ["/snapshot.jpg"] }] } });
+        const { app: staffApp, detailScopes } = setup({ ...staff,
+            grants: [{ roleCode: "BRANCH_MANAGER", scope: { type: "branch", branchId: "10" },
+                permissions: ["order.read.branch"] }] });
+        await request(staffApp).get(`/api/v1/order/${order.id}`).expect(404);
+        expect(detailScopes).toEqual([{ id: order.id, scope: { customerId: null, branchIds: ["10"] } }]);
     });
 });

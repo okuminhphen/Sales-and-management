@@ -117,6 +117,9 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 order read scope on MySQL", ()
         expect(ownerResponse.body.DT[0].ordersDetails[0].productImage).toEqual(["/snapshot-2.jpg"]);
         expect(ownerResponse.body.DT.map((row: { id: string }) => row.id).sort())
             .toEqual([createdIds[0], createdIds[2]].sort());
+        const ownDetailResponse = await request(ownerApp).get(`/api/v1/order/${createdIds[2]}`);
+        expect(ownDetailResponse.body.DT.id).toBe(createdIds[2]);
+        await request(ownerApp).get(`/api/v1/order/${createdIds[1]}`).expect(404);
         const staffApp = express();
         staffApp.use("/api/v1", createOrderReadV2Router({ query: service, auth: (req, _res, next) => {
             (req as V2AuthenticatedRequest).v2AccessContext = branchStaff;

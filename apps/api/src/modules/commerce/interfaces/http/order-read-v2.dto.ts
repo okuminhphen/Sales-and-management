@@ -22,6 +22,7 @@ const entityId = z.string().regex(/^[1-9]\d{0,18}$/).refine(
 
 export const orderReadUserParamsV2 = z.object({ userId: entityId });
 export const orderReadBranchParamsV2 = z.object({ branchId: entityId });
+export const orderReadDetailParamsV2 = z.object({ orderId: entityId });
 export const orderReadListQueryV2 = z.object({
     page: z.coerce.number().int().positive().safe().default(1),
     limit: z.coerce.number().int().min(1).max(100).default(100),
