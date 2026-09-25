@@ -565,6 +565,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     COD/fulfillment invariants; payload sai fail-closed. Unit Web focused 17/17
     (scalar/catalog/cart/order) + typecheck đạt; chưa đổi `OrderDto`/Axios/Redux/UI, checkout/payment
     hoặc mount route V2.
+  - [x] T39.4 — Branch directory response boundary: type/parser list/detail V2 cho ID/code/contact
+    nullable/type/manager và pagination shared; enum/code/email fail-closed. Unit Web focused 20/20
+    (scalar/catalog/cart/order/branch) + typecheck đạt; chưa đổi `BranchDto`/Axios/Redux/UI, branch
+    mutation hoặc mount route V2. Employee write/link/transfer giữ ở lát contract riêng.
 - [ ] T40 — AI MySQL catalog repository dùng products/product_variants V2.
 - [ ] T41 — AI personalization queries dùng customer/behavior V2; không đổi RAG/model.
 - [ ] T42 — Full rehearsal Node + Python + critical smoke flows trên DB V2 test.

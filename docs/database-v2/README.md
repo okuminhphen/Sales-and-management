@@ -927,6 +927,17 @@ Payload vi phạm trả `null`. T39.3 **chưa** thay `OrderDto`, gọi Axios, gh
 hay mount router V2; các URL compatibility còn trùng route legacy nên runtime wiring phải đợi
 cutover có integration contract.
 
+## Web branch directory contract V2 — T39.4
+
+`apps/web/src/types/branch-v2.ts` và `services/branch-v2.contract.ts` bảo vệ list/detail Branch V2
+trước khi dữ liệu đến state hoặc UI. ID branch/manager là signed BIGINT string; code, name, address,
+contact nullable, email, enum `central|branch` và pagination đều được validate. Response lỗi hoặc
+payload sai trả `null`; only allowlisted branch fields xuất hiện trong type kết quả.
+
+Lát này chỉ đọc contract: không thay `BranchDto`/Axios/Redux/UI legacy, không thực hiện branch
+create/update/manager assignment và không mount V2 router. Employee directory/mutation/link/transfer
+tiếp tục là boundary riêng vì có authorization/audit nhạy cảm.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

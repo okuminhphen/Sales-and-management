@@ -151,6 +151,14 @@ total, ràng buộc channel/fulfillment/shipping/shipment theo schema và pagina
 Payload sai fail-closed. T39.3 chưa thay `OrderDto`/Axios/Redux/UI legacy, không tạo checkout/payment
 request và không mount router order V2; chỉ nối runtime sau cutover integration contract.
 
+## T39.4 — web branch directory response boundary
+
+Web bổ sung type/parser read-only cho Branch V2 list/detail, tách `BranchDto` legacy. Contract giữ
+ID signed BIGINT string, code branch, contact nullable, type `central|branch`, manager nullable và
+pagination bounded; email/field length/code đều được kiểm tra trước state/render. Lát này chưa gửi
+mutation branch, gọi Axios/Redux/UI hay mount V2 router. Employee write/link/transfer là boundary
+nhạy cảm tách riêng sau directory branch.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
