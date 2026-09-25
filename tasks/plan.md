@@ -28,6 +28,11 @@ schema -> typed persistence -> identity/catalog -> inventory -> commerce/payment
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
 có acceptance/verify và không được bắt đầu khi checkpoint trước chưa đạt.
 
+Điều chỉnh được duyệt ngày 2026-09-25: T33 được tạm mở sau khi kiểm chứng các
+error path độc lập. Làm payment foundation T34 và shipment foundation T35 trước
+những phần T33 cần chúng (delivery/POS, handover, HTTP write), sau đó quay lại
+hoàn tất T33. Không đổi phạm vi cutover hay bật runtime V2 sớm.
+
 ## Rủi ro và biện pháp
 
 | Rủi ro | Mức | Biện pháp |

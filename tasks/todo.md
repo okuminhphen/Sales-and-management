@@ -365,7 +365,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     chưa mount HTTP; delivery/POS còn lại. MySQL test tái hiện deadlock do
     cart remove khóa item trước cart khi checkout đang giữ cart; đã đổi remove
     thành transaction khóa cart trước rồi xóa item, focused test 5/5 và full
-    API suite 530 pass, 6 skip; typecheck/build đạt.
+    API suite 530 pass, 6 skip; typecheck/build đạt. Ca MySQL nhiều món xác
+    minh rollback hold/order khi món sau hết hàng (10/10 focused tests);
+    full API suite sau lát T34 đạt 533 pass, 6 skip.
   - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
     Lát confirm online pickup nội bộ đã yêu cầu completed payments đủ total
@@ -394,8 +396,19 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     V2 mặc định trước cutover.
   - [ ] HTTP compatibility, checkout delivery/POS, handover, MySQL concurrency/
     error-path và full regression trước khi đóng T33.
-- [ ] T34 — Payment method/payment/webhook V2.
+- [ ] T34 — Payment method/payment/webhook V2. Theo điều chỉnh thứ tự được
+  người dùng duyệt ngày 2026-09-25, làm foundation payment trước khi đóng T33;
+  không tự mở refund policy chưa chốt hoặc mount runtime legacy.
+  - [x] Lát đọc `GET /payment-methods` V2: active-only, BIGINT ID string,
+    envelope legacy và auth DB-derived; HTTP + MySQL `_test` kiểm tra inactive
+    method bị ẩn, không token/account bị khóa trả 401. Focused 2/2,
+    typecheck/build và full API suite 533 pass, 6 skip. Chưa mount runtime.
+  - [ ] Tạo payment attempt/VNPay request an toàn với amount từ order và
+    merchant reference ổn định; xử lý callback đã xác minh, idempotent và
+    không đảo completed về failed. Integration/concurrency trên MySQL `_test`.
 - [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
+  Làm foundation shipment cần cho T33 trước, giữ những policy return/refund còn
+  mở ở trạng thái fail-closed; quay lại T33 khi dependency đã có test MySQL.
 - [ ] T36 — Conversation/message state và Socket contract V2.
 - [ ] T37 — Notification/behavior/chat proxy identity V2.
   - Acceptance cho T21–T37: route/envelope hiện hữu giữ tối đa; actor/scope từ JWT+DB; DTO Zod đầy đủ; mỗi slice có RED test và real-DB integration test.

@@ -543,6 +543,11 @@ release vào các use-case checkout/confirm/cancel. Test unit 4/4, MySQL `_test`
 
 ## Order V2 — T33 đang triển khai
 
+Ngày 2026-09-25, người dùng duyệt điều chỉnh thứ tự: T33 giữ trạng thái mở;
+payment foundation T34 và shipment foundation T35 được làm trước các nhánh
+delivery/POS, bàn giao và HTTP write còn thiếu của T33. Các policy pickup
+no-show/partial payment và return/refund chưa được suy đoán từ thay đổi thứ tự.
+
 Read model trả order và snapshot item với BIGINT ID/DECIMAL string, gồm cả
 product ID và ảnh đã chụp trên `order_items` thay vì đọc lại catalog hiện tại.
 Quyền đọc lấy từ access context DB-derived: customer chỉ đọc đơn của chính
@@ -635,6 +640,18 @@ chạy `V2_OUTBOX_PUBLISHER_ENABLED=true` với lệnh
 chưa bật trong Compose và chưa kiểm chứng publish tới RabbitMQ thật; hiện có
 unit fake broker và integration MySQL `_test`.
 API typecheck/build và full suite 522 pass, 6 skip tại checkpoint này.
+
+## Payment method V2 — T34 foundation
+
+Adapter `GET /payment-methods` V2 giữ đường dẫn và envelope `EM/EC/DT` hiện hữu,
+chỉ trả method `is_active = TRUE` theo thứ tự ID. `id` là BIGINT string;
+`code/name/description/isActive/createdAt/updatedAt` được map tường minh.
+JWT V2 phải tham chiếu account còn active và có role hiện hành từ database;
+token giả hoặc account bị khóa không được đọc. Adapter chưa mount vào runtime
+legacy. Chưa có payment attempt, VNPay URL, return/webhook hoặc paid-state
+transition V2; không coi lát đọc này là hoàn thành T34.
+Focused MySQL HTTP test 2/2, API typecheck/build và full suite 533 pass,
+6 skip.
 
 ## Giới hạn và kiểm thử chung còn lại
 
