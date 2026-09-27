@@ -602,7 +602,14 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - Môi trường Windows/Node hiện tại không chạy được entry `tsx` của V2 runner vì `os.userInfo()` lỗi
     `ENOMEM`; rehearsal đã dùng artifact build `node dist/database/v2/migrate.js status`. Đây là giới
     hạn runner cục bộ cần theo dõi, không phải schema/migration failure và không thay đổi target guard.
-- [ ] T43 — Guarded local cutover: xác minh target, reset `sale_and_managements_db`, baseline + seed.
+- [x] T43 — Guarded local cutover: xác minh target, reset `sale_and_managements_db`, baseline + seed.
+  - Entry `db:v2:cutover:local` chỉ chạy ở `development`, yêu cầu `MYSQL_DATABASE` và
+    `V2_MIGRATIONS_TARGET_DATABASE` đúng literal approved, `V2_MIGRATIONS_ENABLED=true`, manifest/hash
+    đúng và xác nhận one-shot `RESET sale_and_managements_db`. Credential super-admin được validate trước
+    `DROP DATABASE`; runner V2 thường vẫn chỉ nhận target `_test`.
+  - Local database đã được reset có guard, tạo lại và chạy 6 migration V2. Kiểm tra read-only: 50 bảng
+    vật lý (= 49 nghiệp vụ + `database_v2_migrations`), 104 FK, zero pending; seed có 6 role, 37
+    permission, 3 payment method, 1 account/grant SUPER_ADMIN. Chạy seed lần hai giữ nguyên các count.
 - [ ] T44 — Smoke Web/API/AI trên database chính V2.
 - [ ] T45 — Xóa 50 migration và migration-order helper/test legacy.
 - [ ] T46 — Xóa 32 model legacy và compatibility code tạm; default runner/registry chỉ còn V2.

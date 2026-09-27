@@ -219,6 +219,16 @@ Trên Windows/Node cục bộ này, entry `tsx` cho V2 migration runner gặp l�
 phải lỗi schema và không được dùng để nới target guard. Qdrant local dùng API key trên HTTP loopback
 có warning từ client; production bắt buộc endpoint `https://` theo `.env.production.example`.
 
+## T43 — Guarded local cutover
+
+Cutover local đã dùng entrypoint tách biệt `db:v2:cutover:local`, không hạ guard của runner thường.
+Nó yêu cầu đồng thời development, `MYSQL_DATABASE` và V2 target đúng literal
+`sale_and_managements_db`, V2 enabled, schema manifest/checksum hợp lệ và xác nhận one-shot
+`RESET sale_and_managements_db`; credential super-admin được validate trước thao tác drop. Database
+local đã được reset, tạo lại, chạy sáu migration và seed. Xác minh chỉ-đọc cho thấy 50 bảng vật lý
+(49 nghiệp vụ cộng metadata), 104 FK, zero pending; seed gồm 6 role, 37 permission, 3 payment method
+và một SUPER_ADMIN grant. Seed lần hai không thay đổi các count.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
