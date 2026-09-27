@@ -938,6 +938,16 @@ Lát này chỉ đọc contract: không thay `BranchDto`/Axios/Redux/UI legacy, 
 create/update/manager assignment và không mount V2 router. Employee directory/mutation/link/transfer
 tiếp tục là boundary riêng vì có authorization/audit nhạy cảm.
 
+## Web employee directory contract V2 — T39.5
+
+`apps/web/src/types/employee-v2.ts` và `services/employee-v2.contract.ts` validate employee directory
+theo branch trước khi Web lưu hoặc render. Employee/account/branch ID và salary giữ chính xác dạng
+string; profile fields nullable, employee code, email, trạng thái `active|inactive`, timestamp UTC và
+pagination đều fail-closed. Không trả hoặc suy luận quyền từ response profile.
+
+T39.5 chưa thay `EmployeeDto`, gọi Axios/Redux/UI hay mount router V2. Employee create/update/
+deactivate, link account và transfer là mutation có authorization/audit riêng, nằm ngoài lát read-only.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

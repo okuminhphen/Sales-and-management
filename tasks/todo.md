@@ -569,6 +569,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     nullable/type/manager và pagination shared; enum/code/email fail-closed. Unit Web focused 20/20
     (scalar/catalog/cart/order/branch) + typecheck đạt; chưa đổi `BranchDto`/Axios/Redux/UI, branch
     mutation hoặc mount route V2. Employee write/link/transfer giữ ở lát contract riêng.
+  - [x] T39.5 — Employee directory response boundary: type/parser list V2 cho ID/account/branch,
+    salary DECIMAL, nullable profile fields, status/timestamp và pagination shared. Unit Web focused
+    23/23 (scalar/catalog/cart/order/branch/employee) + typecheck đạt; chưa đổi `EmployeeDto`/
+    Axios/Redux/UI hay mở employee mutation/link/transfer hoặc mount V2.
 - [ ] T40 — AI MySQL catalog repository dùng products/product_variants V2.
 - [ ] T41 — AI personalization queries dùng customer/behavior V2; không đổi RAG/model.
 - [ ] T42 — Full rehearsal Node + Python + critical smoke flows trên DB V2 test.

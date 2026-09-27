@@ -159,6 +159,14 @@ pagination bounded; email/field length/code đều được kiểm tra trước 
 mutation branch, gọi Axios/Redux/UI hay mount V2 router. Employee write/link/transfer là boundary
 nhạy cảm tách riêng sau directory branch.
 
+## T39.5 — web employee directory response boundary
+
+Web bổ sung type/parser read-only cho Employee V2 directory theo branch. Contract allowlist employee
+profile, giữ account/employee/branch ID signed BIGINT và salary `DECIMAL(19,4)` canonical, kiểm tra
+code, contact nullable, active/inactive, timestamp UTC và pagination. Đây chỉ là dữ liệu response;
+không suy diễn quyền từ employee record. Create/update/deactivate, link account và transfer có audit/
+authorization riêng nên không được gọi hay wire UI trong lát này.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
