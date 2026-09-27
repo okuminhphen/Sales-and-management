@@ -611,6 +611,18 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     vật lý (= 49 nghiệp vụ + `database_v2_migrations`), 104 FK, zero pending; seed có 6 role, 37
     permission, 3 payment method, 1 account/grant SUPER_ADMIN. Chạy seed lần hai giữ nguyên các count.
 - [ ] T44 — Smoke Web/API/AI trên database chính V2.
+  - [ ] T44.1 — Runtime composition root V2: app/main không import model/router legacy; chỉ tạo một
+    `V2Persistence` và mount boundary V2 có feature gate fail-closed. Verify bằng import/runtime test
+    không truy cập bảng legacy.
+  - [ ] T44.2 — Mount compatibility paths đã có cho identity, catalog, cart/review/banner, order,
+    inventory, notification và conversation; endpoint trùng phải thay thế atomically, không dual-route.
+    Verify bằng HTTP contract/MySQL primary smoke với public read + authenticated failure cases.
+  - [ ] T44.3 — Compose các capability V2 còn thiếu (stock request, transfer, payment method/VNPay)
+    từ module interface tới app router; giữ DTO/auth/audit V2. Verify focused HTTP/integration trước mount.
+  - [ ] T44.4 — Cutover worker/realtime/API-to-AI boundary: không Socket/AI/browser path nào dùng model
+    legacy hoặc gọi AI trực tiếp. Verify liveness, API proxy error mapping và worker dependency checks.
+  - [ ] T44.5 — Smoke primary end-to-end: API/Web/AI chạy với `sale_and_managements_db`, V2 status zero
+    pending và seed idempotent; ghi lại endpoint/command evidence trước T45.
 - [ ] T45 — Xóa 50 migration và migration-order helper/test legacy.
 - [ ] T46 — Xóa 32 model legacy và compatibility code tạm; default runner/registry chỉ còn V2.
 - [ ] T47 — README/docs/deployment/database/ADR tiếng Việt.

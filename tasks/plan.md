@@ -229,6 +229,21 @@ local đã được reset, tạo lại, chạy sáu migration và seed. Xác min
 (49 nghiệp vụ cộng metadata), 104 FK, zero pending; seed gồm 6 role, 37 permission, 3 payment method
 và một SUPER_ADMIN grant. Seed lần hai không thay đổi các count.
 
+## T44 — Runtime V2 cutover và smoke primary
+
+T44 không được coi là một health check đơn lẻ: primary database đã chỉ có V2, còn runtime cũ đang
+mount 27 router legacy. Cutover được chia thành năm lát có thể kiểm chứng. T44.1 thay composition root
+để app/main chỉ tạo `V2Persistence`, không import model/router legacy và có gate fail-closed. T44.2
+mount atomically các compatibility route V2 đã hoàn thiện (identity, catalog, cart/review/banner, order,
+inventory, notification, conversation), không duy trì dual-route cùng path. T44.3 bổ sung composition
+root còn thiếu cho stock request, transfer, payment method và VNPay trước khi mount. T44.4 chuyển
+worker/realtime/API-to-AI boundary để browser vẫn chỉ gọi API và không còn persistence legacy. T44.5
+chạy smoke primary gồm API/Web/AI, V2 status/seed idempotency và contract error path.
+
+Mỗi lát cần focused HTTP/integration test trước mount. Endpoint V2 chưa có behavior tương đương không
+được thay bằng legacy router (vì database cũ đã mất) hoặc endpoint mới tự suy đoán; giữ disabled/fail-
+closed và ghi rõ khoảng trống. Chỉ sau T44.5 mới được bắt đầu xóa source legacy ở T45–T46.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
