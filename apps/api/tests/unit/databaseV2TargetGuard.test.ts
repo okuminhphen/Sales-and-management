@@ -4,7 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+    LOCAL_V2_CUTOVER_CONFIRMATION,
     V2MigrationTargetError,
+    assertApprovedLocalV2CutoverTarget,
     assertV2MigrationTarget,
     type V2MigrationTarget,
 } from "../../src/database/v2/target-guard.js";
@@ -67,5 +69,29 @@ describe("Database V2 migration target guard", () => {
         ).toThrowError(
             expect.objectContaining({ code: "V2_SCHEMA_CHECKSUM_MISMATCH" }),
         );
+    });
+
+    it("only permits the reviewed local development cutover with an exact confirmation", () => {
+        expect(() => assertApprovedLocalV2CutoverTarget({
+            ...createTarget({
+                nodeEnvironment: "development",
+                targetDatabase: "sale_and_managements_db",
+            }),
+            confirmation: LOCAL_V2_CUTOVER_CONFIRMATION,
+            configuredDatabase: "sale_and_managements_db",
+        })).not.toThrow();
+    });
+
+    it.each([
+        { nodeEnvironment: "production", targetDatabase: "sale_and_managements_db", configuredDatabase: "sale_and_managements_db", confirmation: LOCAL_V2_CUTOVER_CONFIRMATION },
+        { nodeEnvironment: "development", targetDatabase: "other_database", configuredDatabase: "other_database", confirmation: LOCAL_V2_CUTOVER_CONFIRMATION },
+        { nodeEnvironment: "development", targetDatabase: "sale_and_managements_db", configuredDatabase: "sale_and_managements_db", confirmation: "" },
+    ] as const)("rejects an unsafe local cutover target", (unsafeTarget) => {
+        const { configuredDatabase, confirmation, ...migrationTarget } = unsafeTarget;
+        expect(() => assertApprovedLocalV2CutoverTarget({
+            ...createTarget(migrationTarget),
+            configuredDatabase,
+            confirmation,
+        })).toThrow(V2MigrationTargetError);
     });
 });

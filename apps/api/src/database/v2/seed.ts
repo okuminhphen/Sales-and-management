@@ -72,7 +72,7 @@ export const PAYMENT_METHOD_SEEDS: readonly SeedRecord[] = [
     { code: "VNPAY", name: "VNPAY", description: "Thanh toán trực tuyến qua VNPay." },
 ];
 
-const normalizeCredentials = (
+export const validateV2SuperAdminCredentials = (
     credentials: V2SuperAdminCredentials,
 ): V2SuperAdminCredentials => {
     const email = credentials.email.trim().toLowerCase();
@@ -136,7 +136,7 @@ export const seedV2Database = async (
     sequelize: Sequelize,
     unvalidatedCredentials: V2SuperAdminCredentials,
 ): Promise<void> => {
-    const credentials = normalizeCredentials(unvalidatedCredentials);
+    const credentials = validateV2SuperAdminCredentials(unvalidatedCredentials);
     const passwordHash = await bcrypt.hash(credentials.password, 12);
 
     await retryV2Transaction(async () => sequelize.transaction(async (transaction) => {
@@ -148,7 +148,7 @@ export const seedV2Database = async (
 };
 
 export const runV2Seed = async (): Promise<void> => {
-    const credentials = normalizeCredentials({
+    const credentials = validateV2SuperAdminCredentials({
         email: env.SUPER_ADMIN_EMAIL ?? "",
         password: env.SUPER_ADMIN_PASSWORD ?? "",
     });

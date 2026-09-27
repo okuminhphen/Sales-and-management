@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
 export const APPROVED_V2_SCHEMA_FILE = "docs/database-v2/target-schema.dbml";
+export const LOCAL_V2_CUTOVER_DATABASE = "sale_and_managements_db";
+export const LOCAL_V2_CUTOVER_CONFIRMATION = `RESET ${LOCAL_V2_CUTOVER_DATABASE}`;
 
 export type V2MigrationTarget = {
     enabled: boolean;
@@ -9,6 +11,11 @@ export type V2MigrationTarget = {
     schemaFile: string;
     schemaSource: string;
     expectedChecksum: string;
+};
+
+export type LocalV2CutoverTarget = V2MigrationTarget & {
+    configuredDatabase: string;
+    confirmation?: string;
 };
 
 export type V2MigrationTargetErrorCode =
@@ -85,6 +92,49 @@ export const assertV2MigrationTarget = (target: V2MigrationTarget): void => {
         throw new V2MigrationTargetError(
             "V2_SCHEMA_CHECKSUM_MISMATCH",
             "The reviewed Database V2 schema checksum does not match its manifest.",
+        );
+    }
+};
+
+/**
+ * This guard is exclusively for the explicit local fresh-database cutover command.
+ * The ordinary V2 migration runner remains restricted to a dedicated `_test` database.
+ */
+export const assertApprovedLocalV2CutoverTarget = (
+    target: LocalV2CutoverTarget,
+): void => {
+    const database = target.targetDatabase?.trim();
+    if (
+        target.nodeEnvironment !== "development" ||
+        database !== LOCAL_V2_CUTOVER_DATABASE ||
+        target.configuredDatabase !== LOCAL_V2_CUTOVER_DATABASE ||
+        target.confirmation !== LOCAL_V2_CUTOVER_CONFIRMATION
+    ) {
+        throw new V2MigrationTargetError(
+            "V2_TARGET_DATABASE_NOT_TEST",
+            "Local V2 cutover requires development, the approved database, and exact confirmation.",
+        );
+    }
+
+    if (!target.enabled) {
+        throw new V2MigrationTargetError(
+            "V2_MIGRATIONS_NOT_ENABLED",
+            "Local V2 cutover requires V2_MIGRATIONS_ENABLED=true.",
+        );
+    }
+
+    if (normalizeSchemaFile(target.schemaFile) !== APPROVED_V2_SCHEMA_FILE) {
+        throw new V2MigrationTargetError(
+            "V2_SCHEMA_TARGET_UNEXPECTED",
+            "Local V2 cutover only accepts the reviewed target-schema.dbml artifact.",
+        );
+    }
+
+    const actualChecksum = createHash("sha256").update(target.schemaSource).digest("hex");
+    if (actualChecksum !== target.expectedChecksum.toLowerCase()) {
+        throw new V2MigrationTargetError(
+            "V2_SCHEMA_CHECKSUM_MISMATCH",
+            "Local V2 cutover schema checksum does not match its manifest.",
         );
     }
 };

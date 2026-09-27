@@ -19,7 +19,9 @@ import {
 } from "./migration-integrity.js";
 import {
     APPROVED_V2_SCHEMA_FILE,
+    assertApprovedLocalV2CutoverTarget,
     assertV2MigrationTarget,
+    type LocalV2CutoverTarget,
     type V2MigrationTarget,
 } from "./target-guard.js";
 
@@ -252,10 +254,11 @@ const createV2Sequelize = (targetDatabase: string): Sequelize =>
 
 export const runV2Migrations = async (
     command: "status" | "up",
+    validateTarget: (target: V2MigrationTarget) => void = assertV2MigrationTarget,
 ): Promise<void> => {
     const schemaManifest = readSchemaManifest();
     const target = loadV2MigrationTarget(schemaManifest);
-    assertV2MigrationTarget(target);
+    validateTarget(target);
     const checksums = loadMigrationChecksums(schemaManifest.schemaRevision);
 
     const sequelize = createV2Sequelize(target.targetDatabase!.trim());
@@ -288,6 +291,16 @@ export const runV2Migrations = async (
         await sequelize.close();
     }
 };
+
+export const runApprovedLocalV2CutoverMigrations = async (
+    command: "status" | "up",
+): Promise<void> => runV2Migrations(command, (target) => {
+    assertApprovedLocalV2CutoverTarget({
+        ...target,
+        configuredDatabase: env.MYSQL_DATABASE,
+        confirmation: env.V2_LOCAL_CUTOVER_CONFIRM,
+    } satisfies LocalV2CutoverTarget);
+});
 
 const runFromCli = async (): Promise<void> => {
     const command = process.argv[2] ?? "status";

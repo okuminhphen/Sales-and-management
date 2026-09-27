@@ -92,6 +92,24 @@ dành cho tiền đã thu tại quầy POS, không đồng nghĩa với `COD` (t
 không được cấp quyền ngầm, vì mapping least-privilege và scope branch sẽ được áp dụng cùng
 authorization V2 ở T23.
 
+## Cutover local có guard
+
+Chỉ sau rehearsal đạt và khi database local được xác nhận không có dữ liệu cần giữ, dùng entrypoint
+riêng dưới đây. Nó chỉ chấp nhận `NODE_ENV=development`, `MYSQL_DATABASE` và target cùng đúng literal
+`sale_and_managements_db`, cùng chuỗi xác nhận chính xác. Mọi điều kiện—including manifest/checksum và
+credential seed—được kiểm tra **trước** khi `DROP DATABASE` chạy. Không ghi biến xác nhận vào `.env`,
+không dùng lệnh này cho staging/production và không thay thế bằng tên database khác.
+
+```powershell
+$env:V2_MIGRATIONS_ENABLED = "true"
+$env:V2_MIGRATIONS_TARGET_DATABASE = "sale_and_managements_db"
+$env:V2_LOCAL_CUTOVER_CONFIRM = "RESET sale_and_managements_db"
+node apps/api/dist/database/v2/cutover-local.js
+```
+
+Lệnh xóa rồi tạo lại chính xác database local đã duyệt, chạy sáu migration V2 và seed một lần. Sau
+đó phải kiểm tra `status`, seed idempotency và smoke Web/API/AI ở T44 trước khi xóa legacy source.
+
 ## Convention persistence V2
 
 - Model V2 thuộc module domain; registry chỉ đăng ký model trước rồi mới compose association,
