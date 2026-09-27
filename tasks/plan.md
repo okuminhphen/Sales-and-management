@@ -205,6 +205,20 @@ cộng cả hai trong một query vì sẽ double-count cùng hành vi. Lát nà
 writer/mount HTTP behavior V2, không đổi trọng số, RAG, embeddings, TF-IDF hoặc model. Integration test
 chỉ dùng `_test` và cleanup account/customer/catalog/stat fixture theo token.
 
+## T42 — Full rehearsal trên database V2 test
+
+Rehearsal trước cutover chỉ dùng `sale_and_managements_db_test`. Schema revision 4 đã parse/export
+PASS (49 bảng, 104 quan hệ); runner V2 xác nhận sáu migration đã thực thi và không còn pending. API
+strict typecheck/build, Web typecheck/build và 16 file/63 Web contract tests đều PASS. API full suite
+chạy tuần tự với database test thật và tự teardown, tránh ghi chồng fixture. AI chạy 12 test, bao gồm
+integration MySQL V2 opt-in, rồi cleanup fixture; `ruff` và `mypy --strict` PASS. Compose infrastructure
+config và `git diff --check` đều PASS.
+
+Trên Windows/Node cục bộ này, entry `tsx` cho V2 migration runner gặp lỗi môi trường `os.userInfo()`
+`ENOMEM`; status rehearsal dùng artifact đã build `node dist/database/v2/migrate.js status`. Đây không
+phải lỗi schema và không được dùng để nới target guard. Qdrant local dùng API key trên HTTP loopback
+có warning từ client; production bắt buộc endpoint `https://` theo `.env.production.example`.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task

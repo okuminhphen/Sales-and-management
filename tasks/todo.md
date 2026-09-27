@@ -588,7 +588,20 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     `confirmed|completed`/`order_items`. Không cộng raw `behavior_events` để tránh double-count với
     stats projection; không đổi trọng số/RAG/model. Unit 5/5 và integration `_test` cleanup fixture.
     Writer/mount HTTP behavior V2 không thuộc lát read adapter này và phải được xác minh ở cutover.
-- [ ] T42 — Full rehearsal Node + Python + critical smoke flows trên DB V2 test.
+- [x] T42 — Full rehearsal Node + Python + critical smoke flows trên DB V2 test.
+  - Schema V2 revision 4 validate PASS (49 bảng/104 quan hệ); runner compiled xác nhận đủ 6
+    migration, zero pending trên `sale_and_managements_db_test`. Không reset hoặc ghi vào database
+    chính.
+  - API strict typecheck/build PASS. Full suite chạy tuần tự trên `_test` với runner fork, hoàn tất và
+    tự teardown; Web contract suite đạt 16 file/63 test, typecheck/build PASS. Compose infrastructure
+    config và `git diff --check` PASS.
+  - AI chạy MySQL integration thật trên `_test` đạt 12 test; `ruff` và strict `mypy` PASS. Warning
+    duy nhất là thư viện Qdrant cảnh báo API key trên HTTP loopback local; production phải dùng
+    `https://` như `.env.production.example`, không được coi là tín hiệu để gửi secret qua mạng công
+    cộng.
+  - Môi trường Windows/Node hiện tại không chạy được entry `tsx` của V2 runner vì `os.userInfo()` lỗi
+    `ENOMEM`; rehearsal đã dùng artifact build `node dist/database/v2/migrate.js status`. Đây là giới
+    hạn runner cục bộ cần theo dõi, không phải schema/migration failure và không thay đổi target guard.
 - [ ] T43 — Guarded local cutover: xác minh target, reset `sale_and_managements_db`, baseline + seed.
 - [ ] T44 — Smoke Web/API/AI trên database chính V2.
 - [ ] T45 — Xóa 50 migration và migration-order helper/test legacy.
