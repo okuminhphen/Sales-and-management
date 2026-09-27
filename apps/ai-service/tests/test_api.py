@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
+from app.core.config import Settings
 from app.domain.models import Product
 from app.main import create_app
 from tests.fakes import FakeChatModel, FakeProductRepository
@@ -10,6 +11,7 @@ from tests.fakes import FakeChatModel, FakeProductRepository
 def test_health_and_chat_contracts() -> None:
     products = [Product(1, "Pijama", "Mềm", Decimal("120000"), ["a.jpg"], "Đồ ngủ")]
     app = create_app(
+        settings=Settings(qdrant_enabled=False),
         repository=FakeProductRepository(products),
         chat_model=FakeChatModel(),
     )

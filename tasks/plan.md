@@ -178,6 +178,20 @@ T39 không phải cutover. Mutation, payment/checkout, branch/employee administr
 wiring tiếp tục thuộc lát có authorization/integration contract tương ứng. Việc mount hoặc thay thế
 legacy chỉ được xét trong rehearsal/cutover T42–T44 sau khi API, Web và AI cùng xác minh trên DB V2.
 
+## T40.1 — AI catalog repository V2
+
+Adapter MySQL của AI đọc `products`, `categories` và `product_variants` V2 thay vì bảng PascalCase
+legacy. Một product chỉ đi vào RAG/Qdrant khi product `active` và tồn tại ít nhất một variant `active`;
+truy vấn dùng `EXISTS` để không nhân bản product theo variant và giữ thứ tự ID xác định. JSON images
+được allowlist thành URL HTTP(S), bỏ `publicId`, URL nội bộ hoặc dữ liệu không đúng shape trước khi vào
+prompt/API response.
+
+Thêm `find_product_by_id` vào catalog port để catalog-event consumer rehydrate đúng một aggregate thay
+vì tải toàn bộ catalog rồi lọc trong bộ nhớ. T40 chưa chuyển `get_user_signals`: `UserBehavior`, cart
+và order legacy thuộc T41 personalization; không thay RAG, embeddings, TF-IDF hay model trong lát này.
+Unit test kiểm tra query/mapping và integration test opt-in chỉ ghi vào database `_test`, rồi cleanup
+toàn bộ fixture theo token.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task

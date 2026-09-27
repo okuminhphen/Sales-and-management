@@ -14,6 +14,9 @@ class FakeProductRepository:
     async def list_products(self) -> list[Product]:
         return self.products
 
+    async def find_product_by_id(self, product_id: int) -> Product | None:
+        return next((product for product in self.products if product.id == product_id), None)
+
     async def get_user_signals(self, user_id: int) -> list[UserSignal]:
         del user_id
         return self.signals

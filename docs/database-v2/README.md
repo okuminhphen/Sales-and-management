@@ -959,6 +959,32 @@ không thay UI và không mount router V2. Checkout/payment, branch/employee mut
 request thật chỉ được triển khai trong lát có authorization/integration contract; chỉ T42–T44 mới
 được quyết định mount/replace legacy sau rehearsal đầy đủ trên DB V2.
 
+## AI catalog repository V2 — T40
+
+`apps/ai-service/app/infrastructure/mysql_repository.py` đã chuyển catalog AI sang `products`,
+`categories` và `product_variants` V2. Product chỉ được đưa vào RAG/Qdrant khi product `active` và có
+ít nhất một variant `active`; `EXISTS` tránh bản sao product khi một product có nhiều size. Giá đọc từ
+`base_price`; images JSON được chuẩn hoá thành danh sách URL HTTP(S), nên `publicId`, path nội bộ và
+shape JSON sai không thể đi vào prompt hay response chatbot.
+
+Catalog port có thêm `find_product_by_id`. Worker catalog-event dùng phương thức này để rehydrate đúng
+một product cho mỗi event, thay vì đọc toàn bộ catalog rồi lọc bằng Python. T40 cố ý **không** đổi
+`get_user_signals`: các bảng hành vi/cart/order legacy sẽ được thay tại T41; RAG, Gemini, embedding và
+thuật toán TF-IDF không thay đổi trong lát này.
+
+Unit test kiểm tra SQL V2, filter sellable, parameter binding và media mapping. Integration test thật
+chỉ chạy khi chủ động bật database V2 `_test`; nó tạo fixture có token riêng và cleanup trong `finally`:
+
+```powershell
+Push-Location apps/ai-service
+$env:RUN_DATABASE_V2_TESTS = "true"
+$env:MYSQL_DATABASE = "sale_and_managements_db_test"
+& .\.venv\Scripts\python.exe -m pytest tests/test_mysql_repository_integration.py
+Pop-Location
+```
+
+Test từ chối database không kết thúc bằng `_test`, vì vậy không được chạy nó với database local chính.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

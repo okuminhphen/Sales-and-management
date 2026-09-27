@@ -49,8 +49,7 @@ async def run() -> None:
                 if event_type == "catalog.product.deleted":
                     await store.delete(product_id)
                     return
-                products = await repository.list_products()
-                product = next((item for item in products if item.id == product_id), None)
+                product = await repository.find_product_by_id(product_id)
                 if product is None:
                     logger.warning(
                         "catalog.event.product_missing", extra={"product_id": product_id}
