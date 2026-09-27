@@ -948,6 +948,17 @@ pagination đều fail-closed. Không trả hoặc suy luận quyền từ respo
 T39.5 chưa thay `EmployeeDto`, gọi Axios/Redux/UI hay mount router V2. Employee create/update/
 deactivate, link account và transfer là mutation có authorization/audit riêng, nằm ngoài lát read-only.
 
+## Hoàn tất Web consumer contract V2 — T39
+
+T39.1–T39.5 khép lại phần chuẩn bị consumer-side cho public catalog, own-cart, order, branch
+directory và employee directory. Các contract chỉ parse response read-only theo allowlist; signed
+BIGINT và `DECIMAL(19,4)` luôn là string, dữ liệu không hợp lệ bị từ chối trước state/render.
+
+Đây **không** là runtime cutover: các file contract không gọi Axios, không ghi Redux/localStorage,
+không thay UI và không mount router V2. Checkout/payment, branch/employee mutation và việc nối
+request thật chỉ được triển khai trong lát có authorization/integration contract; chỉ T42–T44 mới
+được quyết định mount/replace legacy sau rehearsal đầy đủ trên DB V2.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google

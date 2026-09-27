@@ -550,7 +550,10 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   - [x] T38.3 — Signed-BIGINT consistency: thay ba DTO identity-access copy-paste bằng
     `v2EntityId` chung đúng migration DDL và đưa parser Web về cùng range. Unit API 6/6 + Web
     10/10 đạt; overflow ID bị chặn trước service/database.
-- [ ] T39 — Web catalog/cart/order/admin contract cho ID string và DECIMAL money.
+- [x] T39 — Web catalog/cart/order/admin contract cho ID string và DECIMAL money.
+  - Hoàn tất theo ranh giới consumer contract: T39.1–T39.5 là parser/type read-only fail-closed cho
+    catalog, cart, order, branch và employee. Không có Axios/Redux/localStorage/UI, mutation hoặc
+    mount route V2; runtime cutover vẫn phải chờ rehearsal T42 và guarded cutover T43–T44.
   - [x] T39.1 — Scalar/common public catalog boundary: signed BIGINT + canonical DECIMAL parser
     dùng chung, product V2 allowlist và safe HTTP(S) image. Unit Web 16/16 focused đạt; chưa đổi
     `ProductDto`/Axios/UI hoặc mount catalog V2.

@@ -167,6 +167,17 @@ code, contact nullable, active/inactive, timestamp UTC và pagination. Đây ch�
 không suy diễn quyền từ employee record. Create/update/deactivate, link account và transfer có audit/
 authorization riêng nên không được gọi hay wire UI trong lát này.
 
+## Hoàn tất T39 — Web V2 consumer contracts
+
+T39.1–T39.5 đã phủ các response read-only đã được duyệt: public catalog, own-cart, order,
+branch directory và employee directory. Mỗi boundary allowlist dữ liệu, giữ signed BIGINT và
+`DECIMAL(19,4)` dưới dạng string, đồng thời fail-closed trước envelope hoặc payload không hợp lệ.
+Chúng là parser/type thuần, không có Axios, Redux, localStorage, UI hay runtime router dependency.
+
+T39 không phải cutover. Mutation, payment/checkout, branch/employee administration và mọi runtime
+wiring tiếp tục thuộc lát có authorization/integration contract tương ứng. Việc mount hoặc thay thế
+legacy chỉ được xét trong rehearsal/cutover T42–T44 sau khi API, Web và AI cùng xác minh trên DB V2.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
