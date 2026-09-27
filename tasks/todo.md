@@ -582,7 +582,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     consumer rehydrate một product/event thay vì tải toàn catalog. Legacy behavior/cart/order signals
     giữ nguyên có chú thích rõ và thuộc T41; không đổi RAG/model/TF-IDF. Unit 3/3 và full Python
     8 pass; integration MySQL opt-in chỉ chấp nhận database `_test`, có cleanup fixture.
-- [ ] T41 — AI personalization queries dùng customer/behavior V2; không đổi RAG/model.
+- [x] T41 — AI personalization queries dùng customer/behavior V2; không đổi RAG/model.
+  - [x] T41.1 — Query account → customer active qua `customers.account_id`; lấy view/like từ
+    `customer_product_stats`, cart từ `carts`/`cart_items`/`product_variants`, purchase từ order
+    `confirmed|completed`/`order_items`. Không cộng raw `behavior_events` để tránh double-count với
+    stats projection; không đổi trọng số/RAG/model. Unit 5/5 và integration `_test` cleanup fixture.
+    Writer/mount HTTP behavior V2 không thuộc lát read adapter này và phải được xác minh ở cutover.
 - [ ] T42 — Full rehearsal Node + Python + critical smoke flows trên DB V2 test.
 - [ ] T43 — Guarded local cutover: xác minh target, reset `sale_and_managements_db`, baseline + seed.
 - [ ] T44 — Smoke Web/API/AI trên database chính V2.

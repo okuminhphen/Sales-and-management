@@ -32,24 +32,39 @@ FIND_ACTIVE_SELLABLE_PRODUCT_SQL = text(
     f"{_ACTIVE_SELLABLE_PRODUCT_SELECT}\n  AND p.id = :product_id\nLIMIT 1"
 )
 
-_LEGACY_USER_SIGNALS_SQL = text(
+V2_USER_SIGNALS_SQL = text(
     """
     SELECT product_id, SUM(score) AS score
     FROM (
-        SELECT productId AS product_id,
-               (COALESCE(viewCount, 0) + COALESCE(isLiked, 0) * 5) AS score
-        FROM UserBehavior WHERE userId = :user_id
+        SELECT stats.product_id,
+               (stats.view_count + IF(stats.is_liked, 5, 0)) AS score
+        FROM accounts AS a
+        JOIN customers AS c ON c.account_id = a.id
+        JOIN customer_product_stats AS stats ON stats.customer_id = c.id
+        WHERE a.id = :account_id
+          AND a.status = 'active'
+          AND c.status = 'active'
         UNION ALL
-        SELECT ps.productId AS product_id, 10 AS score
-        FROM Cart AS c
-        JOIN CartProductSize AS cps ON cps.cartId = c.id
-        JOIN ProductSize AS ps ON ps.id = cps.productSizeId
-        WHERE c.userId = :user_id
+        SELECT variant.product_id, 10 AS score
+        FROM accounts AS a
+        JOIN customers AS c ON c.account_id = a.id
+        JOIN carts AS cart ON cart.customer_id = c.id
+        JOIN cart_items AS item ON item.cart_id = cart.id
+        JOIN product_variants AS variant ON variant.id = item.product_variant_id
+        WHERE a.id = :account_id
+          AND a.status = 'active'
+          AND c.status = 'active'
         UNION ALL
-        SELECT od.productId AS product_id, 15 AS score
-        FROM Orders AS o
-        JOIN OrdersDetails AS od ON od.orderId = o.id
-        WHERE o.userId = :user_id
+        SELECT item.product_id, 15 AS score
+        FROM accounts AS a
+        JOIN customers AS c ON c.account_id = a.id
+        JOIN orders AS o ON o.customer_id = c.id
+        JOIN order_items AS item ON item.order_id = o.id
+        WHERE a.id = :account_id
+          AND a.status = 'active'
+          AND c.status = 'active'
+          AND o.status IN ('confirmed', 'completed')
+          AND item.product_id IS NOT NULL
     ) AS signals
     GROUP BY product_id
     """
@@ -74,9 +89,8 @@ class MySqlProductRepository:
         )
         return self._to_product(rows[0]) if rows else None
 
-    async def get_user_signals(self, user_id: int) -> list[UserSignal]:
-        # Personalization behavior has its own V2 schema transition in T41.
-        rows = await self._fetch_rows(_LEGACY_USER_SIGNALS_SQL, {"user_id": user_id})
+    async def get_user_signals(self, account_id: int) -> list[UserSignal]:
+        rows = await self._fetch_rows(V2_USER_SIGNALS_SQL, {"account_id": account_id})
         return [
             UserSignal(product_id=int(row["product_id"]), score=float(row["score"])) for row in rows
         ]

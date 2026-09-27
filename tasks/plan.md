@@ -192,6 +192,19 @@ và order legacy thuộc T41 personalization; không thay RAG, embeddings, TF-ID
 Unit test kiểm tra query/mapping và integration test opt-in chỉ ghi vào database `_test`, rồi cleanup
 toàn bộ fixture theo token.
 
+## T41.1 — AI personalization query V2
+
+Personalization giữ input account ID hiện có, nhưng query V2 map `accounts.id` sang customer `active`
+qua `customers.account_id`. Tín hiệu đọc từ `customer_product_stats` (view + like), cart hiện tại
+(`carts`/`cart_items`/`product_variants`) và order `confirmed|completed` (`orders`/`order_items`).
+Tất cả query parameterized; account/customer inactive không lộ tín hiệu và dẫn tới fallback catalog
+generic vốn có của ranker.
+
+`behavior_events` là immutable event log, còn `customer_product_stats` là projection read model; không
+cộng cả hai trong một query vì sẽ double-count cùng hành vi. Lát này chỉ thay read adapter, không tạo
+writer/mount HTTP behavior V2, không đổi trọng số, RAG, embeddings, TF-IDF hoặc model. Integration test
+chỉ dùng `_test` và cleanup account/customer/catalog/stat fixture theo token.
+
 ## Task list
 
 Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task

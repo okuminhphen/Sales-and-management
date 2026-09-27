@@ -32,9 +32,9 @@ class RecommendationService:
         fallback = await anyio.to_thread.run_sync(self._rank_similar, products, product_id, limit)
         return self._merge(semantic, fallback, limit)
 
-    async def products_for_user(self, user_id: int, limit: int = 10) -> list[Product]:
+    async def products_for_user(self, account_id: int, limit: int = 10) -> list[Product]:
         products = await self._repository.list_products()
-        signals = await self._repository.get_user_signals(user_id)
+        signals = await self._repository.get_user_signals(account_id)
         weights = {signal.product_id: signal.score for signal in signals}
         return await anyio.to_thread.run_sync(self._rank_for_user, products, weights, limit)
 

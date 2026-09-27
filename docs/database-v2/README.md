@@ -985,6 +985,23 @@ Pop-Location
 
 Test từ chối database không kết thúc bằng `_test`, vì vậy không được chạy nó với database local chính.
 
+## AI personalization query V2 — T41
+
+`get_user_signals(account_id)` đã không còn đọc `UserBehavior`, `Cart`, `CartProductSize`, `Orders`
+hay `OrdersDetails` legacy. Query bắt đầu bằng account/customer `active` (`accounts.id` →
+`customers.account_id`), rồi cộng các tín hiệu V2: `customer_product_stats` giữ view/like, cart hiện
+tại giữ tín hiệu 10, order `confirmed|completed` giữ tín hiệu 15. Không có customer active hoặc chưa
+có tín hiệu sẽ trả danh sách rỗng để ranker giữ fallback catalog generic hiện có.
+
+`behavior_events` là event log bất biến còn `customer_product_stats` là projection cho read path.
+Không được cộng cả hai trong cùng request vì một view/like đã xuất hiện trong stats sẽ bị double-count.
+T41 chỉ chuyển adapter đọc: không thay trọng số, TF-IDF, embedding, RAG hay model; cũng không tự tạo
+hoặc mount endpoint ghi behavior V2. Trước guarded cutover phải xác minh producer behavior duy trì
+`customer_product_stats`, nếu không thì recommendation vẫn đúng nhưng chỉ có tín hiệu cart/purchase.
+
+Integration test AI có thêm fixture account → customer → stats và luôn cleanup theo token. Chạy cùng
+lệnh `_test` của T40; test vẫn từ chối database không kết thúc bằng `_test`.
+
 ## Giới hạn và kiểm thử chung còn lại
 
 Google OAuth V2 **chưa được chuyển**. `accounts` hiện thiếu provider subject bất biến (Google
