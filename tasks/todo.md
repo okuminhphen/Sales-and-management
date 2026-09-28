@@ -671,4 +671,4 @@ checkpoint cũ để suy ra runtime hiện tại.
     Production dependency audit còn 0 critical/high. Xem `docs/database-v2/final-validation.md`.
   - Verify: `npm run typecheck`, `npm test`, `npm run build`, Python `ruff/mypy/pytest`, Compose config và `git diff --check`.
 - [x] Checkpoint commit — Đã tách commit logic và tài liệu trên local branch `develop`.
-- [ ] Checkpoint push — Sẽ đánh dấu sau khi push `develop` ở lần đóng initiative này.
+- [x] Checkpoint push — Toàn bộ Database V2 cutover và closure đã được push lên `origin/develop`.
