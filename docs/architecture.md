@@ -87,7 +87,7 @@ không nới quyền bằng room membership hoặc payload do client tự khai.
 
 ## Technical debt còn lại
 
-1. Frontend còn `@ts-nocheck` và component/page lớn; nên chuyển dần sang
+1. Frontend còn 31 file `@ts-nocheck` và component/page lớn; nên chuyển dần sang
    `features/<feature>/{api,components,hooks,schema,types}`.
 2. Cần bổ sung tracing, metrics, dashboard/SLO và alert ngoài structured log hiện có.
 3. Google OAuth V2 và staff Socket handoff còn là capability follow-up; không được giả lập bằng

@@ -1,3 +1,4 @@
+/** Compatibility boundary; V2 API responses serialize BIGINT identifiers as strings. */
 export type EntityId = string | number;
 export type RequestPayload = object;
 export type QueryParameters = Record<

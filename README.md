@@ -85,10 +85,10 @@ cd apps/ai-service; .venv\Scripts\python.exe -m uvicorn app.main:app --reload --
 - API health: `http://localhost:8080/health/live`
 - FastAPI/OpenAPI: `http://localhost:8000/docs`
 
-Frontend đọc cấu hình build-time từ file `.env` ở root monorepo. Google OAuth là tùy
-chọn ở local: nếu `VITE_GOOGLE_CLIENT_ID` để trống, ứng dụng không khởi tạo Google
-Identity Services và ẩn nút Google; đăng nhập/đăng ký thường vẫn được hiển thị. Muốn bật
-Google OAuth, đặt OAuth Web Client ID vào biến này rồi khởi động lại `npm run dev:web`.
+Frontend đọc cấu hình build-time từ file `.env` ở root monorepo. Google OAuth hiện được
+đóng fail-closed kể cả khi máy còn `VITE_GOOGLE_CLIENT_ID`: Database V2 chưa có provider
+subject bất biến để liên kết account an toàn. Đăng nhập email/mật khẩu và đăng ký OTP vẫn
+hoạt động. Chỉ bật lại Google sau một schema revision + account-linking spec riêng.
 
 `venv` chỉ cần tạo và cài package lần đầu (hoặc sau khi đổi dependency). Khi chạy lại,
 gọi trực tiếp Python trong `.venv` như lệnh trên; không bắt buộc activate môi trường.
@@ -234,7 +234,10 @@ trong private network. Xem [hướng dẫn triển khai](docs/deployment.md).
 - Source ứng dụng đã chuyển sang TypeScript/TSX hoặc Python; không còn source JS.
 - API đã cutover hoàn toàn sang Database V2 typed; HTTP boundary dùng Zod DTO strict.
 - FastAPI strict với Mypy và có test bằng dependency injection.
-- Frontend còn 33 file `@ts-nocheck` và một số component quá lớn; đây là technical debt.
+- Frontend còn 31 file `@ts-nocheck` và một số component quá lớn; đây là technical debt
+  đã được tách khỏi Database V2 cutover, không nên tăng thêm ở feature mới.
+- Các UI chưa có policy V2 an toàn (quản trị account/customer, staff chat, xóa branch) đã
+  được ẩn; không còn trình bày nút gọi endpoint 404. Voucher admin hiện là read-only.
 - Widget chatbot đã là TSX typed, có trạng thái loading/error và giữ kết quả sản phẩm theo
   từng lượt trả lời; phần màn hình lớn còn lại cần tách dần theo feature.
 - Database V2 đã chuẩn hóa BIGINT/DECIMAL/FK/index; migration dữ liệu production vẫn cần

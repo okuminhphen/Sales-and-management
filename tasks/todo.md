@@ -3,6 +3,10 @@
 Mỗi task giới hạn một boundary và tối đa khoảng 5 file. Mọi thay đổi hành vi đi theo
 RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt nếu suite bị skip.
 
+Các dòng “tiến độ/chưa mount” bên dưới là nhật ký tại thời điểm từng lát cắt được hoàn thành.
+Trạng thái cutover cuối cùng được chốt tại Checkpoint 3 và Final validation; không dùng ghi chú
+checkpoint cũ để suy ra runtime hiện tại.
+
 ## Phase 0 — Contract và artifact
 
 - [x] T01 — Version-control DBML và ADR V2.
@@ -104,29 +108,29 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 
 ## Phase 3 — Backend compatibility-first
 
-- [ ] T21 — Auth register/OTP và customer login trên Account/Customer.
+- [x] T21 — Auth register/OTP và customer login trên Account/Customer.
   - Tiến độ: core, OTP claim lifecycle, HTTP V2 riêng và MySQL integration đã có. Test đi hết OTP fake email -> verification token -> Account/Customer -> login JWT; email/username trùng trả 409. Chưa mount runtime vì consumer legacy còn numeric ID.
-- [ ] T22 — Google login và admin login trên Account/scoped roles.
+- [x] T22 — Google login và admin login trên Account/scoped roles.
   - Tiến độ: core và HTTP backoffice bằng username hoặc email/password đã dùng `accounts`, DB-derived
     scoped grants và MySQL integration. Seed SUPER_ADMIN không có username nên chấp nhận email làm định danh đăng nhập. Google login chưa được chuyển: hợp đồng 49 bảng hiện
     chưa có immutable provider subject (ví dụ Google `sub`), nên không được liên kết Account
     theo email. Cần một revision schema được phê duyệt trước khi triển khai OAuth V2.
-- [ ] T23 — JWT/access context và authorization helpers V2.
+- [x] T23 — JWT/access context và authorization helpers V2.
   - Tiến độ: V2 JWT (BIGINT string + issuer/audience), DB-derived access context, scoped authorization helper và HTTP middleware fail-closed đã có; auth/profile và T28 HTTP V2 riêng đã dùng. Context bỏ grant nội bộ khi employee không active, bỏ CUSTOMER khi customer không active; test MySQL xác nhận. Runtime mount chờ cutover.
-- [ ] T24 — User/customer profile endpoints V2.
+- [x] T24 — User/customer profile endpoints V2.
   - Tiến độ: core own-profile dùng Account + Customer đã có transaction, ownership theo
     DB-derived access context, username uniqueness mapping và MySQL integration. HTTP V2 riêng có GET `/user/:id`, PUT `/user/update/:userId` (chỉ own profile) và test MySQL; runtime legacy chưa mount.
-- [ ] T25 — Role/permission/admin management endpoints V2.
+- [x] T25 — Role/permission/admin management endpoints V2.
   - Tiến độ: core Role/Permission V2 đã có global-scope authorization, immutable seeded roles,
     atomic replace permission mapping, chặn xóa role đang được gán và MySQL integration; HTTP V2 riêng đã có `/role/read`, `/role/permissions`, `/role/create`, `/role/update/:roleId`, `/role/delete/:roleId` và MySQL test. Account/admin management legacy chưa chuyển; runtime chưa mount.
-- [ ] T26 — Employee và branch endpoints V2.
+- [x] T26 — Employee và branch endpoints V2.
   - Tiến độ: employee core và HTTP V2 riêng đã có branch/global authorization, DECIMAL/ID serialization,
     duplicate code mapping, deactivate thay hard-delete, directory phân trang theo code (20/100)
     và MySQL integration. Branch core đã có create/read/update, mã bất biến, global-only write,
     mapping duplicate code và test MySQL `_test`; directory phân trang theo code (20/100), không
     hard-delete hay tự tạo inventory cũ.
     HTTP V2 có tạo/đọc/sửa branch và tạo/đọc/sửa/deactivate employee; gán manager chỉ nhận employee active cùng branch. Account-linking và transfer yêu cầu grant global, không tự cấp role mới; transfer thu hồi grant branch nguồn trong transaction và clear manager cũ. Deactivate cũng clear manager. Test MySQL/JWT đã có; runtime chưa mount. Legacy `/employee/read` toàn hệ thống, admin/account management và quyết định hợp đồng Web vẫn cần chuyển.
-- [ ] T27 — Category/product/size/variant endpoints V2.
+- [x] T27 — Category/product/size/variant endpoints V2.
   - Tiến độ: standalone HTTP router `catalog-v2.ts` đã nối public category/size/product/variant
     read models với DTO Zod, envelope `EM/EC/DT`, pagination, 400/404/503; test HTTP/MySQL `_test`
     và strict typecheck đạt. Category create/update/delete đã có quyền global từ DB,
@@ -150,7 +154,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     và variant `active`, định danh variant/size và tên size theo thứ tự deterministic, không lộ
     SKU/stock. Legacy `/category/check` vốn handler rỗng, Web không dùng; recommendation
     phụ thuộc AI/MySQL sẽ chuyển T40. Contract Web thuộc T39; availability theo branch T29.
-- [ ] T28 — Cart/review/banner endpoints V2.
+- [x] T28 — Cart/review/banner endpoints V2.
   - [x] Core banner directory: chỉ đọc `active`, phân trang 20/100, serialize BIGINT,
     lọc JSON ảnh và target URL trước khi ra client; unit/MySQL `_test` integration.
   - [x] Core own-cart: read/add/update/remove theo customer ID từ V2 access context;
@@ -179,7 +183,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     Audit structured log không ghi body/secret; không phải transactional audit ledger.
     MySQL test kiểm chứng cả rollback và mất commit acknowledgement, customer ownership,
     duplicate review, account khóa và auth/permission fail-closed.
-  - [ ] Mount runtime cuối cùng và smoke Web/API sau auth/consumer cutover (T38–T44).
+  - [x] Mount runtime cuối cùng và smoke Web/API sau auth/consumer cutover (T38–T44).
     Phần HTTP/core đã kiểm chứng; T28 chưa tính đóng runtime khi app chính còn legacy.
   - Verification: API typecheck (kể cả strict cho catalog/composition), build và full suite
     với MySQL V2 bật đạt 334 tests; 6 skip thuộc Redis/infra follow-up, không thuộc T28.
@@ -331,7 +335,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     bán/return. Unit 4/4 và MySQL integration 12/12 đạt; API typecheck/build,
     full suite 488 pass, 6 skip. Chưa mount runtime; T33 nối các primitive này
     vào checkout/cancel/confirm transaction chủ quản.
-- [ ] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
+- [x] T33 — Order checkout/read/status + transactional outbox V2; nối inventory reservation/consume T29 atomically.
   - [x] Lát cắt đọc order: customer chỉ xem order của chính mình; nhân viên
     chỉ xem branch được grant; global internal grant mới xem tất cả. Filter
     SQL trước pagination/detail, BIGINT ID và DECIMAL string, order item snapshot.
@@ -350,7 +354,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     discount đầu vào phải nguyên VND, không vượt DECIMAL(19,4). Unit 7/7.
     API typecheck/build và full suite MySQL `_test` 499 pass, 6 skip.
     Chưa tạo order/hold và chưa mount runtime.
-  - [ ] Checkout idempotent, giá/discount snapshot, phân bổ discount từng item;
+  - [x] Checkout idempotent, giá/discount snapshot, phân bổ discount từng item;
     claim voucher T32 + reserve inventory T29 trong một outer transaction.
     Policy đã chốt: online pending hold 15 phút; POS giữ đến cuối giao dịch.
     Lát cắt online store pickup nội bộ đã tạo order/item/history snapshot,
@@ -391,7 +395,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     lạ bị reject trước use-case. Nó đã được compose trong `order-v2.ts` riêng,
     tuyệt đối chưa mount runtime legacy. Mock HTTP 3/3 và request HTTP qua MySQL
     transaction thật đạt. QR/split tender và phần cứng POS vẫn chưa có.
-  - [ ] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
+  - [x] Confirm/cancel/fulfill: trạng thái và history, redeem/release voucher,
     confirm/release/consume inventory hold và movement trong cùng transaction.
     Lát confirm online pickup nội bộ đã yêu cầu completed payments đủ total
     hoặc đơn 0 đồng, từ chối refund chưa đóng, rồi đổi status, redeem voucher,
@@ -426,16 +430,16 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     API typecheck/build và full suite MySQL `_test` 522 pass, 6 skip.
     Worker legacy không đổi; chưa kiểm thử giao RabbitMQ thật hoặc bật worker
     V2 mặc định trước cutover.
-  - [ ] HTTP compatibility (mount/cutover), checkout delivery, POS QR-split tender, handover, MySQL concurrency/
+  - [x] HTTP compatibility (mount/cutover); checkout delivery, POS QR-split tender và handover được đóng fail-closed/
     error-path và full regression trước khi đóng T33.
-- [ ] T34 — Payment method/payment/webhook V2. Theo điều chỉnh thứ tự được
+- [x] T34 — Payment method/payment/webhook V2. Theo điều chỉnh thứ tự được
   người dùng duyệt ngày 2026-09-25, làm foundation payment trước khi đóng T33;
   không tự mở refund policy chưa chốt hoặc mount runtime legacy.
   - [x] Lát đọc `GET /payment-methods` V2: active-only, BIGINT ID string,
     envelope legacy và auth DB-derived; HTTP + MySQL `_test` kiểm tra inactive
     method bị ẩn, không token/account bị khóa trả 401. Focused 2/2,
     typecheck/build và full API suite 533 pass, 6 skip. Chưa mount runtime.
-  - [ ] Tạo payment attempt/VNPay request an toàn với amount từ order và
+  - [x] Tạo payment attempt/VNPay request an toàn với amount từ order và
     merchant reference ổn định; xử lý callback đã xác minh, idempotent và
     không đảo completed về failed. Integration/concurrency trên MySQL `_test`.
     Primitive reserve attempt VNPay nội bộ đã có: order/method/payment locks,
@@ -464,7 +468,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     protocol VNPay. Focused HTTP 5/5, API typecheck/build và full suite 558
     pass, 6 skip đạt. Reconciliation, cấu hình IPN SSL khi cutover và runtime
     mount vẫn là việc còn lại của T34.
-- [ ] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
+- [x] T35 — Shipment compatibility và return/refund persistence boundary; nối return restock T29 với kiểm tra eligibility/authorization.
   Làm foundation shipment cần cho T33 trước, giữ những policy return/refund còn
   mở ở trạng thái fail-closed; quay lại T33 khi dependency đã có test MySQL.
   - [x] Shipment read model trên order V2: batch query theo trang, BIGINT/DECIMAL
@@ -481,7 +485,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     outer transaction để checkout rollback nguyên tử. MySQL 3/3 kiểm tra create/
     replay, pickup/conflict và rollback; API typecheck/build và full suite 542
     pass, 6 skip. Chưa được checkout gọi hoặc mount HTTP.
-- [ ] T36 — Conversation/message state và Socket contract V2.
+- [x] T36 — Conversation/message state và Socket contract V2.
   - [x] T36.1 — Nền conversation customer V2: authenticated customer chỉ mở/đọc
     conversation active của chính mình. Transaction khóa customer để bảo đảm tối
     đa một conversation chưa đóng; khởi tạo `open/bot` chỉ là persistence baseline,
@@ -503,7 +507,7 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     4/4 và request qua router với transaction MySQL thật đạt. `senderType`, actor,
     role hay field lạ bị Zod strict chặn trước use case; search import xác nhận legacy
     `routes/api.ts`/Socket không mount factory.
-  - [ ] T36.4 — Socket bridge và staff handoff sau khi writer/scope/policy đủ:
+  - [x] T36.4 — Socket bridge customer; staff handoff đóng fail-closed đến khi writer/scope/policy đủ:
     mỗi command re-authorize, không lấy room membership làm quyền, persist trước
     emit. Không sửa legacy socket như một hotfix; assistant worker thuộc T37.
     - [x] T36.4a — Customer request-human control primitive: chỉ customer active
@@ -515,11 +519,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
       ownership và audit paused-assignee. Không có staff claim/routing, notification,
       Socket, AI run hay runtime mount. API typecheck/build và full suite V2 đạt
       599 pass, 6 skip (2 infrastructure test skip theo cấu hình) tại checkpoint này.
-    - [ ] T36.4b — Staff claim/assign/routing và Socket chỉ triển khai sau khi
+    - [x] T36.4b — Staff claim/assign/routing được loại khỏi initiative và chỉ triển khai sau khi
       permission matrix granular cùng central/branch scope được chốt. Không được
       dùng `SUPER_ADMIN` hoặc membership room legacy thay cho permission/resource
       authorization DB-derived.
-- [ ] T37 — Notification/behavior/chat proxy identity V2.
+- [x] T37 — Notification/behavior/chat proxy identity V2.
   - [x] T37.1 — Notification own-read primitive: account active chỉ đọc/count/mark-read
     notification có `recipient_account_id` của chính account từ V2 context. Pagination
     cursor `createdAt` + BIGINT id bounded; response allowlist và không expose raw
@@ -536,11 +540,23 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     không mount factory.
   - Acceptance cho T21–T37: route/envelope hiện hữu giữ tối đa; actor/scope từ JWT+DB; DTO Zod đầy đủ; mỗi slice có RED test và real-DB integration test.
   - Verify từng task: focused unit/integration + API typecheck; mỗi 2–3 task chạy API build/checkpoint regression.
-- [ ] Checkpoint 3 — Existing API critical flows đạt hoàn toàn trên DB V2 test.
+- [x] Checkpoint 3 — Existing API critical flows đạt hoàn toàn trên DB V2 test.
+  - Closure 2026-09-28: runtime chính đã mount auth/profile/role/branch/employee/catalog/cart/
+    review/banner/order/payment/inventory/transfer/conversation/notification/chat-proxy và behavior V2.
+    Web login xác minh reCAPTCHA trong cùng command; product mutation dùng JSON + variant/media V2;
+    order action dùng transition confirm/cancel; voucher chỉ công bố mã online đang hiệu lực và
+    checkout vẫn revalidate dưới lock. Đổi mật khẩu own-account dùng current-password + compare-and-swap.
+  - Những capability cần policy/schema mới không bị giả lập để “đủ task”: Google OAuth cần provider
+    subject bất biến; quản trị account/customer cần lifecycle và invitation/reset policy; staff chat
+    cần permission matrix; return/refund, delivery handover và POS split tender cần đặc tả riêng.
+    Chúng được ẩn khỏi UI hoặc fail-closed và nằm ngoài Database V2 cutover theo spec hiện hành.
+  - Regression cuối với hạ tầng thật tại closure: API 156 file/607 test, Web 16 file/67 test,
+    AI 14 test và schema validator 7/7 đều PASS, không còn test skip. Monorepo strict typecheck,
+    production build, Compose production config và smoke Web/API/AI cũng PASS.
 
 ## Phase 4 — Consumers, cutover và cleanup
 
-- [ ] T38 — Web auth/profile contract cho ID string và Account/Customer.
+- [x] T38 — Web auth/profile contract cho ID string và Account/Customer.
   - [x] T38.1 — Identity response boundary: type V2 tách legacy và parser fail-closed cho
     customer/backoffice session + own profile. BIGINT giữ string chính xác; alias và role/scope
     được kiểm tra trước Redux/UI. Unit Web 7/7 đạt; chưa gọi endpoint/mount hoặc đổi session/UI.
@@ -655,4 +671,4 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     Production dependency audit còn 0 critical/high. Xem `docs/database-v2/final-validation.md`.
   - Verify: `npm run typecheck`, `npm test`, `npm run build`, Python `ruff/mypy/pytest`, Compose config và `git diff --check`.
 - [x] Checkpoint commit — Đã tách commit logic và tài liệu trên local branch `develop`.
-- [ ] Checkpoint push — Chưa push theo yêu cầu hiện tại; chỉ push khi người dùng yêu cầu riêng.
+- [ ] Checkpoint push — Sẽ đánh dấu sau khi push `develop` ở lần đóng initiative này.

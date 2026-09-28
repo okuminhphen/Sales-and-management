@@ -62,7 +62,7 @@ const replaceCart = (state: CartState, items: CartItem[]): void => {
   state.error = null;
 };
 
-const loadCart = async (userId: number | undefined): Promise<CartItem[]> => {
+const loadCart = async (userId: string | number | undefined): Promise<CartItem[]> => {
   if (!userId) return getLocalStorageCart();
   const response = await getCart(userId);
   if (Number(response.data.EC) !== 0 || !Array.isArray(response.data.DT)) {

@@ -1022,9 +1022,10 @@ có tín hiệu sẽ trả danh sách rỗng để ranker giữ fallback catalog
 
 `behavior_events` là event log bất biến còn `customer_product_stats` là projection cho read path.
 Không được cộng cả hai trong cùng request vì một view/like đã xuất hiện trong stats sẽ bị double-count.
-T41 chỉ chuyển adapter đọc: không thay trọng số, TF-IDF, embedding, RAG hay model; cũng không tự tạo
-hoặc mount endpoint ghi behavior V2. Trước guarded cutover phải xác minh producer behavior duy trì
-`customer_product_stats`, nếu không thì recommendation vẫn đúng nhưng chỉ có tín hiệu cart/purchase.
+T41 không thay trọng số, TF-IDF, embedding, RAG hay model. Closure 2026-09-28 đã mount writer
+`/behavior/view/:productId`, `/behavior/like/:productId` và `/behavior/like-status/:productId`.
+Writer chỉ nhận customer từ V2 access context, xác minh product/customer active rồi ghi
+`behavior_events` và `customer_product_stats` atomically; browser không thể tự khai customer ID.
 
 Integration test AI có thêm fixture account → customer → stats và luôn cleanup theo token. Chạy cùng
 lệnh `_test` của T40; test vẫn từ chối database không kết thúc bằng `_test`.

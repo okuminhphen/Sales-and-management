@@ -19,10 +19,10 @@ liệu thật vẫn cần backup, inspection, rehearsal và rollback runbook ri�
 | Database chính | 50 bảng vật lý = 49 nghiệp vụ + metadata; 104 FK; 6 migration; zero pending |
 | Seed nền | 6 role, 37 permission, 3 payment method; integration test idempotency/concurrency đạt |
 | Schema artifact | Revision 4, checksum hợp lệ, 49 bảng/104 quan hệ; validator 7/7 đạt |
-| API | Full MySQL V2 suite 152 file; 590 pass/4 skip có chủ đích; Redis OTP focused 8/8 đạt |
+| API | Full MySQL/Redis V2 suite 156 file; 607 pass, 0 skip |
 | API compile | strict typecheck và production build đạt; runtime gate database chính đạt |
-| Web | 16 file/65 test, typecheck và production build đạt |
-| AI | Ruff sạch, Mypy strict sạch, Pytest 12 pass/2 opt-in skip; AI–MySQL focused 2/2 đạt |
+| Web | 16 file/67 test, typecheck và production build đạt ở closure 2026-09-28 |
+| AI | Ruff sạch, Mypy strict sạch, Pytest 14 pass gồm AI–MySQL integration; 0 skip |
 | Deployment | Compose production config hợp lệ; worker outbox trỏ artifact V2; API image build lại thành công và có DBML/manifest |
 | Dependency production | `npm audit --omit=dev`: 0 critical/high; chuỗi `qs`/`body-parser` đã vá |
 | Legacy scan | 0 tracked file trong `src/models` và `src/migrations`; `dist/models` không tồn tại |
@@ -43,9 +43,24 @@ liệu thật vẫn cần backup, inspection, rehearsal và rollback runbook ri�
 6. Đã bỏ adapter Cloudinary không dùng, nâng Cloudinary/Multer/Express và áp dụng bản vá
    `body-parser`/`qs` không breaking. Image API được build lại sau thay đổi dependency.
 
+## Closure bổ sung ngày 2026-09-28
+
+- Login reCAPTCHA được xác minh trong chính command `/login`, không còn endpoint captcha giả.
+- Product admin ghi metadata JSON, variant và media qua contract V2; order admin chỉ dùng
+  transition confirm/cancel, không hard-delete hoặc gửi status tùy ý.
+- Public voucher directory chỉ trả mã online đang hiệu lực; checkout vẫn kiểm tra scope/quota
+  dưới lock. Voucher admin là read-only cho đến khi có promotion lifecycle spec.
+- Own-account password change đã có DTO strict, kiểm tra current password và compare-and-swap.
+- Writer behavior view/like lấy customer từ V2 access context, ghi event + projection atomically;
+  AI personalization tiếp tục đọc projection đã chuẩn hóa.
+- Google OAuth, account/customer admin, branch delete và staff chat được ẩn/fail-closed thay vì
+  gọi route không tồn tại. Các capability này cần schema/policy riêng, không phải lỗi cutover.
+- Regression cuối với hạ tầng thật: API 607/607; Web 67/67; AI 14/14;
+  schema validator 7/7; strict typecheck/build và smoke Web/API/AI đều đạt.
+
 ## Rủi ro không chặn và follow-up
 
-- Web còn component lớn, `@ts-nocheck` và cảnh báo chunk hơn 500 kB; cần initiative frontend riêng.
+- Web còn component lớn, 31 file `@ts-nocheck` và cảnh báo chunk hơn 500 kB; cần initiative frontend riêng.
 - Google OAuth V2 và staff realtime handoff còn fail-closed/chưa hoàn tất theo policy đã ghi.
 - Pytest cảnh báo dependency TestClient cũ; nên theo dõi FastAPI/Starlette/httpx2 trong đợt nâng dependency.
 - Qdrant local dùng HTTP với API key nên có cảnh báo insecure; production phải dùng TLS/private network.

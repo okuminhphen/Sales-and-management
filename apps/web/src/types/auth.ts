@@ -1,9 +1,11 @@
+import type { EntityId } from "./http";
+
 export interface AdminSession {
-  adminId: number;
+  adminId: EntityId;
   username?: string;
   email?: string;
   role: string;
-  branchId?: number | null;
+  branchId?: EntityId | null;
   token: string;
 }
 
@@ -12,14 +14,14 @@ export interface GoogleAccessTokenCredential {
 }
 
 export interface AdminAccountDto {
-  id: number;
+  id: EntityId;
   username: string;
   email: string;
   fullname?: string | null;
   phone?: string | null;
   status: "ACTIVE" | "INACTIVE";
   roleId?: number | null;
-  branchId?: number | null;
+  branchId?: EntityId | null;
   role?: { id: number; name: string } | null;
 }
 
@@ -40,10 +42,10 @@ export interface RoleDto {
 }
 
 export interface UserSession {
-  userId: number;
+  userId: EntityId;
   email: string;
   userRole: RoleDto;
-  branchId?: number | null;
+  branchId?: EntityId | null;
   token: string;
   username?: string | null;
   fullname?: string | null;
@@ -52,13 +54,13 @@ export interface UserSession {
 }
 
 export interface UserDto {
-  id: number;
+  id: EntityId;
   username: string;
   email: string;
   phone?: string | null;
   fullname?: string | null;
   address?: string | null;
-  branchId?: number | null;
+  branchId?: EntityId | null;
   roles?: RoleDto[];
 }
 
@@ -71,7 +73,7 @@ export interface CreateUserInput {
 }
 
 export interface UpdateUserByAdminInput extends CreateUserInput {
-  id: number;
+  id: EntityId;
 }
 
 export type UpdateProfileInput = Partial<
