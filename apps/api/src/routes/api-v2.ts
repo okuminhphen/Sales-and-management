@@ -18,6 +18,7 @@ import { createInventoryTransferV2Router } from "./inventory-transfer-v2.js";
 import { createNotificationV2Router } from "./notification-v2.js";
 import { createOrderV2Router } from "./order-v2.js";
 import { createPaymentV2Router } from "./payment-v2.js";
+import { createBehaviorV2Router } from "./behavior-v2.js";
 
 /**
  * The primary HTTP composition for routes whose V2 implementations are complete.
@@ -40,6 +41,7 @@ export const createApiV2Router = (dependencies: {
     router.use(createInventoryV2Router(persistence));
     router.use(createInventoryTransferV2Router({ persistence, audit }));
     router.use(createPaymentV2Router({ persistence, audit, gateway: dependencies.paymentGateway }));
+    router.use(createBehaviorV2Router({ persistence, audit }));
     router.use(createNotificationV2Router({ persistence }));
     router.use(createConversationV2Router({ persistence }));
     router.use(createChatbotRouter());
