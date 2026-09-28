@@ -1,119 +1,96 @@
 # Kiến trúc hệ thống
 
-Ngày audit gần nhất: 2026-09-15.
+Ngày cập nhật: 2026-09-28.
 
-## Quyết định kiến trúc
+## Tổng quan
 
-Hệ thống là modular monorepo gồm ba deployable độc lập: web, API và AI. MySQL, Redis,
-Qdrant và RabbitMQ là hạ tầng riêng. Socket.IO là transport của API, không phải service
-nghiệp vụ độc lập.
+HappyShop là modular monorepo nhưng có ba deployable độc lập: Web React, API
+Express/Socket.IO và AI FastAPI. MySQL là source of truth nghiệp vụ; Redis phục vụ rate
+limit/cache/realtime; RabbitMQ vận chuyển sự kiện catalog đã commit; Qdrant là read-model
+vector có thể dựng lại từ MySQL.
 
 ```text
-Web React
-  ├─ HTTP/Socket.IO -> API Express -> feature services -> Sequelize -> MySQL
-  │                               └-> Redis cache/adapter
-  └─ POST /api/v1/bot/chat -> API -> FastAPI -> application use cases -> repository/chat ports
-                                             ├-> MySQL adapter
-                                             └-> Gemini adapter
-
-Qdrant <- worker (chưa triển khai) <- RabbitMQ <- product/catalog events
+Browser/CDN
+  └─ Web React
+      ├─ REST + Socket.IO ──> API Express ──> Database V2/MySQL
+      │                              ├──────> Redis
+      │                              └──────> RabbitMQ ──> AI index worker ──> Qdrant
+      └─ chat/recommendation ─> API BFF ───> AI FastAPI ──> Gemini/Qdrant/MySQL
 ```
 
-FastAPI không public trực tiếp cho browser. API là BFF/gateway của chat: xác thực boundary
-nếu cần, rate limit, timeout upstream và mapping lỗi. `X-Request-ID` được tạo ở API (hoặc
-nhận từ reverse proxy), chuyển tới AI service và xuất hiện trong response/log của cả hai.
+Browser không gọi FastAPI, Gemini, MySQL hoặc Qdrant trực tiếp. API là trust boundary:
+validate DTO, xác thực/ủy quyền bằng trạng thái đọc lại từ Database V2, rate limit, gắn
+`X-Request-ID`, áp timeout và chuẩn hóa lỗi upstream.
 
-## Phân bổ thư mục
+## Database V2 là runtime duy nhất
+
+Runtime đã cutover sang Database V2 revision 4: 49 bảng nghiệp vụ, 104 khóa ngoại và bảng
+metadata `database_v2_migrations`. `main.ts` tạo đúng một `V2Persistence`; startup gate
+fail-closed nếu checksum migration, danh sách bảng hoặc metadata không khớp. Không còn
+legacy migration, model registry, dual-write, compatibility view hoặc `sync({ alter: true })`.
+
+- ID database dùng `BIGINT` và serialize qua HTTP dưới dạng chuỗi khi có thể vượt giới hạn
+  an toàn của JavaScript.
+- Tiền dùng `DECIMAL(19,4)`; không tính tiền bằng floating point.
+- Order, payment và inventory mutation dùng transaction, row lock, idempotency/outbox phù hợp.
+- Migration là release job riêng; API startup chỉ kiểm tra, không tự thay schema.
+
+Chi tiết schema và lệnh vận hành: [Database V2](database-v2/README.md). Lý do cutover:
+[ADR-0002](database-v2/adr/0002-database-v2-fresh-cutover.md).
+
+## Phân bổ mã nguồn
 
 ```text
 apps/
   api/src/
-    modules/          feature modules
-    infrastructure/   SMTP, GHN và provider adapters
-    database/         migration/seed runner
-    models/           Sequelize model registry (legacy boundary)
-    migrations/       lịch sử schema
-    config/            cấu hình runtime
-    middlewares/       HTTP cross-cutting concerns
-    security/          token và security primitives
-    routes/api.ts      composition root duy nhất
-  web/src/
-    components/        UI dùng lại
-    pages/             màn hình theo route
-    layouts/           bố cục
-    services/          HTTP clients
-    store/             Redux state
-    types/             contract dùng chung
+    modules/<capability>/
+      application/       use case, port và transaction orchestration
+      domain/             rule/value object không phụ thuộc transport
+      interfaces/http/    route, DTO, controller/handler
+      persistence/        Sequelize repository cho V2
+    database/v2/          registry typed, migration, seed, runtime gate
+    routes/               composition root V2 theo capability
+    workers/              process nền độc lập
+    config/               parse/validate cấu hình runtime
+    middlewares/          HTTP cross-cutting concerns
+    infrastructure/       adapter provider bên ngoài
+  web/src/                React UI, service, state và contract parser
   ai-service/app/
-    api/               FastAPI transport
-    application/       use case và ports
-    domain/            domain models
-    infrastructure/    MySQL/Gemini adapters
-infra/                 MySQL, Redis, Qdrant, RabbitMQ cho local/staging
-docs/                  tài liệu vận hành và kiến trúc
+    api/                  FastAPI transport
+    application/          use case và ports
+    domain/               domain model
+    infrastructure/       MySQL, Qdrant, RabbitMQ, Gemini adapters
+infra/                    MySQL, Redis, Qdrant, RabbitMQ cho local/staging
 ```
 
-## Quy tắc backend
+Không ép mọi module phải có đủ folder rỗng. Capability phức tạp dùng các layer trên; module
+provider nhỏ có thể phẳng, miễn dependency vẫn hướng vào domain/application. Route chỉ ghép
+middleware/validation/handler; DTO Zod `.strict()` chặn field ngoài; luật nghiệp vụ không đặt
+trong route.
 
-Mỗi capability nằm tại `modules/<feature>` và thường có `<feature>.routes.ts`,
-`<feature>.dto.ts`, `<feature>.controller.ts`, `<feature>.service.ts`. Chỉ thêm repository,
-port hoặc use-case khi có nhu cầu thật; không tạo folder rỗng để “đủ pattern”.
+## Pattern và nguyên tắc
 
-- Route ghép middleware, authorization, validation và handler.
-- DTO validate/coerce input bằng Zod trước controller.
-- Controller chuyển HTTP request thành lời gọi service và định dạng response.
-- Service chứa nghiệp vụ, transaction và phối hợp persistence/provider.
-- Infrastructure chứa adapter nhà cung cấp, không chứa luật nghiệp vụ.
-- Module không import controller/router của module khác và không tạo dependency cycle.
+- **SRP:** bootstrap, transport, use case, persistence và worker có vòng đời riêng.
+- **DIP/Ports and Adapters:** application phụ thuộc port; provider/ORM là adapter thay thế được.
+- **Composition root:** `routes/api-v2.ts` và `main.ts` là nơi wiring dependency, không service locator.
+- **Factory/DI:** app/router/use case nhận dependency để unit/integration test không cần listen port.
+- **Transactional outbox:** sự kiện chỉ được publish sau khi mutation MySQL commit.
+- **Fail closed:** schema sai, access context không hợp lệ hoặc dependency bắt buộc thiếu thì từ chối chạy/thao tác.
+- **Observability:** log JSON + request ID; không log body, token, OTP, mật khẩu hoặc API key.
 
-`routes/api.ts` chỉ đăng ký router. Request lỗi dùng envelope field-level thống nhất. Các
-thao tác order/inventory/payment quan trọng dùng transaction và row lock; actor ID lấy từ
-JWT thay vì tin dữ liệu từ browser.
+## Ranh giới deploy và scale
 
-## SOLID và pattern đang áp dụng
+Web, API, AI HTTP, outbox publisher, inventory-expiry worker và AI catalog indexer là các
+process độc lập. Có thể chạy chung bằng Compose để rehearsal, nhưng production scale/release
+từng process. Staff realtime handoff chỉ được bật khi policy/authorization tương ứng hoàn tất;
+không nới quyền bằng room membership hoặc payload do client tự khai.
 
-- SRP: tách bootstrap, app factory, WebSocket, Redis lifecycle và feature module.
-- DIP/Ports and Adapters: AI application phụ thuộc protocol, không phụ thuộc Gemini/MySQL.
-- Factory: Express/FastAPI có app factory để test không cần listen port.
-- Adapter: Sequelize, Redis, SMTP, GHN, Cloudinary và Gemini nằm ở biên hệ thống.
-- Dependency Injection: size module và AI tests dùng fake repository/model.
-- Fail-fast configuration: cấu hình được parse và chặn JWT không an toàn ở production.
-- Observability: API và AI ghi JSON log có timestamp, level, service, request ID, HTTP status
-  và duration; logger che các field bí mật thông dụng. Request body không được log mặc định.
+## Technical debt còn lại
 
-## Kết quả audit toàn project
-
-### Đã đạt
-
-- Monorepo và deploy boundary rõ ràng; không gộp ba runtime vào một process.
-- API được phân theo 24 feature, không còn global `controllers`/`services` hay router gom domain.
-- FastAPI có strict typing, ports/adapters và test.
-- Docker local, production manifest và CI/release workflow đã tách trách nhiệm.
-- Source app không còn `.js/.jsx/.cjs`; unit/integration test và build chạy được.
-
-### Chưa đạt hoàn toàn
-
-1. API toàn cục vẫn dùng `strict: false`; nhiều controller/service Sequelize còn implicit `any`.
-2. Frontend còn 34 file `@ts-nocheck`, nhiều page/component dài từ 300 đến hơn 1.100 dòng,
-   đang trộn UI, form state, gọi API và mapping nghiệp vụ.
-3. Frontend còn thiên về technical layer; nên chuyển dần sang
-   `features/<feature>/{api,components,hooks,schema,types}` và giữ `shared` cho UI chung.
-4. Sequelize models chưa có model/attribute types đầy đủ và nằm ở legacy boundary chung.
-5. Migration/database còn rủi ro ghi tại `database.md`; chưa đủ điều kiện khởi tạo DB production mới.
-6. Đã có structured log, request ID, timeout AI và rate limit chat qua Redis; vẫn thiếu
-   distributed tracing, metrics, dashboard, alert và centralized log storage.
-7. Qdrant/RabbitMQ đã được provision trong local infrastructure nhưng chưa được application
-   sử dụng. Chỉ nối chúng vào AI service sau khi có use case `search_products`,
-   `find_similar_products` và worker idempotent để đồng bộ embedding.
-
-## Roadmap ưu tiên
-
-1. Tạo database baseline v2 từ schema thật, sửa money/FK/index và rehearsal restore.
-2. Bật strict TypeScript từng API feature, typed Sequelize repository, sau đó bật strict toàn API.
-3. Refactor frontend theo feature, tách component trên 300 dòng, xóa toàn bộ `@ts-nocheck`.
-4. Thêm contract test web–API, test transaction/order/payment và WebSocket integration.
-5. Thêm distributed tracing, metrics, readiness health và alert; giữ rate limit/chat timeout
-   dưới kiểm thử tải.
-
-Kiến trúc hiện tại là nền tảng tốt và deployable, nhưng chưa nên tuyên bố “hoàn tất clean
-architecture” trước khi xử lý database, strict typing và frontend decomposition.
+1. Frontend còn `@ts-nocheck` và component/page lớn; nên chuyển dần sang
+   `features/<feature>/{api,components,hooks,schema,types}`.
+2. Cần bổ sung tracing, metrics, dashboard/SLO và alert ngoài structured log hiện có.
+3. Google OAuth V2 và staff Socket handoff còn là capability follow-up; không được giả lập bằng
+   đường legacy đã xóa.
+4. Trước production với dữ liệu thật phải có backup, rehearsal migration, capacity test và
+   runbook rollback; kết quả fresh local không thay thế các bước này.

@@ -1,104 +1,95 @@
-# Audit cơ sở dữ liệu
+# Cơ sở dữ liệu HappyShop
 
-Ngày audit ban đầu: 2026-09-15; cập nhật kiểm chứng local: 2026-09-23. Schema hiện tại đã
-được replay trên MySQL 8.4 local từ database rỗng: 50 migration tạo 38 bảng (tính cả
-`SequelizeMeta`) và không còn migration pending. Đây không phải inspection production;
-trước mọi migration production vẫn phải chạy
-[`sql/inspect_database.sql`](sql/inspect_database.sql) trên database thật.
+Ngày cập nhật: 2026-09-28.
 
-Database mặc định hiện dùng tên `sale_and_managements_db`. Cấu hình này áp dụng cho database
-mới; nếu MySQL volume đã khởi tạo với tên cũ, cần backup và chuyển schema/data riêng. Không xóa
-volume để ép MySQL khởi tạo lại.
+## Trạng thái hiện tại
 
-## Cấu trúc logic hiện tại
+Database V2 revision 4 là schema và persistence runtime duy nhất. Baseline gồm đúng **49 bảng
+nghiệp vụ**, **104 khóa ngoại** và một bảng metadata `database_v2_migrations` do runner quản
+lý. Sáu migration V2 được kiểm tra checksum; chạy lại phải báo zero pending. Chuỗi 50 migration
+và 32 model legacy đã bị xóa khỏi source runtime sau cutover.
 
-API nạp 32 Sequelize models và có 50 migrations (gồm `OutboxEvent` và
-`InventoryMovement` add-only).
+Tên database development mặc định là `sale_and_managements_db`. Integration test chỉ được
+phép dùng database có hậu tố `_test`, mặc định `sale_and_managements_db_test`; target guard
+từ chối chạy test destructive vào database chính.
 
-| Nhóm | Bảng/model chính | Quan hệ chính |
-| --- | --- | --- |
-| Danh tính | `User`, `Role`, `UserRole`, `Admins`, `Employee`, `Branch` | user–role; admin–role; user/admin/employee–branch |
-| Catalog | `Category`, `Product`, `Size`, `ProductSize`, `Review`, `Banner`, `Vouchers` | category–product; product–size; user/product–review |
-| Bán hàng | `Cart`, `CartProductSize`, `Orders`, `OrdersDetails`, `Payment`, `PaymentMethods` | user–cart/order; cart–product size; order–detail/payment |
-| Kho | `Inventory`, `StockRequests`, `StockRequestItems`, `StockHistories` | branch/product size–inventory; request–item/history |
-| Điều chuyển | `TransferReceipt`, `TransferReceiptItem`, `TransferHistory` | receipt–branch/item/approval/history |
-| Tin nhắn | `conversations`, `messages`, `notifications` | conversation–user/admin/message; notification–admin |
-| Cá nhân hóa | `UserBehavior` | tín hiệu view/like theo user và product |
+Source of truth:
 
-Migration còn tạo `Vehicle`, `Driver`, `Shipment`, `ShipmentItem`, `ShipmentTracking` nhưng
-không có Sequelize model hoặc module ứng dụng tương ứng.
+- [DBML revision 4](database-v2/target-schema.dbml)
+- [Schema manifest](database-v2/schema-manifest.json)
+- [Migration manifest](database-v2/migration-manifest.json)
+- [Hướng dẫn Database V2](database-v2/README.md)
+- [ADR cutover](database-v2/adr/0002-database-v2-fresh-cutover.md)
 
-## Rủi ro mức cao
+## Quy ước dữ liệu
 
-1. Migration runner đã khóa thứ tự các file nền `migrate-*.ts` trước migration timestamp và
-   đã replay thành công trên database MySQL local rỗng. Đây chỉ là lớp tương thích schema
-   legacy; không dùng kết quả rehearsal local để bootstrap production mới khi chưa audit dữ
-   liệu, backup và phê duyệt cutover.
-2. Tên bảng không nhất quán giữa số ít/số nhiều, PascalCase/lowercase và tên suy luận/tường
-   minh. Windows và Linux MySQL có thể xử lý khác nhau. Compose local đang tạm dùng
-   `lower_case_table_names=1` để tương thích dữ liệu legacy.
-3. Model `Cart` từng lệch migration: migration lưu `userId`, model cũ khai báo `name` và
-   `description`. Model đã sửa nhưng vẫn phải kiểm tra/chuyển kiểu cột trên DB thật.
-4. Các cột tiền `Product.price`, `Orders.totalPrice`, `Orders.shippingFee`,
-   `OrdersDetails.priceAtOrder`, `OrdersDetails.totalPrice` và `Payment.amount` đang dùng
-   `FLOAT`. Phải đổi thành `DECIMAL(19,4)` hoặc integer minor units; `FLOAT` gây sai số tiền.
-5. Nhiều cột quan hệ thiếu foreign key, composite unique key và index ở database level.
-   `ProductSize`, `Inventory`, `CartProductSize`, `UserBehavior` và `OrdersDetails` là các
-   điểm cần ưu tiên kiểm tra trên schema thật.
-6. Mã branch/employee sinh theo “đọc dòng cuối + 1”, có race condition khi ghi đồng thời.
-7. Model/migration drift: một số field chỉ có trong migration; một số bảng logistics không
-   còn ứng dụng sử dụng. Cần xác lập một source of truth.
-8. Runtime `sequelize.sync({ alter: true })` đã được bỏ vì có thể tự đổi schema production.
-   Mọi thay đổi schema phải đi qua migration versioned.
-9. Cart/order đã được gia cố ownership và transaction, nhưng vẫn cần integration test với
-   schema production-size trước release.
-10. `InventoryMovement` hiện ghi immutable ledger cho luồng tạo order và duyệt điều chuyển;
-    cần chuyển các điểm nhập/xuất/điều chỉnh kho còn lại sang cùng helper trước khi bật audit
-    tồn kho như nguồn đối soát chính.
+- InnoDB, `utf8mb4`, timestamp UTC và tên bảng/cột `snake_case`.
+- Primary/foreign key dùng `BIGINT`; HTTP không ép ID lớn thành JavaScript `number`.
+- Tiền dùng `DECIMAL(19,4)` và serialize chính xác, không dùng `FLOAT`.
+- Foreign key, unique key, check constraint và index được đặt tại database cho invariant quan trọng.
+- Inventory movement, payment attempt và outbox là audit/idempotency record; không xóa tùy tiện.
+- MySQL là nguồn dữ liệu chuẩn. Qdrant là read-model có thể rebuild, Redis là dữ liệu tạm thời.
+- Không dùng `sequelize.sync({ alter: true })`; mọi thay đổi schema phải qua migration versioned.
 
-Registry đã khai báo tường minh model name và sửa lỗi `db.Notifications` thành
-`db.Notification`. Order code dùng database ID sau insert, loại bỏ race “last order + 1”.
-Race tương tự của branch/employee vẫn còn.
+## Lệnh development
 
-## Đánh giá thiết kế và chuẩn v2 đề xuất
+```powershell
+$env:V2_MIGRATIONS_ENABLED='true'
+$env:V2_MIGRATIONS_TARGET_DATABASE='sale_and_managements_db'
+npm run db:migrate:status --workspace @sales/api
+npm run db:migrate --workspace @sales/api
+npm run db:seed --workspace @sales/api
+```
 
-Phân vùng domain hiện tại hợp lý cho hệ thống bán hàng: catalog, order/payment, warehouse,
-transfer và identity đã tách entity riêng. Tuy nhiên **schema hiện tại chưa đạt mức best
-practice production** vì các integrity rule chủ yếu nằm ở code/association, không được bảo
-đảm bảo đầy đủ ở database. Không được áp dụng các constraint dưới đây trực tiếp vào database
-đang có trước khi kiểm tra dữ liệu orphan/trùng lặp.
+Target phải khớp chính xác `MYSQL_DATABASE`; cờ enable/target là xác nhận rõ ràng cho release
+job, không nên bật thường trực trong API runtime. Runner đọc `.env`, kiểm tra manifest/checksum
+và chỉ áp migration còn thiếu. Seed là idempotent.
+API startup không chạy migration; nó dùng runtime gate để từ chối khởi động nếu schema không
+đúng revision đã build.
 
-| Entity | Ràng buộc/index nên có ở baseline v2 | Lý do |
-| --- | --- | --- |
-| `Product` | `price >= 0`; index `categoryId`; giá `DECIMAL` | Giá chính xác, lọc catalog nhanh |
-| `ProductSize` | `NOT NULL productId,sizeId`; `UNIQUE(productId,sizeId)`; FK tới `Product`,`Size`; `stock >= 0` nếu còn giữ stock tổng | Không sinh biến thể trùng hoặc mồ côi |
-| `Inventory` | `NOT NULL branchId,productSizeId`; `UNIQUE(branchId,productSizeId)`; FK; `stock >= 0` | Một tồn kho cho mỗi chi nhánh/biến thể |
-| `InventoryMovement` | append-only; `UNIQUE(idempotencyKey)`; index `(branchId, productSizeId, occurredAt)` | Sổ cái tồn kho, có thể đối soát balance và retry an toàn |
-| `OutboxEvent` | `eventId` unique; index event chưa publish | Phát RabbitMQ sau commit MySQL, tránh mất sự kiện |
-| `CartProductSize` | `NOT NULL`; `UNIQUE(cartId,productSizeId)`; FK; `quantity > 0` | Không có dòng cart trùng hoặc số lượng âm |
-| `Orders` | FK `userId`,`branchId`; index `(userId, createdAt)`, `(status, createdAt)`; `code` unique/not null sau backfill | Truy vấn lịch sử và vận hành đơn hàng |
-| `OrdersDetails` | FK `orderId`,`productId`; `quantity > 0`; giá snapshot `DECIMAL`; index `orderId` | Bảo toàn dòng đơn hàng và truy vấn chi tiết |
-| `Payment` | FK `orderId`,`paymentMethodId`; unique theo provider transaction ID; index trạng thái/thời gian | Idempotency callback và đối soát |
-| `UserBehavior` | `UNIQUE(userId,productId)`; FK; index `(userId,updatedAt)` | Một aggregate behavior cho một user/sản phẩm |
-| `Review` | FK `userId`,`productId`; `CHECK rating BETWEEN 1 AND 5`; policy `UNIQUE(userId,productId)` nếu chỉ một review | Chất lượng dữ liệu review |
+Cutover/reset local chỉ dành cho database development mới và có target guard riêng:
 
-Các cột audit `createdAt`, `updatedAt`, timezone UTC, charset `utf8mb4` và InnoDB nên được
-chuẩn hóa trong baseline. `deletedAt` chỉ dùng soft delete cho entity thật sự cần khôi phục;
-order/payment/stock history cần immutable audit trail, không nên xóa mềm tùy tiện.
+```powershell
+npm run db:v2:cutover:local --workspace @sales/api
+```
 
-## Việc bắt buộc trước production
+Không chạy lệnh cutover lên staging/production hoặc database có dữ liệu cần giữ. Xóa Docker
+volume sẽ xóa toàn bộ dữ liệu MySQL local; lần `infra:up` sau tạo volume/database rỗng và vẫn
+phải chạy migrate + seed.
 
-1. Backup và chạy inspection SQL trên staging/production.
-2. Tạo baseline v2 versioned từ schema thật, chỉ chứa cấu trúc và không chứa data/secrets.
-3. Đối chiếu từng model với baseline; giữ chuỗi migration legacy và manifest thứ tự để audit,
-   nhưng không xem chúng là schema V2 chuẩn hóa.
-4. Viết forward migration chuẩn hóa tên bảng, `Cart.userId`, kiểu tiền, FK, index và unique
-   constraints; xử lý orphan rows trước khi thêm constraint.
-5. Rehearsal restore + migration trên bản sao staging có kích thước tương đương production.
-6. Ghi lại thời gian, kế hoạch rollback và người chịu trách nhiệm phê duyệt.
+## Integration test
 
-Cho tới khi hoàn thành, migration legacy chỉ được dùng để bootstrap local/rehearsal tương
-thích ứng dụng hiện tại; không nên dùng để khởi tạo database production mới.
+Các test MySQL V2 là opt-in và bắt buộc target `_test`:
 
-CI dùng MySQL 8.4 và Redis 7.4 tạm để test adapter/infrastructure. Test này không chạy toàn
-bộ chuỗi migration legacy và không được phép trỏ tới staging/production.
+```powershell
+$env:RUN_DATABASE_V2_TESTS='true'
+$env:V2_MIGRATIONS_ENABLED='true'
+$env:V2_MIGRATIONS_TARGET_DATABASE='sale_and_managements_db_test'
+npm run test --workspace @sales/api
+```
+
+Không tái sử dụng database development cho integration test. Database `_test` dùng cùng MySQL
+container và chỉ tốn dung lượng theo schema/dữ liệu test; nó tồn tại trong named volume cho tới
+khi bị drop hoặc volume bị xóa.
+
+## Quy trình thay đổi schema
+
+1. Sửa DBML và schema manifest; chạy `npm run db:v2:validate` và `npm run test:db:v2`.
+2. Thêm migration V2 forward-only và cập nhật migration manifest/checksum.
+3. Viết test đỏ cho constraint/repository/use case, rồi triển khai đến khi xanh.
+4. Rehearsal trên `_test`; xác nhận table/FK/checksum/zero-pending và seed idempotent.
+5. Review compatibility API/Web/AI, backup và rollback plan trước release.
+6. Production chạy migration bằng job one-off trước khi deploy app phụ thuộc schema mới.
+
+## Production
+
+Fresh local cutover không chứng minh migration dữ liệu production. Trước release phải:
+
+- chạy [`sql/inspect_database.sql`](sql/inspect_database.sql) trên bản sao môi trường thật;
+- backup và kiểm thử restore;
+- rehearsal forward migration với kích thước dữ liệu tương đương;
+- đối soát row count, tiền, inventory ledger, order/payment và orphan rows;
+- ghi owner phê duyệt, maintenance/compatibility window và rollback runbook.
+
+Không tự động down-migration dữ liệu production. Khi cần thay đổi breaking schema, dùng
+expand/migrate/contract qua nhiều release.

@@ -29,11 +29,17 @@ container.
 ```powershell
 Copy-Item .env.example .env
 npm run infra:up
+$env:V2_MIGRATIONS_ENABLED='true'
+$env:V2_MIGRATIONS_TARGET_DATABASE='sale_and_managements_db'
+npm run db:migrate --workspace @sales/api
+npm run db:seed --workspace @sales/api
 npm run rehearsal:up
 ```
 
 `infra/compose.infrastructure.yml` tạo network `sales-infrastructure`; `compose.yml` cho ba
-app tham gia network này. Web chạy cổng 3000, API 8080, AI chỉ expose nội bộ.
+app tham gia network này. Web chạy cổng 3000, API 8080, AI chỉ expose nội bộ. API có runtime
+gate và sẽ không khởi động nếu Database V2 chưa đủ 49 bảng, migration checksum sai hoặc còn
+schema ngoài allowlist.
 
 ## Production trên một VPS
 
@@ -56,7 +62,21 @@ docker compose --env-file .env.production -f compose.production.yml up -d --no-d
 ```
 
 Thay `api` bằng `web` hoặc `ai-service`. Database migration là release job one-off, không
-chạy tự động khi API startup.
+chạy tự động khi API startup. Image API phải chạy `node dist/database/v2/migrate.js up` bằng
+job có credential riêng trước khi rollout API phụ thuộc schema mới.
+
+Ví dụ job dùng chính image/credential của service API; target phải khớp `MYSQL_DATABASE`:
+
+```powershell
+$database = 'sale_and_managements_db' # phải giống MYSQL_DATABASE trong secret/env production
+docker compose --env-file .env.production -f compose.production.yml run --rm `
+  -e V2_MIGRATIONS_ENABLED=true `
+  -e V2_MIGRATIONS_TARGET_DATABASE=$database `
+  api node dist/database/v2/migrate.js up
+```
+
+Secret manager/CI nên inject target trực tiếp; không ghi cờ migration vào cấu hình API chạy
+thường xuyên. Seed super-admin là bootstrap có kiểm soát, không phải job chạy mỗi release.
 
 ## Managed platform
 
@@ -67,10 +87,10 @@ chạy tự động khi API startup.
 
 ## Thứ tự release
 
-1. Backup MySQL; rehearsal forward/rollback migration trên bản sao production. Manifest
-   legacy đã chạy được ở local nhưng chưa thay thế baseline V2 hoặc audit dữ liệu thật.
+1. Backup MySQL và kiểm thử restore; rehearsal forward migration V2 trên bản sao production.
+   Fresh local cutover không thay thế audit hoặc migration dữ liệu thật.
 2. Chạy typecheck, unit/integration test và build trong CI.
-3. Chạy backward-compatible migration bằng job riêng sau khi có baseline v2.
+3. Chạy backward-compatible migration V2 bằng job riêng; xác nhận checksum và zero pending.
 4. Deploy AI, API, rồi web; kiểm tra `/health/live` sau từng bước.
 5. Smoke test login, catalog, cart, checkout, điều chuyển kho, chat, reconnect WebSocket và payment callback.
 6. Theo dõi error rate, latency, DB pool, Redis memory, socket connections và provider failures.
@@ -91,7 +111,7 @@ backfill, rồi xóa field cũ trong release sau.
 - Chuyển tiếp `X-Request-ID` từ reverse proxy. Thu thập JSON log của `sales-api` và
   `sales-ai-service`; không index request body, token hoặc API key.
 - CPU/RAM limits, autoscaling, distributed trace, metrics và alert.
-- Thay Multer Cloudinary adapter legacy bằng adapter tương thích Multer 2 trước production.
+- Nâng Multer/Cloudinary adapter theo một thay đổi được kiểm thử riêng trước production.
 
 ## Rollback
 

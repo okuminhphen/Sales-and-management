@@ -2,7 +2,7 @@
 
 ## Trạng thái
 
-Accepted — 2026-09-23.
+Accepted — 2026-09-23. Implemented locally — 2026-09-28.
 
 ## Bối cảnh
 
@@ -28,3 +28,10 @@ cần bảo toàn.
 Cutover chỉ diễn ra sau khi các capability checkpoint đạt yêu cầu. `BIGINT` và `DECIMAL` cần
 contract serialize rõ ràng xuyên API/Web. Thành công trên local không đồng nghĩa production-ready;
 Git history lưu implementation legacy thay vì giữ bản sao legacy trong runtime source.
+
+## Kết quả triển khai
+
+Cutover local đã hoàn tất theo quyết định: database chính có 49 bảng nghiệp vụ + metadata,
+sáu migration zero pending; runtime chỉ tạo V2 persistence và legacy migration/model/router
+đã bị xóa. Kết quả này xác nhận kiến trúc fresh-database local, không phải phê duyệt tự động
+cho migration dữ liệu staging/production.

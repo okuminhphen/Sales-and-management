@@ -23,15 +23,14 @@ Trình duyệt
       └─ /api proxy ─────────> API ─────────> AI FastAPI ──> MySQL/Gemini
 ```
 
-Backend được tổ chức theo feature module. Mỗi nghiệp vụ tự sở hữu route, DTO,
-controller và service:
+Backend được tổ chức theo capability và dependency direction. Ví dụ commerce tự sở hữu
+application use case, HTTP DTO/controller/route và persistence adapter:
 
 ```text
-apps/api/src/modules/order/
-  order.routes.ts
-  order.dto.ts
-  order.controller.ts
-  order.service.ts
+apps/api/src/modules/commerce/
+  application/
+  interfaces/http/
+  persistence/
 ```
 
 Các provider bên ngoài nằm trong `infrastructure`; middleware, security, config và
@@ -61,12 +60,14 @@ py -3.12 -m venv .venv
 cd ../..
 ```
 
-Khởi tạo schema local **chỉ khi bạn đang tạo database mới**. Migration runner có manifest
-đưa các migration tạo bảng legacy lên trước migration timestamp, và đã được rehearsal từ
-database MySQL rỗng. Không dùng kết quả này để tự động bootstrap production; production vẫn
-cần backup, audit dữ liệu và review theo [Database](docs/database.md).
+Khởi tạo Database V2 local sau khi hạ tầng đã sẵn sàng. Runner kiểm tra manifest/checksum,
+chỉ áp migration còn thiếu và seed có thể chạy lại an toàn. API không tự migrate khi startup;
+nó fail-closed nếu schema không đúng revision đã build. Production vẫn cần backup, audit dữ
+liệu và migration job được review theo [Database](docs/database.md).
 
 ```powershell
+$env:V2_MIGRATIONS_ENABLED='true'
+$env:V2_MIGRATIONS_TARGET_DATABASE='sale_and_managements_db'
 npm run db:migrate --workspace @sales/api
 npm run db:migrate:status --workspace @sales/api
 npm run db:seed --workspace @sales/api
@@ -105,7 +106,7 @@ cd ../..
 npm run rehearsal:up -- --profile ai-indexing
 ```
 
-Worker API `outbox-publisher` phát event MySQL đã commit sang RabbitMQ; `ai-catalog-indexer`
+Worker API `outbox:publish:v2` phát event MySQL đã commit sang RabbitMQ; `ai-catalog-indexer`
 nhận event và upsert/delete vector Qdrant. Hai worker là process deploy độc lập, không chạy
 trong request HTTP. Qdrant chỉ là read-model: MySQL vẫn là nguồn dữ liệu chuẩn.
 
@@ -121,29 +122,29 @@ tài liệu dài khi được bổ sung sau này.
 
 ## Database
 
-Database V2 đang được triển khai trên `sale_and_managements_db_test`; ứng dụng local hiện vẫn
-chạy schema legacy cho tới checkpoint cutover. V2 đã có baseline 49 bảng, typed persistence và
-HTTP catalog/cart/review/banner và đọc kho theo chi nhánh đã được kiểm chứng với MySQL
-`_test` trong composition riêng; route bảo vệ dùng JWT V2. Core giữ hàng và ledger điều chỉnh
-tồn cũng có test MySQL, nhưng checkout/payment/fulfillment và toàn bộ lifecycle reservation
-chưa hoàn tất. Các route
-V2 và worker dọn ảnh chưa tự bật trong ứng dụng đang chạy. Xem [Database V2](docs/database-v2/README.md)
-và [checklist](tasks/todo.md) để phân biệt phần đã kiểm chứng với phần chưa cutover.
+Database V2 revision 4 là runtime duy nhất: 49 bảng nghiệp vụ, 104 khóa ngoại và một bảng
+metadata migration. API tạo một typed V2 persistence, mount composition V2 và có startup gate
+kiểm tra đúng sáu migration/checksum/table allowlist. Migration, model registry, router và
+worker legacy đã bị xóa; không còn dual-write hoặc schema compatibility chạy song song.
+Integration test dùng database riêng có hậu tố `_test`. Xem
+[Database V2](docs/database-v2/README.md), [quy ước database](docs/database.md) và
+[checklist](tasks/todo.md).
 
 Tên database mặc định cho môi trường mới là `sale_and_managements_db` (cấu hình qua
 `MYSQL_DATABASE`). MySQL chỉ khởi tạo database này tự động khi data volume được tạo lần đầu;
 đổi giá trị biến môi trường không đổi tên database bên trong volume đã khởi tạo.
 
 ```powershell
+$env:V2_MIGRATIONS_ENABLED='true'
+$env:V2_MIGRATIONS_TARGET_DATABASE='sale_and_managements_db'
 npm run db:migrate:status --workspace @sales/api
 npm run db:migrate --workspace @sales/api
 npm run db:seed --workspace @sales/api
 ```
 
-> Migration legacy đã replay thành công trên MySQL local chạy với
-> `lower_case_table_names=1`. Đây là lớp tương thích cho ứng dụng hiện tại, chưa phải schema
-> V2 chuẩn hóa và chưa được phê duyệt để bootstrap production. Hoàn thành checklist trong
-> [docs/database.md](docs/database.md) trước mọi thay đổi production.
+> Fresh local cutover không đồng nghĩa production-ready. Database có dữ liệu thật phải được
+> backup, inspection, rehearsal forward migration và đối soát trước release; không dùng lệnh
+> reset/cutover local cho staging hoặc production.
 
 ## Kiểm tra chất lượng
 
@@ -231,12 +232,13 @@ trong private network. Xem [hướng dẫn triển khai](docs/deployment.md).
 ## Trạng thái kỹ thuật
 
 - Source ứng dụng đã chuyển sang TypeScript/TSX hoặc Python; không còn source JS.
-- API đã chia theo feature module và có Zod DTO tại HTTP boundary.
+- API đã cutover hoàn toàn sang Database V2 typed; HTTP boundary dùng Zod DTO strict.
 - FastAPI strict với Mypy và có test bằng dependency injection.
 - Frontend còn 33 file `@ts-nocheck` và một số component quá lớn; đây là technical debt.
 - Widget chatbot đã là TSX typed, có trạng thái loading/error và giữ kết quả sản phẩm theo
   từng lượt trả lời; phần màn hình lớn còn lại cần tách dần theo feature.
-- Database legacy cần baseline và chuẩn hóa khóa ngoại, index, kiểu tiền trước production.
+- Database V2 đã chuẩn hóa BIGINT/DECIMAL/FK/index; migration dữ liệu production vẫn cần
+  initiative, backup và rehearsal riêng.
 
 ## Quy trình Git đề xuất
 

@@ -639,7 +639,11 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   bị xóa cùng implementation, test V2 thay thế vẫn giữ. Build xóa sạch `dist` trước compile để không
   đóng gói artifact legacy cũ. Search import legacy rỗng; API full suite 377 pass/215 skip, strict
   typecheck/build đạt.
-- [ ] T47 — README/docs/deployment/database/ADR tiếng Việt.
+- [x] T47 — README/docs/deployment/database/ADR tiếng Việt.
+  Đã cập nhật README, architecture, database, deployment, Database V2 và ADR theo trạng thái
+  runtime duy nhất V2; ghi rõ local/test/production guard, release migration job và technical
+  debt còn lại. Đồng thời sửa gap vận hành: CLI migration target phải khớp `MYSQL_DATABASE`,
+  bỏ alias down không hỗ trợ, image mang DBML/manifest và production outbox dùng worker V2.
 - [ ] T48 — Final full validation và Codex review.
   - Acceptance: local chỉ còn 49 bảng V2 + metadata, zero pending, seed không trùng, không import legacy, Web/API/AI chạy.
   - Verify: `npm run typecheck`, `npm test`, `npm run build`, Python `ruff/mypy/pytest`, Compose config và `git diff --check`.

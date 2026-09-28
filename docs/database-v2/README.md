@@ -11,6 +11,8 @@ Bảng metadata do migration runner tạo ra không thuộc 49 bảng nghiệp v
   theo nội dung nguồn TypeScript đã chuẩn hóa xuống dòng LF.
 - DBML là hợp đồng thiết kế, **không phải SQL để chạy trực tiếp**.
 - Baseline migration thực thi và kiểm chứng MySQL 8.4 được triển khai từng phần ở các task T04–T11.
+- Runtime local đã cutover ngày 2026-09-28; V2 là persistence/schema duy nhất và source legacy
+  đã bị xóa. Các mục theo Txx bên dưới là nhật ký checkpoint, không phải trạng thái runtime hiện tại.
 - Cutover chỉ áp dụng cho database local mới, có guard rõ ràng; production/staging và backfill
   dữ liệu nằm ngoài initiative này.
 - Trạng thái cuối chỉ có một schema và một write path; không duy trì dual-write hoặc view tương
@@ -44,16 +46,12 @@ Kế hoạch triển khai chi tiết được theo dõi tại [`tasks/plan.md`](
 Không chỉnh trực tiếp schema đích mà không cập nhật revision, checksum/manifest, ADR liên quan và
 các test bảo vệ schema.
 
-## Chạy baseline V2 an toàn ở local
+## Chạy migration V2 an toàn
 
-V2 runner hoàn toàn tách khỏi migration legacy. Nó chỉ có `status` và `up`; không có lệnh
-`down`, reset hoặc drop. Runner luôn yêu cầu đủ hai biến dưới đây và từ chối mọi database không
-kết thúc bằng `_test`:
-
-Hiện runner dành cho checkout local của repository: cần có cả nguồn migration TypeScript và
-hai manifest trong `docs/database-v2`. Runtime image trong `apps/api/Dockerfile` chưa đóng gói
-các artifact này; chưa dùng image đó để chạy V2 migration. Deployment/cutover sẽ được xử lý ở
-checkpoint sau, không ngầm coi local rehearsal là production-ready.
+V2 runner chỉ có `status` và `up`; không có lệnh `down`, reset hoặc drop. Runner cho integration
+test mặc định chỉ chấp nhận database `_test`. CLI/release job còn yêu cầu target khớp chính xác
+`MYSQL_DATABASE`, ngoài cờ enable, manifest/checksum và tên database hợp lệ. Vì vậy không thể
+đổi riêng target để ghi nhầm sang database khác.
 
 ```powershell
 $env:V2_MIGRATIONS_ENABLED = "true"
@@ -62,9 +60,11 @@ npm run db:v2:up --workspace @sales/api
 npm run db:v2:status --workspace @sales/api
 ```
 
-Tạo database `_test` riêng và cấp quyền cho user API trước lần chạy đầu. Không đặt hai biến trên
-vào cấu hình production và không thay `MYSQL_DATABASE=sale_and_managements_db` bằng database V2
-trước checkpoint cutover. Checksum DBML và từng file migration được kiểm tra trước khi kết nối
+Đối với database local chính, đặt cả `MYSQL_DATABASE` và target là
+`sale_and_managements_db`, rồi dùng alias mặc định `db:migrate`, `db:migrate:status` và
+`db:seed`. Không bật các biến migration trong process API chạy thường xuyên.
+
+Tạo database `_test` riêng và cấp quyền cho user API trước lần chạy đầu. Checksum DBML và từng file migration được kiểm tra trước khi kết nối
 MySQL; checksum migration đã thực thi còn được đối chiếu với cột `checksum` trong
 `database_v2_migrations`. Schema/migration chưa được review, hash lệch, thiếu target hoặc
 target không phải `_test` đều bị chặn. Metadata cũ không có cột checksum sẽ bị từ chối;
@@ -74,8 +74,9 @@ hoặc tạo DB `_test` mới; không reset DB ứng dụng chính để xử l�
 
 ## Seed dữ liệu nền V2
 
-Sau baseline, seed V2 chỉ chạy trên cùng target `_test` và cũng kích hoạt guard của migration.
-Nó không có reset/drop, chạy trong một transaction, và có thể chạy lại an toàn:
+Sau baseline, seed V2 dùng cùng explicit target và cũng kích hoạt guard của migration. Target
+integration phải có hậu tố `_test`; CLI/release target phải khớp `MYSQL_DATABASE`. Seed không có
+reset/drop, chạy trong một transaction và có thể chạy lại an toàn:
 
 ```powershell
 $env:V2_MIGRATIONS_ENABLED = "true"
@@ -108,7 +109,8 @@ node apps/api/dist/database/v2/cutover-local.js
 ```
 
 Lệnh xóa rồi tạo lại chính xác database local đã duyệt, chạy sáu migration V2 và seed một lần. Sau
-đó phải kiểm tra `status`, seed idempotency và smoke Web/API/AI ở T44 trước khi xóa legacy source.
+đó phải kiểm tra `status`, seed idempotency và smoke Web/API/AI. Quy trình này đã hoàn tất cho
+database local; lệnh vẫn được giữ làm công cụ reset có xác nhận, không dùng cho production.
 
 ## Convention persistence V2
 
@@ -123,10 +125,16 @@ Lệnh xóa rồi tạo lại chính xác database local đã duyệt, chạy s�
   (`ER_LOCK_DEADLOCK`, `ER_LOCK_WAIT_TIMEOUT`) với backoff hữu hạn. Không retry validation,
   unique/integrity error hoặc lỗi hạ tầng khác; các lỗi đó phải trả về kết quả nghiệp vụ hoặc lỗi
   rõ ràng ở use-case sở hữu chúng.
-- Không import registry V2 vào runtime legacy trong Phase 2. Registry chỉ được nối vào app sau
-  khi module compatibility tương ứng đã có integration test trên V2.
+- Runtime chỉ import registry V2; source registry legacy đã bị xóa sau khi các module compatibility
+  vượt integration test và primary smoke.
 
-## Authentication V2 đang triển khai
+## Nhật ký capability T12–T43 (historical)
+
+Các mục từ đây đến trước T44 ghi lại trạng thái tại thời điểm từng lát được xây dựng. Cụm từ
+“chưa mount”, “runtime legacy” hoặc “đang triển khai” trong phần này là gate lịch sử, đã được
+T44–T46 thay thế. Trạng thái hiện hành nằm ở phần đầu tài liệu và mục cutover cuối tài liệu.
+
+## Authentication V2 — checkpoint lịch sử
 
 Customer và backoffice password flow được tách thành application service, persistence adapter
 và access-context reader. Password được so sánh qua một `PasswordHasher` port; cả credential
@@ -1072,3 +1080,16 @@ Evidence local ngày 2026-09-27:
   từ chối đọc duy nhất file rỗng `app/scripts/__init__.py` trong OneDrive (ACL host), không phải lỗi
   lint nội dung; cần khôi phục quyền file hoặc checkout sạch trước final T48.
 - Web có 16 file/63 test đạt, typecheck/build đạt; Vite chỉ cảnh báo chunk lớn, không lỗi build.
+
+## Loại bỏ legacy và đồng bộ vận hành — T45–T47
+
+- T45 xóa 50 migration legacy, migration-order helper/test; alias migrate/status/seed mặc định
+  chỉ còn runner V2.
+- T46 xóa 32 model + registry, router/Socket/token/seed/outbox worker và module compatibility
+  legacy. Build luôn xóa `dist` trước compile để artifact cũ không lọt vào image.
+- CLI migration deployment yêu cầu `V2_MIGRATIONS_ENABLED=true`, target tường minh và target
+  phải khớp chính xác `MYSQL_DATABASE`; integration runner vẫn bắt buộc hậu tố `_test`.
+- API image đóng gói `docs/database-v2` để migration job có DBML/manifest kiểm checksum;
+  production outbox command dùng `run-outbox-publisher-v2.js`.
+- README, kiến trúc, database, deployment và ADR đã được đồng bộ tiếng Việt theo trạng thái
+  runtime chỉ còn V2. Git history là nơi lưu implementation cũ, không giữ bản sao trong runtime.
