@@ -654,4 +654,5 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     strict API-to-AI response và loại browser-supplied user ID khỏi personalized recommendation.
     Production dependency audit còn 0 critical/high. Xem `docs/database-v2/final-validation.md`.
   - Verify: `npm run typecheck`, `npm test`, `npm run build`, Python `ruff/mypy/pytest`, Compose config và `git diff --check`.
-- [ ] Checkpoint cuối — Chỉ commit/push khi người dùng yêu cầu riêng.
+- [x] Checkpoint commit — Đã tách commit logic và tài liệu trên local branch `develop`.
+- [ ] Checkpoint push — Chưa push theo yêu cầu hiện tại; chỉ push khi người dùng yêu cầu riêng.
