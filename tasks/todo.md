@@ -633,7 +633,12 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
 - [x] T45 — Xóa 50 migration và migration-order helper/test legacy. Default migration/status/seed
   scripts và production artifact path đã trỏ duy nhất tới runner V2; API strict typecheck/build đạt,
   migration-integrity/target-guard unit test đạt và source không còn import runner/order legacy.
-- [ ] T46 — Xóa 32 model legacy và compatibility code tạm; default runner/registry chỉ còn V2.
+- [x] T46 — Xóa 32 model legacy và compatibility code tạm; default runner/registry chỉ còn V2.
+  Đã xóa registry + 32 model, router/Socket/token/seed/outbox worker và module compatibility không còn
+  reachable; giữ module address provider không phụ thuộc DB và mount vào router V2. Chín test legacy
+  bị xóa cùng implementation, test V2 thay thế vẫn giữ. Build xóa sạch `dist` trước compile để không
+  đóng gói artifact legacy cũ. Search import legacy rỗng; API full suite 377 pass/215 skip, strict
+  typecheck/build đạt.
 - [ ] T47 — README/docs/deployment/database/ADR tiếng Việt.
 - [ ] T48 — Final full validation và Codex review.
   - Acceptance: local chỉ còn 49 bảng V2 + metadata, zero pending, seed không trùng, không import legacy, Web/API/AI chạy.

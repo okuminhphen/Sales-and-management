@@ -6,6 +6,7 @@ import type { VnPayGatewayPort } from "../modules/payment/application/vnpay-gate
 import type { V2HttpAuditWriter } from "../observability/v2-http-audit.js";
 import { createChatbotRouter } from "../modules/chatbot/chatbot.routes.js";
 import { createRecommendationProxyRouter } from "../modules/chatbot/recommendation-proxy.routes.js";
+import { createAddressRouter } from "../modules/address/address.routes.js";
 import { createV2AuthMiddleware } from "../modules/identity-access/interfaces/http/v2-auth.middleware.js";
 import { SequelizeV2AccessContextRepository } from "../modules/identity-access/persistence/v2-access-context.repository.js";
 import { createCatalogCommerceV2Router } from "./catalog-commerce-v2.js";
@@ -45,5 +46,6 @@ export const createApiV2Router = (dependencies: {
     router.use(createRecommendationProxyRouter({ auth: createV2AuthMiddleware({
         accessContexts: new SequelizeV2AccessContextRepository(persistence),
     }) }));
+    router.use(createAddressRouter());
     return router;
 };

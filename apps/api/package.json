@@ -7,6 +7,7 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "tsx watch src/main.ts",
+    "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.strict.json --noEmit",
@@ -23,7 +24,6 @@
     "db:seed": "tsx src/database/v2/seed.ts",
     "db:migrate:prod": "node dist/database/v2/migrate.js up",
     "db:seed:prod": "node dist/database/v2/seed.js",
-    "outbox:publish": "tsx src/workers/run-outbox-publisher.ts",
     "outbox:publish:v2": "tsx src/workers/run-outbox-publisher-v2.ts",
     "outbox:publish:v2:prod": "node dist/workers/run-outbox-publisher-v2.js",
     "banner-media:cleanup": "tsx src/workers/run-banner-media-cleanup.ts",

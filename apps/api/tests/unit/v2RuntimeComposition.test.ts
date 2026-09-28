@@ -27,6 +27,7 @@ describe("V2 runtime composition", () => {
         await request(app).get("/api/v1/transfer-receipts?page=1&limit=20").expect(401);
         await request(app).get("/api/v1/payment-methods").expect(401);
         await request(app).post("/api/v1/bot/chat").send({}).expect(400);
+        await request(app).get("/api/v1/address/districts").expect(400);
 
         await persistence.sequelize.close();
     });
