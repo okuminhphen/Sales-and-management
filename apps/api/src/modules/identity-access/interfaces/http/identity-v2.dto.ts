@@ -12,6 +12,7 @@ export const registerV2Body = z.object({
 export const customerLoginV2Body = z.object({
     emailOrPhone: z.string().trim().min(3).max(255),
     password: z.string().min(1).max(128),
+    recaptchaToken: z.string().trim().min(1).max(4096).optional(),
 }).strict();
 export const backofficeLoginV2Body = z.object({
     username: z.string().trim().min(3).max(255),

@@ -9,7 +9,7 @@ export const setOtpRecaptchaEnabledOverride = (value: boolean | undefined): void
     enabledOverride = value;
 };
 
-export const requireOtpRecaptcha = async (
+export const createRequireRecaptcha = (expectedAction: "register" | "login") => async (
     request: Request,
     response: Response,
     next: NextFunction
@@ -33,7 +33,7 @@ export const requireOtpRecaptcha = async (
     try {
         const result = await getRecaptchaVerifier().verify({
             token,
-            expectedAction: "register",
+            expectedAction,
             remoteIp: request.ip,
         });
         if (result.valid === false) {
@@ -62,3 +62,5 @@ export const requireOtpRecaptcha = async (
         });
     }
 };
+
+export const requireOtpRecaptcha = createRequireRecaptcha("register");

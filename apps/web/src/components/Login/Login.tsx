@@ -19,8 +19,8 @@ import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
 import { loginByUser, logout, setUser } from "../../store/slices/userSlice";
 import { fetchCart } from "../../store/slices/cartSlice";
-import { loginWithGoogle, verifyCaptcha } from "../../services/authService";
-import { GOOGLE_OAUTH_ENABLED } from "../../config/auth";
+import { loginWithGoogle } from "../../services/authService";
+import { GOOGLE_OAUTH_ENABLED, RECAPTCHA_ENABLED } from "../../config/auth";
 import { GoogleOAuthButton } from "../Auth/GoogleOAuthButton";
 
 const Login = (props) => {
@@ -48,18 +48,8 @@ const Login = (props) => {
 
   const handleGoogleSuccess = async (credentialResponse: TokenResponse) => {
     try {
-      if (!executeRecaptcha) {
+      if (RECAPTCHA_ENABLED && !executeRecaptcha) {
         toast.error("Recaptcha not yet loaded");
-        return;
-      }
-
-      // Lấy token reCAPTCHA v3
-      const token = await executeRecaptcha("login"); // "login" là action
-
-      // Gửi token lên backend
-      const captchaResult = await verifyCaptcha(token);
-      if (!captchaResult) {
-        toast.error("Failed captcha verification");
         return;
       }
 
@@ -110,19 +100,14 @@ const Login = (props) => {
   //   }
   // };
   const handleLogin = async () => {
-    if (!executeRecaptcha) {
+    if (RECAPTCHA_ENABLED && !executeRecaptcha) {
       toast.error("Recaptcha not yet loaded");
       return;
     }
 
-    // Lấy token reCAPTCHA v3
-    const token = await executeRecaptcha("login"); // "login" là action
-    // Gửi token lên backend
-    const captchaResult = await verifyCaptcha(token);
-    if (!captchaResult) {
-      toast.error("Failed captcha verification");
-      return;
-    }
+    const recaptchaToken = RECAPTCHA_ENABLED
+      ? await executeRecaptcha!("login")
+      : undefined;
 
     await dispatch(logout());
     setObjValidInput(defaultValidInput);
@@ -138,7 +123,7 @@ const Login = (props) => {
     }
 
     const resultAction = await dispatch(
-      loginByUser({ emailOrPhone, password })
+      loginByUser({ emailOrPhone, password, recaptchaToken })
     );
 
     if (loginByUser.fulfilled.match(resultAction)) {

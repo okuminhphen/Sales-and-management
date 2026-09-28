@@ -31,6 +31,7 @@ interface UserState {
 interface LoginInput {
   emailOrPhone: string;
   password: string;
+  recaptchaToken?: string;
 }
 
 interface UpdateUserInput {
@@ -105,9 +106,9 @@ export const loginByUser = createAsyncThunk<
   { rejectValue: string }
 >(
   "user/login",
-  async ({ emailOrPhone, password }, { rejectWithValue }) => {
+  async ({ emailOrPhone, password, recaptchaToken }, { rejectWithValue }) => {
     try {
-      let response = await loginUser(emailOrPhone, password);
+      let response = await loginUser(emailOrPhone, password, recaptchaToken);
 
       // Kiểm tra kết quả phản hồi
       if (response && response.data && +response.data.EC === 0) {

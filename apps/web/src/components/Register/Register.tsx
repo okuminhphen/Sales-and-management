@@ -27,7 +27,6 @@ import { setUser } from "../../store/slices/userSlice";
 import {
   createEmailVerificationChallenge,
   loginWithGoogle,
-  verifyCaptcha,
   verifyEmailChallenge,
 } from "../../services/authService";
 import { GOOGLE_OAUTH_ENABLED, RECAPTCHA_ENABLED } from "../../config/auth";
@@ -183,8 +182,6 @@ const Register = () => {
     try {
       const recaptchaToken = await getRecaptchaTokenIfEnabled("register");
       if (recaptchaToken === null) return;
-      if (recaptchaToken) await verifyCaptcha(recaptchaToken);
-
       const response = await loginWithGoogle(credentialResponse);
       toast.success("Login successful!");
       void dispatch(fetchCart());

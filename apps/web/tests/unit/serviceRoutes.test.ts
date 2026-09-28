@@ -5,11 +5,13 @@ import { deleteRole } from "../../src/services/roleService";
 import { deleteSize } from "../../src/services/sizeService";
 import { deleteVoucher } from "../../src/services/voucherService";
 import { getRecommendProductsForUser } from "../../src/services/productService";
+import { loginUser } from "../../src/services/userService";
 
 vi.mock("../../src/middlewares/axiosConfig", () => ({
   default: {
     delete: vi.fn(),
     get: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
@@ -33,5 +35,15 @@ describe("typed service routes", () => {
     getRecommendProductsForUser();
 
     expect(axios.get).toHaveBeenCalledWith("/recommend-product", { params: { num: 10 } });
+  });
+
+  it("sends the login reCAPTCHA token in the login command instead of calling a legacy endpoint", () => {
+    loginUser("customer@example.com", "password123", "captcha-token");
+
+    expect(axios.post).toHaveBeenCalledWith("/login", {
+      emailOrPhone: "customer@example.com",
+      password: "password123",
+      recaptchaToken: "captcha-token",
+    });
   });
 });

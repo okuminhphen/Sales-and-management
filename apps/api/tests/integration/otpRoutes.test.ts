@@ -1,4 +1,5 @@
 import request from "supertest";
+import { Router } from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.js";
 import { setEmailSender, TestEmailAdapter } from "../../src/infrastructure/mail/index.js";
@@ -7,7 +8,7 @@ import {
     MemoryOtpStorage,
     setOtpStorage,
 } from "../../src/modules/auth/otp/otp.repository.js";
-import { setOtpRecaptchaEnabledOverride } from "../../src/modules/auth/otp/recaptcha.guard.js";
+import { createRequireRecaptcha, setOtpRecaptchaEnabledOverride } from "../../src/modules/auth/otp/recaptcha.guard.js";
 import { createOtpRouter } from "../../src/modules/auth/otp/otp.routes.js";
 
 describe("OTP Email Verification API", () => {
@@ -32,6 +33,25 @@ describe("OTP Email Verification API", () => {
     });
 
     describe("POST /api/v1/auth/email-verification/challenges", () => {
+        it("verifies the login action at the API boundary without a separate public captcha endpoint", async () => {
+            const verifier = { verify: vi.fn().mockResolvedValue({ valid: true }) };
+            setOtpRecaptchaEnabledOverride(true);
+            setRecaptchaVerifier(verifier);
+            const router = Router();
+            router.post("/login-probe", createRequireRecaptcha("login"), (_request, response) => {
+                response.status(204).end();
+            });
+            const loginApp = createApp({ apiRouter: router });
+
+            await request(loginApp).post("/api/v1/login-probe")
+                .send({ recaptchaToken: "login-token" }).expect(204);
+            expect(verifier.verify).toHaveBeenCalledWith({
+                token: "login-token",
+                expectedAction: "login",
+                remoteIp: expect.any(String),
+            });
+        });
+
         it("rejects invalid email addresses", async () => {
             const response = await request(app)
                 .post("/api/v1/auth/email-verification/challenges")

@@ -31,6 +31,7 @@ export const createIdentityV2Routes = (dependencies: {
     auth: RequestHandler;
     audit?: V2HttpAuditWriter;
     loginRateLimit?: RequestHandler;
+    loginRecaptcha?: RequestHandler;
 }): Router => {
     const router = Router();
     const loginLimit = dependencies.loginRateLimit ?? rateLimit({ keyPrefix: "rate-limit:v2-auth:ip",
@@ -56,7 +57,8 @@ export const createIdentityV2Routes = (dependencies: {
                     response.status(503).json(envelope("Registration unavailable", -1, null)); return;
             }
         });
-    router.post("/login", loginLimit, validateRequest({ body: customerLoginV2Body }),
+    router.post("/login", loginLimit, ...(dependencies.loginRecaptcha ? [dependencies.loginRecaptcha] : []),
+        validateRequest({ body: customerLoginV2Body }),
         async (request, response) => {
             const result = await dependencies.customerAuth.login(request.body);
             if (result.kind === "invalid_credentials") {

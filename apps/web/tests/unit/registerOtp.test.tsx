@@ -25,7 +25,6 @@ vi.mock("../../src/components/Auth/GoogleOAuthButton", () => ({
 vi.mock("../../src/services/authService", () => ({
   createEmailVerificationChallenge: vi.fn(),
   verifyEmailChallenge: vi.fn(),
-  verifyCaptcha: vi.fn(),
   loginWithGoogle: vi.fn(),
 }));
 
@@ -51,7 +50,6 @@ describe("Register component OTP flow", () => {
   });
 
   beforeEach(() => {
-    vi.mocked(authService.verifyCaptcha).mockResolvedValue(true as any);
     vi.mocked(authService.createEmailVerificationChallenge).mockResolvedValue({
       data: {
         EC: 0,

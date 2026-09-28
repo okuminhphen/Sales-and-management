@@ -24,6 +24,7 @@ import { SequelizeEmployeeV2Repository } from "../modules/identity-access/persis
 import { createEmployeeV2Router } from "../modules/identity-access/interfaces/http/employee-v2.routes.js";
 import { EmployeeAssignmentV2Service } from "../modules/identity-access/application/employee-assignment-v2.service.js";
 import { SequelizeEmployeeAssignmentV2Repository } from "../modules/identity-access/persistence/employee-assignment-v2.repository.js";
+import { createRequireRecaptcha } from "../modules/auth/otp/recaptcha.guard.js";
 
 export const createIdentityV2Router = (dependencies: {
     persistence: V2Persistence;
@@ -68,6 +69,7 @@ export const createIdentityV2Router = (dependencies: {
         auth,
         audit: dependencies.audit,
         loginRateLimit: dependencies.loginRateLimit,
+        loginRecaptcha: createRequireRecaptcha("login"),
     }));
     return router;
 };

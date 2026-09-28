@@ -25,8 +25,12 @@ const registerNewUser = (
   });
 };
 
-const loginUser = (emailOrPhone: string, password: string) => {
-  return axios.post<ApiEnvelope<UserSession>>("/login", { emailOrPhone, password });
+const loginUser = (emailOrPhone: string, password: string, recaptchaToken?: string) => {
+  return axios.post<ApiEnvelope<UserSession>>("/login", {
+    emailOrPhone,
+    password,
+    ...(recaptchaToken ? { recaptchaToken } : {}),
+  });
 };
 
 const logoutUser = () => {

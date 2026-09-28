@@ -6,10 +6,6 @@ const loginWithGoogle = (credential: GoogleAccessTokenCredential) => {
   return axios.post("/auth/google", { credential });
 };
 
-const verifyCaptcha = (recaptchaToken: string) => {
-  return axios.post("/auth/verify-captcha", { recaptchaToken });
-};
-
 export interface ChallengeResponseData {
   challengeId: string;
   expiresInSeconds: number;
@@ -52,7 +48,6 @@ const loginAdmin = (username: string, password: string) => {
 };
 export {
   loginWithGoogle,
-  verifyCaptcha,
   verifyOTP,
   sendOTP,
   loginAdmin,

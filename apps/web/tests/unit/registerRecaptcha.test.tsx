@@ -36,7 +36,6 @@ vi.mock("../../src/components/Auth/GoogleOAuthButton", () => ({
 vi.mock("../../src/services/authService", () => ({
   createEmailVerificationChallenge: vi.fn(),
   verifyEmailChallenge: vi.fn(),
-  verifyCaptcha: vi.fn(),
   loginWithGoogle: vi.fn(),
 }));
 
@@ -112,14 +111,11 @@ describe("Register component reCAPTCHA fail-closed & bypass handling (P1 Finding
     });
 
     // Should NOT call captcha functions
-    expect(authService.verifyCaptcha).not.toHaveBeenCalled();
   });
 
   it("proceeds to OTP challenge when reCAPTCHA is enabled and verification succeeds", async () => {
     mockRecaptchaEnabled = true;
     mockExecuteRecaptcha = vi.fn().mockResolvedValue("valid-recaptcha-token");
-    vi.mocked(authService.verifyCaptcha).mockResolvedValue(true as any);
-
     render(<Register />);
     fillValidRegistrationForm();
 
