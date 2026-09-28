@@ -630,7 +630,9 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
     method. Web 16 file/63 test + typecheck/build đạt; API focused composition/auth/OTP/chat proxy đạt.
     Socket customer re-authorize từng command, persist V2 trước emit; staff Socket tiếp tục fail-closed
     đúng checkpoint T36.4b chưa duyệt. VNPay chỉ mount khi credential hiện diện.
-- [ ] T45 — Xóa 50 migration và migration-order helper/test legacy.
+- [x] T45 — Xóa 50 migration và migration-order helper/test legacy. Default migration/status/seed
+  scripts và production artifact path đã trỏ duy nhất tới runner V2; API strict typecheck/build đạt,
+  migration-integrity/target-guard unit test đạt và source không còn import runner/order legacy.
 - [ ] T46 — Xóa 32 model legacy và compatibility code tạm; default runner/registry chỉ còn V2.
 - [ ] T47 — README/docs/deployment/database/ADR tiếng Việt.
 - [ ] T48 — Final full validation và Codex review.
