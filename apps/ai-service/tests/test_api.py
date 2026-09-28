@@ -24,4 +24,5 @@ def test_health_and_chat_contracts() -> None:
 
     assert response.status_code == 200
     assert response.json()["reply"] == "Echo: Có đồ ngủ không?"
-    assert response.json()["products"][0]["product_id"] == 1
+    assert response.json()["products"][0]["product_id"] == "1"
+    assert response.json()["products"][0]["price"] == "120000.0000"

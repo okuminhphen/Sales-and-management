@@ -31,6 +31,7 @@ import {
   toggleLikeAPI,
   getLikeStatusAPI,
 } from "../../services/behaviorService";
+import { formatV2Money } from "../../services/database-v2.contract";
 import "./ProductDetails.scss";
 
 dayjs.extend(utc);
@@ -122,7 +123,7 @@ const ProductDetail = () => {
 
   const getTopProductsData = useCallback(async () => {
     try {
-      const response = await getRecommendProductsForUser(userId);
+      const response = await getRecommendProductsForUser();
       console.log(response.data.DT);
       if (response && response.data.EC === 0) {
         setTopProducts(response.data.DT);
@@ -130,7 +131,7 @@ const ProductDetail = () => {
     } catch (error) {
       console.error("Lỗi lấy top sản phẩm:", error);
     }
-  }, [userId]);
+  }, []);
 
   const addView = useCallback(async () => {
     try {
@@ -640,7 +641,7 @@ const ProductDetail = () => {
                     <div className="product-info">
                       <div className="product-name">{recProduct.name}</div>
                       <div className="product-price">
-                        {recProduct.price?.toLocaleString("vi-VN")} VND
+                        {formatV2Money(recProduct.price) ?? "—"} VND
                       </div>
                     </div>
                   </div>

@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { NextFunction, Request, Response } from "express";
+import { ZodError } from "zod";
 import type { ChatbotMessageDto } from "./chatbot.dto.js";
 import { sendChatMessage } from "./chatbot.service.js";
 
@@ -15,7 +16,7 @@ const sendMessageFunc = async (
             await sendChatMessage(message, history, typeof requestId === "string" ? requestId : undefined),
         );
     } catch (error: unknown) {
-        if (axios.isAxiosError(error)) {
+        if (axios.isAxiosError(error) || error instanceof ZodError) {
             res.status(502).json({
                 EM: "AI service unavailable",
                 EC: 2,

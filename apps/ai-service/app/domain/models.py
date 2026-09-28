@@ -1,6 +1,20 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
+from typing import TypedDict
+
+
+class PublicProduct(TypedDict):
+    product_id: str
+    name: str
+    description: str
+    price: str
+    images: list[str] | str | None
+    category_name: str
+
+
+class ChatReply(TypedDict):
+    reply: str
+    products: list[PublicProduct]
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,12 +34,12 @@ class Product:
             return self.images.split(",", maxsplit=1)[0].strip() or None
         return None
 
-    def to_public_dict(self) -> dict[str, Any]:
+    def to_public_dict(self) -> PublicProduct:
         return {
-            "product_id": self.id,
+            "product_id": str(self.id),
             "name": self.name,
             "description": self.description,
-            "price": float(self.price),
+            "price": format(self.price, ".4f"),
             "images": self.images,
             "category_name": self.category_name,
         }

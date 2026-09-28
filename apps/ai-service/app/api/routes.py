@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from app.application.chat import ChatService
 from app.application.ports import ChatTurn
 from app.application.recommendations import RecommendationService
+from app.domain.models import ChatReply, PublicProduct
 
 
 class ChatRequest(BaseModel):
@@ -20,7 +21,7 @@ class ChatHistoryItem(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
-    products: list[dict[str, object]] = Field(default_factory=list)
+    products: list[PublicProduct] = Field(default_factory=list)
 
 
 def create_router(
@@ -37,7 +38,7 @@ def create_router(
     async def recommend_product(
         product_id: int,
         limit: Annotated[int, Query(ge=1, le=50)] = 10,
-    ) -> list[dict[str, object]]:
+    ) -> list[PublicProduct]:
         try:
             products = await recommendations.similar_products(product_id, limit)
         except LookupError as error:
@@ -51,12 +52,12 @@ def create_router(
     ) -> dict[str, object]:
         products = await recommendations.products_for_user(user_id, limit)
         return {
-            "user_id": user_id,
+            "user_id": str(user_id),
             "recommendations": [product.to_public_dict() for product in products],
         }
 
     @router.post("/chat", response_model=ChatResponse, tags=["chat"])
-    async def chat_with_customer(payload: ChatRequest) -> dict[str, object]:
+    async def chat_with_customer(payload: ChatRequest) -> ChatReply:
         history = [ChatTurn(item.role, item.content.strip()) for item in payload.history]
         return await chat.reply(payload.message.strip(), history)
 

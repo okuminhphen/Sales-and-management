@@ -48,4 +48,20 @@ describe("chatbot HTTP boundary", () => {
             DT: null,
         });
     });
+
+    it("fails closed when the AI service returns an invalid chat contract", async () => {
+        vi.spyOn(axios, "post").mockResolvedValue({
+            data: {
+                reply: "Giá đã bị sửa",
+                products: [{ product_id: "1", name: "Áo", price: 1 }],
+            },
+        });
+
+        const response = await request(createChatbotApp())
+            .post("/api/v1/bot/chat")
+            .send({ message: "Tìm áo" });
+
+        expect(response.status).toBe(502);
+        expect(response.body).toEqual({ EM: "AI service unavailable", EC: 2, DT: null });
+    });
 });

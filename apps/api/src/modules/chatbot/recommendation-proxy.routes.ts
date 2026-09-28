@@ -6,6 +6,10 @@ import { validateRequest } from "../../middlewares/validateRequest.js";
 import { rateLimit } from "../../middlewares/rateLimit.js";
 import type { V2AuthenticatedRequest } from "../identity-access/interfaces/http/v2-auth.middleware.js";
 import type { RequestHandler } from "express";
+import {
+    aiPersonalizedRecommendationResponse,
+    aiRecommendationResponse,
+} from "./chatbot.dto.js";
 
 const productParams = z.object({ productId: z.string().regex(/^[1-9]\d{0,18}$/) }).strict();
 const recommendationQuery = z.object({ num: z.coerce.number().int().min(1).max(50).default(10) }).strict();
@@ -27,7 +31,8 @@ export const createRecommendationProxyRouter = (dependencies: { auth: RequestHan
             const upstream = await axios.get(`${env.AI_SERVICE_URL}/recommend/${request.params.productId}`, {
                 timeout: env.AI_SERVICE_TIMEOUT_MS,
             });
-            response.status(200).json({ EM: "Get recommended products successfully", EC: 0, DT: upstream.data });
+            const products = aiRecommendationResponse.parse(upstream.data);
+            response.status(200).json({ EM: "Get recommended products successfully", EC: 0, DT: products });
         } catch {
             response.status(502).json(unavailable);
         }
@@ -41,9 +46,9 @@ export const createRecommendationProxyRouter = (dependencies: { auth: RequestHan
                     params: { userId: context.accountId, num: request.query.num },
                     timeout: env.AI_SERVICE_TIMEOUT_MS,
                 });
-                const payload = upstream.data as { recommendations?: unknown };
+                const payload = aiPersonalizedRecommendationResponse.parse(upstream.data);
                 response.status(200).json({ EM: "Get personalized recommendations successfully", EC: 0,
-                    DT: Array.isArray(payload.recommendations) ? payload.recommendations : [] });
+                    DT: payload.recommendations });
             } catch {
                 response.status(502).json(unavailable);
             }

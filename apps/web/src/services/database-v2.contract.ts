@@ -15,6 +15,16 @@ export const parseV2EntityId = (value: unknown): V2EntityId | null => {
 export const parseV2Money = (value: unknown): V2Money | null =>
   typeof value === "string" && MONEY_PATTERN.test(value) ? value as V2Money : null;
 
+/** Formats exact DECIMAL(19,4) text for vi-VN without a lossy Number conversion. */
+export const formatV2Money = (value: unknown): string | null => {
+  const money = parseV2Money(value);
+  if (!money) return null;
+  const [integer, decimal] = money.split(".");
+  const groupedInteger = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const significantDecimal = decimal.replace(/0+$/, "");
+  return significantDecimal ? `${groupedInteger},${significantDecimal}` : groupedInteger;
+};
+
 /** Validates bounded offset metadata against the items already parsed from a V2 response. */
 export const parseV2OffsetPagination = (value: unknown, itemCount: number): V2OffsetPagination | null => {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;

@@ -1,5 +1,5 @@
 import axios from "../middlewares/axiosConfig";
-import type { ProductDto } from "../types/catalog";
+import type { ProductDto, RecommendationProductDto } from "../types/catalog";
 import type { ApiEnvelope, EntityId } from "../types/http";
 
 const getProducts = () => {
@@ -31,11 +31,13 @@ const createNewProduct = (formData: FormData) => {
 };
 
 const getRecommendProducts = (productId: EntityId) => {
-  return axios.get<ApiEnvelope<ProductDto[]>>(`/product/recommend/${productId}`);
+  return axios.get<ApiEnvelope<RecommendationProductDto[]>>(`/product/recommend/${productId}`);
 };
 
-const getRecommendProductsForUser = (userId: EntityId) => {
-  return axios.get<ApiEnvelope<ProductDto[]>>("/recommend-product", { params: { userId } });
+const getRecommendProductsForUser = () => {
+  return axios.get<ApiEnvelope<RecommendationProductDto[]>>("/recommend-product", {
+    params: { num: 10 },
+  });
 };
 
 export {

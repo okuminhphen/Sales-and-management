@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 import { FaRobot, FaTimes } from "react-icons/fa";
 import { sendMessage } from "../../services/chatBotService";
+import { formatV2Money, parseV2EntityId } from "../../services/database-v2.contract";
 import type { ChatbotProductPayload } from "../../types/chatbot";
 import "./Bot.scss";
 
@@ -11,10 +12,10 @@ type BotProps = {
 };
 
 type ProductCard = {
-  id: number;
+  id: string;
   name: string;
   description: string;
-  price: number | null;
+  price: string | null;
   imageUrl: string | null;
 };
 
@@ -28,9 +29,10 @@ type ChatMessage = {
 const toImageUrl = (value: unknown): string | null => {
   if (typeof value === "string") {
     try {
-      return toImageUrl(JSON.parse(value));
+      const url = new URL(value);
+      return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
     } catch {
-      return value.trim() || null;
+      return null;
     }
   }
 
@@ -44,14 +46,14 @@ const toImageUrl = (value: unknown): string | null => {
 
 const toProductCard = (product: ChatbotProductPayload): ProductCard | null => {
   const id = product.id ?? product.product_id;
-  if (typeof id !== "number" || !Number.isInteger(id) || !product.name) return null;
+  const parsedId = parseV2EntityId(id);
+  if (!parsedId || !product.name) return null;
 
-  const parsedPrice = Number(product.price);
   return {
-    id,
+    id: parsedId,
     name: product.name,
     description: product.description ?? "",
-    price: Number.isFinite(parsedPrice) ? parsedPrice : null,
+    price: formatV2Money(product.price),
     imageUrl: toImageUrl(product.images ?? product.image),
   };
 };
@@ -137,7 +139,7 @@ const Bot = ({ isOpen, onToggle, onOpen }: BotProps) => {
                           <h5>{product.name}</h5>
                           {product.price !== null && (
                             <p className="product-price">
-                              {product.price.toLocaleString("vi-VN")} VNĐ
+                              {product.price} VNĐ
                             </p>
                           )}
                           {product.description && (

@@ -1,6 +1,6 @@
 export type ChatbotProductPayload = {
-  id?: number;
-  product_id?: number;
+  id?: string;
+  product_id?: string;
   name?: string;
   description?: string;
   price?: number | string;

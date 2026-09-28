@@ -20,3 +20,12 @@ export interface ProductDto {
   categoryId?: number | null;
   sizes?: SizeDto[];
 }
+
+export interface RecommendationProductDto {
+  product_id: string;
+  name: string;
+  description: string;
+  price: string;
+  images?: string[] | string | null;
+  category_name: string;
+}
