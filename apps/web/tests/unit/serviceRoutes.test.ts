@@ -6,6 +6,7 @@ import { deleteSize } from "../../src/services/sizeService";
 import { deleteVoucher } from "../../src/services/voucherService";
 import { createNewProduct, getRecommendProductsForUser } from "../../src/services/productService";
 import { loginUser } from "../../src/services/userService";
+import { updateOrderStatus } from "../../src/services/orderService";
 
 vi.mock("../../src/middlewares/axiosConfig", () => ({
   default: {
@@ -75,5 +76,17 @@ describe("typed service routes", () => {
       sku: "HAPPY-9007199254740993-3",
       status: "active",
     });
+  });
+
+  it("maps order cancellation to the guarded V2 transition then refreshes the order", async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: { EC: 0, DT: { orderId: "7" } } } as never);
+    vi.mocked(axios.get).mockResolvedValue({ data: { EC: 0, DT: { id: "7", status: "CANCELLED" } } } as never);
+
+    await updateOrderStatus("7", { status: "CANCELLED" });
+
+    expect(axios.post).toHaveBeenCalledWith("/order/7/cancel", {
+      reason: "Cancelled by an authorized user",
+    });
+    expect(axios.get).toHaveBeenCalledWith("/order/7");
   });
 });

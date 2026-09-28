@@ -221,7 +221,7 @@ const ManageOrders = () => {
     setShowEditModal(true);
   };
 
-  // Mở modal xóa đơn hàng
+  // Mở modal hủy đơn hàng; đơn nghiệp vụ không được hard-delete.
   const handleOpenDeleteModal = (order) => {
     setOrderToDelete(order);
     setShowDeleteModal(true);
@@ -250,19 +250,19 @@ const ManageOrders = () => {
     }
   };
 
-  // Xóa đơn hàng
+  // Hủy đơn hàng qua state transition có audit.
   const handleDeleteOrder = async () => {
     if (!orderToDelete) return;
 
     try {
       await dispatch(deleteAdminOrderThunk(orderToDelete.id)).unwrap();
-      toast.success("Xóa đơn hàng thành công!");
+      toast.success("Hủy đơn hàng thành công!");
       setShowDeleteModal(false);
 
       // Refresh dữ liệu sau khi xóa thành công
       refreshData();
     } catch (error) {
-      toast.error("Xóa đơn hàng thất bại: " + error);
+      toast.error("Hủy đơn hàng thất bại: " + error);
     }
   };
 
@@ -614,10 +614,7 @@ const ManageOrders = () => {
                   value={newStatus}
                   onChange={(e) => setNewStatus(e.target.value)}
                 >
-                  <option value="PENDING">Chờ xác nhận</option>
                   <option value="CONFIRMED">Đã xác nhận</option>
-                  <option value="SHIPPING">Đang giao</option>
-                  <option value="COMPLETED">Đã giao</option>
                   <option value="CANCELLED">Đã hủy</option>
                 </Form.Select>
               </Form.Group>

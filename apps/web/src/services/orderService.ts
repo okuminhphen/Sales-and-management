@@ -15,10 +15,17 @@ const updateOrderStatus = (
   orderId: EntityId,
   updatedData: UpdateOrderStatusInput["updatedData"],
 ) => {
-  return axios.put<ApiEnvelope<OrderDto>>(
-    `/order/details/update/${orderId}`,
-    updatedData,
-  );
+  let transition: Promise<unknown>;
+  if (updatedData.status === "CONFIRMED") {
+    transition = axios.post(`/order/${orderId}/confirm`, {});
+  } else if (updatedData.status === "CANCELLED") {
+    transition = axios.post(`/order/${orderId}/cancel`, {
+      reason: "Cancelled by an authorized user",
+    });
+  } else {
+    return Promise.reject(new TypeError(`Unsupported order transition: ${updatedData.status}`));
+  }
+  return transition.then(() => getOrder(orderId));
 };
 
 const getOrder = (orderId: EntityId) => {
@@ -30,8 +37,8 @@ const getOrdersByUserId = (userId: EntityId) => {
 };
 
 const deleteOrder = (orderId: EntityId) => {
-  return axios.delete<ApiEnvelope<number>>(`/order/delete`, {
-    data: { id: orderId },
+  return axios.post<ApiEnvelope<{ orderId: string }>>(`/order/${orderId}/cancel`, {
+    reason: "Cancelled by an authorized user",
   });
 };
 const fetchAllOrders = () => {

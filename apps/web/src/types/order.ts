@@ -9,9 +9,9 @@ export type OrderStatus =
   | "CANCELLED";
 
 export interface OrderDetailDto {
-  id: number;
-  orderId: number;
-  productId: number;
+  id: string;
+  orderId: string;
+  productId: string;
   productName: string;
   productImage?: string | string[];
   productSize?: string;
@@ -21,9 +21,9 @@ export interface OrderDetailDto {
 }
 
 export interface OrderDto {
-  id: number;
-  userId?: number | null;
-  branchId?: number | null;
+  id: string;
+  userId?: string | null;
+  branchId?: string | null;
   code?: string;
   orderDate?: string;
   createdAt?: string;
@@ -39,20 +39,20 @@ export interface OrderDto {
 }
 
 export interface PaymentDto extends RequestPayload {
-  id?: number;
+  id?: string;
   amount?: number | string;
   status?: string;
   transactionId?: string | null;
 }
 
 export interface CreatedOrderDto {
-  orderId: number;
+  orderId: string;
   code: string;
 }
 
 export interface FetchOrdersInput {
   role: string;
-  branchId?: number | null;
+  branchId?: string | null;
 }
 
 export interface UpdateOrderStatusInput {

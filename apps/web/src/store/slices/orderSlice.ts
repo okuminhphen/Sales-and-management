@@ -56,7 +56,7 @@ export const fetchOrdersThunk = createAsyncThunk<
     const response =
       role === "SUPER_ADMIN"
         ? await fetchAllOrders()
-        : await fetchOrdersByBranch(branchId as number);
+        : await fetchOrdersByBranch(branchId as string);
     if (Number(response.data.EC) !== 0) {
       return rejectWithValue(response.data.EM);
     }

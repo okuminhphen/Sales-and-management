@@ -9,7 +9,7 @@ describe("order state", () => {
     const receipt = {
       EC: "0",
       EM: "created",
-      DT: { orderId: 9, code: "ORD-000009" },
+      DT: { orderId: "9", code: "ORD-000009" },
     };
 
     const state = reducer(
@@ -22,7 +22,7 @@ describe("order state", () => {
   });
 
   it("upserts the complete order returned by a status change", () => {
-    const order = { id: 9, status: "CANCELLED" as const, totalPrice: 100 };
+    const order = { id: "9", status: "CANCELLED" as const, totalPrice: "100.0000" };
     const state = reducer(
       undefined,
       updateOrderStatusThunk.fulfilled(order, "request-id", {
