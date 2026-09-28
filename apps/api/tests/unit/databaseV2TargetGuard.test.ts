@@ -7,6 +7,7 @@ import {
     LOCAL_V2_CUTOVER_CONFIRMATION,
     V2MigrationTargetError,
     assertApprovedLocalV2CutoverTarget,
+    assertConfiguredV2MigrationTarget,
     assertV2MigrationTarget,
     type V2MigrationTarget,
 } from "../../src/database/v2/target-guard.js";
@@ -68,6 +69,25 @@ describe("Database V2 migration target guard", () => {
             ),
         ).toThrowError(
             expect.objectContaining({ code: "V2_SCHEMA_CHECKSUM_MISMATCH" }),
+        );
+    });
+
+    it("permits a reviewed deployment target only when it matches MYSQL_DATABASE", () => {
+        expect(() => assertConfiguredV2MigrationTarget({
+            ...createTarget({
+                nodeEnvironment: "development",
+                targetDatabase: "sale_and_managements_db",
+            }),
+            configuredDatabase: "sale_and_managements_db",
+        })).not.toThrow();
+    });
+
+    it("rejects a deployment target different from MYSQL_DATABASE", () => {
+        expect(() => assertConfiguredV2MigrationTarget({
+            ...createTarget({ targetDatabase: "sale_and_managements_db_test" }),
+            configuredDatabase: "sale_and_managements_db",
+        })).toThrowError(
+            expect.objectContaining({ code: "V2_TARGET_DATABASE_MISMATCH" }),
         );
     });
 

@@ -18,6 +18,7 @@ COPY apps/web/package.json apps/web/package.json
 RUN npm install --omit=dev --workspace @sales/api --include-workspace-root
 COPY --from=build /app/apps/api/dist apps/api/dist
 COPY apps/api/templates apps/api/templates
+COPY docs/database-v2 docs/database-v2
 WORKDIR /app/apps/api
 EXPOSE 8080
 USER node

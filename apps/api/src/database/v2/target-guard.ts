@@ -18,11 +18,16 @@ export type LocalV2CutoverTarget = V2MigrationTarget & {
     confirmation?: string;
 };
 
+export type ConfiguredV2MigrationTarget = V2MigrationTarget & {
+    configuredDatabase: string;
+};
+
 export type V2MigrationTargetErrorCode =
     | "V2_MIGRATIONS_NOT_ENABLED"
     | "V2_TARGET_DATABASE_REQUIRED"
     | "V2_TARGET_DATABASE_INVALID"
     | "V2_TARGET_DATABASE_NOT_TEST"
+    | "V2_TARGET_DATABASE_MISMATCH"
     | "V2_SCHEMA_TARGET_UNEXPECTED"
     | "V2_SCHEMA_CHECKSUM_INVALID"
     | "V2_SCHEMA_CHECKSUM_MISMATCH";
@@ -40,7 +45,7 @@ export class V2MigrationTargetError extends Error {
 const normalizeSchemaFile = (schemaFile: string): string =>
     schemaFile.replaceAll("\\", "/").replace(/^\.\//, "");
 
-export const assertV2MigrationTarget = (target: V2MigrationTarget): void => {
+const assertReviewedV2MigrationTarget = (target: V2MigrationTarget): string => {
     if (!target.enabled) {
         throw new V2MigrationTargetError(
             "V2_MIGRATIONS_NOT_ENABLED",
@@ -60,13 +65,6 @@ export const assertV2MigrationTarget = (target: V2MigrationTarget): void => {
         throw new V2MigrationTargetError(
             "V2_TARGET_DATABASE_INVALID",
             "The Database V2 migration target must be a plain MySQL database identifier.",
-        );
-    }
-
-    if (!database.endsWith("_test")) {
-        throw new V2MigrationTargetError(
-            "V2_TARGET_DATABASE_NOT_TEST",
-            "Database V2 migrations are restricted to a dedicated database ending in _test.",
         );
     }
 
@@ -92,6 +90,30 @@ export const assertV2MigrationTarget = (target: V2MigrationTarget): void => {
         throw new V2MigrationTargetError(
             "V2_SCHEMA_CHECKSUM_MISMATCH",
             "The reviewed Database V2 schema checksum does not match its manifest.",
+        );
+    }
+
+    return database;
+};
+
+export const assertV2MigrationTarget = (target: V2MigrationTarget): void => {
+    const database = assertReviewedV2MigrationTarget(target);
+    if (!database.endsWith("_test")) {
+        throw new V2MigrationTargetError(
+            "V2_TARGET_DATABASE_NOT_TEST",
+            "Database V2 test migrations require a dedicated database ending in _test.",
+        );
+    }
+};
+
+export const assertConfiguredV2MigrationTarget = (
+    target: ConfiguredV2MigrationTarget,
+): void => {
+    const database = assertReviewedV2MigrationTarget(target);
+    if (database !== target.configuredDatabase.trim()) {
+        throw new V2MigrationTargetError(
+            "V2_TARGET_DATABASE_MISMATCH",
+            "The Database V2 migration target must exactly match MYSQL_DATABASE.",
         );
     }
 };

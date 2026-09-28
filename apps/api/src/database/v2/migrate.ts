@@ -20,6 +20,7 @@ import {
 import {
     APPROVED_V2_SCHEMA_FILE,
     assertApprovedLocalV2CutoverTarget,
+    assertConfiguredV2MigrationTarget,
     assertV2MigrationTarget,
     type LocalV2CutoverTarget,
     type V2MigrationTarget,
@@ -302,13 +303,22 @@ export const runApprovedLocalV2CutoverMigrations = async (
     } satisfies LocalV2CutoverTarget);
 });
 
+export const runConfiguredV2Migrations = async (
+    command: "status" | "up",
+): Promise<void> => runV2Migrations(command, (target) => {
+    assertConfiguredV2MigrationTarget({
+        ...target,
+        configuredDatabase: env.MYSQL_DATABASE,
+    });
+});
+
 const runFromCli = async (): Promise<void> => {
     const command = process.argv[2] ?? "status";
     if (command !== "status" && command !== "up") {
         throw new Error("Database V2 migration command must be either status or up.");
     }
 
-    await runV2Migrations(command);
+    await runConfiguredV2Migrations(command);
 };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(currentFile)) {

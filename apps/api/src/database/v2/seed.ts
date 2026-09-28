@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { Sequelize, type Transaction } from "sequelize";
 import { fileURLToPath } from "node:url";
 import { env } from "../../config/env.js";
-import { runV2Migrations } from "./migrate.js";
+import { runConfiguredV2Migrations } from "./migrate.js";
 import { retryV2Transaction } from "./transaction-retry.js";
 
 type SeedRecord = {
@@ -152,7 +152,7 @@ export const runV2Seed = async (): Promise<void> => {
         email: env.SUPER_ADMIN_EMAIL ?? "",
         password: env.SUPER_ADMIN_PASSWORD ?? "",
     });
-    await runV2Migrations("up");
+    await runConfiguredV2Migrations("up");
     const targetDatabase = env.V2_MIGRATIONS_TARGET_DATABASE;
     if (!targetDatabase) {
         throw new Error("Database V2 seed requires V2_MIGRATIONS_TARGET_DATABASE.");

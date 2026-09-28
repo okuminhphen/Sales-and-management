@@ -111,7 +111,7 @@ services:
   outbox-publisher:
     image: "${API_IMAGE:?Set API_IMAGE to an immutable image tag}"
     restart: unless-stopped
-    command: ["node", "dist/workers/run-outbox-publisher.js"]
+    command: ["node", "dist/workers/run-outbox-publisher-v2.js"]
     environment:
       NODE_ENV: production
       MYSQL_HOST: "${MYSQL_HOST:?Set MYSQL_HOST}"
