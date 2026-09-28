@@ -5,18 +5,15 @@ import { useDispatch, useSelector } from "react-redux";
 import {
   FaDollarSign,
   FaBox,
-  FaUserFriends,
   FaClipboardList,
 } from "react-icons/fa";
 import "./AdminPage.scss";
 import { fetchProducts } from "../../store/slices/productSlice";
 import { fetchOrdersThunk } from "../../store/slices/orderSlice";
-import { fetchUsers } from "../../store/slices/userSlice";
 import { BACKEND_URL } from "../../config/constants";
 
 // Import các component quản lý
 import Products from "../../components/ManageProducts/Products";
-import ManageUsers from "../../components/ManageUsers/ManageUsers";
 import ManageOrders from "../../components/ManageOrders/ManageOrders";
 import ManageBanners from "../../components/ManageBanners/ManageBanners";
 import Voucher from "../VoucherPage/Voucher";
@@ -24,13 +21,11 @@ import BranchManager from "../BranchManagerPage/BranchManager";
 import BranchDetail from "../BranchDetail/BranchDetail";
 import Role from "../RolePage/Role";
 import Category from "../CategoryPage/Category";
-import AdminAccountManagementPage from "../AdminAccountManagementPage/AdminAccountManagementPage";
 import SizePage from "../SizePage/SizePage";
 import InventoryPage from "../InventoryPage/InventoryPage";
 import StockRequestPage from "../StockRequestPage/StockRequestPage";
 import StockRequestCreatePage from "../StockRequestCreatePage/StockRequestCreatePage";
 import StockRequestAdminPage from "../StockRequestAdminPage/StockRequestAdminPage";
-import ConversationPage from "../ConversationPage/ConversationPage";
 import TransferReceiptPage from "../TransferReceiptPage/TransferReceiptPage";
 import RevenueChart from "../../components/RevenueChart/RevenueChart";
 import OrderStatusChart from "../../components/OrderStatusChart/OrderStatusChart";
@@ -50,7 +45,6 @@ const AdminPage = () => {
   // Redux selectors
   const { products } = useSelector((state: any) => state.product);
   const { orders } = useSelector((state: any) => state.orders);
-  const { users } = useSelector((state: any) => state.user);
   const { adminInfo } = useSelector((state: any) => state.admin);
   // Check if user is SUPER_ADMIN
   const isSuperAdmin = useMemo(() => {
@@ -66,7 +60,6 @@ const AdminPage = () => {
         const branchId = adminInfo.branchId || null;
         dispatch(fetchOrdersThunk({ role, branchId }));
       }
-      dispatch(fetchUsers());
     }
   }, [activeTab, dispatch, adminInfo]);
 
@@ -154,20 +147,6 @@ const AdminPage = () => {
           100
         : 0;
 
-    // Users count
-    const usersCount = users.length || 0;
-    const previousMonthUsers = users.filter((user) => {
-      const userDate = new Date(user.createdAt);
-      return (
-        userDate.getMonth() === previousMonth &&
-        userDate.getFullYear() === previousYear
-      );
-    }).length;
-    const usersChange =
-      previousMonthUsers > 0
-        ? ((usersCount - previousMonthUsers) / previousMonthUsers) * 100
-        : 0;
-
     return {
       revenue: currentMonthRevenue,
       revenueChange,
@@ -175,10 +154,8 @@ const AdminPage = () => {
       productsChange,
       ordersCount: currentMonthOrdersCount,
       ordersChange,
-      usersCount,
-      usersChange,
     };
-  }, [products, orders, users]);
+  }, [products, orders]);
 
   // Get recent orders (last 4)
   const recentOrders = useMemo(() => {
@@ -261,16 +238,13 @@ const AdminPage = () => {
     // Danh sách các tab chỉ dành cho SUPER_ADMIN
     const superAdminOnlyTabs = [
       "products",
-      "users",
       "banners",
       "vouchers",
       "branch-manager",
       "branch-detail",
       "roles",
       "categorys",
-      "admin-accounts",
       "sizes",
-      "chat",
       "stock-request-admin",
       "transfer-receipt",
     ];
@@ -320,8 +294,6 @@ const AdminPage = () => {
         return <Products />;
       case "inventory":
         return <InventoryPage />;
-      case "users":
-        return <ManageUsers />;
       case "orders":
         return <ManageOrders />;
       case "banners":
@@ -347,8 +319,6 @@ const AdminPage = () => {
         return <Role />;
       case "categorys":
         return <Category />;
-      case "admin-accounts":
-        return <AdminAccountManagementPage />;
       case "sizes":
         return <SizePage />;
       case "stock-request":
@@ -359,8 +329,6 @@ const AdminPage = () => {
         return <StockRequestAdminPage />;
       case "transfer-receipt":
         return <TransferReceiptPage />;
-      case "chat":
-        return <ConversationPage />;
       default:
         return (
           <div className="text-center py-5">
@@ -482,36 +450,6 @@ const AdminPage = () => {
             </Card>
           </Col>
 
-          <Col md={6} lg={3}>
-            <Card className="stat-card h-100">
-              <Card.Body>
-                <div className="d-flex align-items-center">
-                  <div className="stat-icon bg-info">
-                    <FaUserFriends />
-                  </div>
-                  <div className="ms-3">
-                    <h6 className="stat-label">Khách hàng</h6>
-                    <h3 className="stat-value mb-0">{statistics.usersCount}</h3>
-                    <small
-                      className={
-                        statistics.usersChange >= 0
-                          ? "text-success"
-                          : "text-danger"
-                      }
-                    >
-                      <i
-                        className={`fas fa-arrow-${
-                          statistics.usersChange >= 0 ? "up" : "down"
-                        }`}
-                      ></i>{" "}
-                      {Math.abs(statistics.usersChange).toFixed(1)}% so với
-                      tháng trước
-                    </small>
-                  </div>
-                </div>
-              </Card.Body>
-            </Card>
-          </Col>
         </Row>
 
         {/* Charts */}

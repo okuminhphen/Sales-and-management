@@ -4,17 +4,14 @@ import { Nav } from "react-bootstrap";
 import {
   FaHome,
   FaBoxes,
-  FaUsers,
   FaShoppingCart,
   FaTags,
   FaImages,
   FaTicketAlt,
   FaBuilding,
-  FaUserShield,
   FaRuler,
   FaWarehouse,
   FaClipboardCheck,
-  FaComments,
   FaExchangeAlt,
 } from "react-icons/fa";
 import "./AdminLeftNavbar.scss";
@@ -100,14 +97,6 @@ const AdminLeftNavbar = ({
               {!isSidebarCollapsed && <span>Phiếu chuyển kho</span>}
             </Nav.Link>
           )}
-          {isSuperAdmin && (
-            <Nav.Link
-              className={activeTab === "users" ? "active" : ""}
-              onClick={() => setActiveTab("users")}
-            >
-              <FaUsers /> {!isSidebarCollapsed && <span>Người dùng</span>}
-            </Nav.Link>
-          )}
           <Nav.Link
             className={activeTab === "orders" ? "active" : ""}
             onClick={() => setActiveTab("orders")}
@@ -171,23 +160,6 @@ const AdminLeftNavbar = ({
               onClick={() => setActiveTab("sizes")}
             >
               <FaRuler /> {!isSidebarCollapsed && <span>Size</span>}
-            </Nav.Link>
-          )}
-          {isSuperAdmin && (
-            <Nav.Link
-              className={activeTab === "admin-accounts" ? "active" : ""}
-              onClick={() => setActiveTab("admin-accounts")}
-            >
-              <FaUserShield />{" "}
-              {!isSidebarCollapsed && <span>Admin accounts</span>}
-            </Nav.Link>
-          )}
-          {isSuperAdmin && (
-            <Nav.Link
-              className={activeTab === "chat" ? "active" : ""}
-              onClick={() => setActiveTab("chat")}
-            >
-              <FaComments /> {!isSidebarCollapsed && <span>Chat hỗ trợ</span>}
             </Nav.Link>
           )}
           {/* <Nav.Link

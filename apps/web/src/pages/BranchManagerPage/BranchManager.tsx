@@ -5,15 +5,12 @@ import {
   fetchBranches,
   createBranchThunk,
   updateBranchThunk,
-  deleteBranchThunk,
 } from "../../store/slices/branchSlice";
 
 function BranchManager({ setSelectedBranchId, setActiveTab }) {
   const dispatch = useDispatch<any>();
   const { branches, loading } = useSelector((state: any) => state.branch);
   const [showDialog, setShowDialog] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [deleteId, setDeleteId] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [search, setSearch] = useState("");
@@ -82,23 +79,6 @@ function BranchManager({ setSelectedBranchId, setActiveTab }) {
     closeDialog();
   };
 
-  const openConfirmDelete = (id) => {
-    setDeleteId(id);
-    setShowConfirm(true);
-  };
-
-  const confirmDelete = () => {
-    dispatch(deleteBranchThunk(deleteId)).then(() => {
-      dispatch(fetchBranches());
-    });
-    setShowConfirm(false);
-    setDeleteId(null);
-  };
-
-  const cancelDelete = () => {
-    setShowConfirm(false);
-    setDeleteId(null);
-  };
 
   // Hàm chuyển đổi type từ backend sang tiếng Việt để hiển thị
   const getTypeDisplay = (type) => {
@@ -221,12 +201,6 @@ function BranchManager({ setSelectedBranchId, setActiveTab }) {
                     >
                       Sửa
                     </button>
-                    <button
-                      className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700"
-                      onClick={() => openConfirmDelete(b.id)}
-                    >
-                      Xóa
-                    </button>
                   </td>
                 </tr>
               ))
@@ -303,40 +277,6 @@ function BranchManager({ setSelectedBranchId, setActiveTab }) {
         </div>
       )}
 
-      {/* Popup xác nhận xóa */}
-      {showConfirm && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-start justify-center pt-8 z-50 animate-fadeIn"
-          onClick={cancelDelete}
-        >
-          <div
-            className="bg-white p-6 rounded-xl w-[350px] shadow-xl mt-[-100px]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-lg font-bold text-red-600 mb-2">
-              Xác nhận xóa chi nhánh
-            </h2>
-            <p className="text-gray-700 mb-4 leading-relaxed text-sm">
-              Bạn có chắc muốn xóa chi nhánh này không? <br />
-              <b>Hành động này không thể hoàn tác.</b>
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                className="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500"
-                onClick={cancelDelete}
-              >
-                Hủy
-              </button>
-              <button
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
-                onClick={confirmDelete}
-              >
-                Xóa
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

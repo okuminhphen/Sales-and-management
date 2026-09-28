@@ -4,7 +4,9 @@ const normalizePublicConfig = (value: string | undefined): string =>
 export const GOOGLE_CLIENT_ID = normalizePublicConfig(
   import.meta.env.VITE_GOOGLE_CLIENT_ID,
 );
-export const GOOGLE_OAUTH_ENABLED = GOOGLE_CLIENT_ID.length > 0;
+// Database V2 intentionally has no immutable OAuth provider subject yet.
+// Keep the UI fail-closed even if an old client ID remains in a local env.
+export const GOOGLE_OAUTH_ENABLED = false;
 export const RECAPTCHA_SITE_KEY = normalizePublicConfig(
   import.meta.env.VITE_RECAPTCHA_SITE_KEY,
 );
