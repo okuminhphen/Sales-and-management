@@ -31,7 +31,8 @@ này.
 
 Kế hoạch triển khai chi tiết được theo dõi tại [`tasks/plan.md`](../../tasks/plan.md) và
 [`tasks/todo.md`](../../tasks/todo.md). Tài liệu database tổng quan nằm tại
-[`docs/database.md`](../database.md).
+[`docs/database.md`](../database.md). Evidence cuối của cutover nằm tại
+[`final-validation.md`](./final-validation.md).
 
 ## Quy ước cốt lõi
 

@@ -644,7 +644,14 @@ RED -> GREEN -> REFACTOR; checkpoint MySQL thật không được tính đạt n
   runtime duy nhất V2; ghi rõ local/test/production guard, release migration job và technical
   debt còn lại. Đồng thời sửa gap vận hành: CLI migration target phải khớp `MYSQL_DATABASE`,
   bỏ alias down không hỗ trợ, image mang DBML/manifest và production outbox dùng worker V2.
-- [ ] T48 — Final full validation và Codex review.
+- [x] T48 — Final full validation và Codex review.
   - Acceptance: local chỉ còn 49 bảng V2 + metadata, zero pending, seed không trùng, không import legacy, Web/API/AI chạy.
+  - Evidence: database chính 50 bảng vật lý/104 FK/6 migration zero pending; runtime gate PASS;
+    legacy tracked/build scan rỗng. API full MySQL V2 590 pass/4 skip và Redis OTP 8/8;
+    Web 65/65 + typecheck/build; AI Ruff/Mypy/Pytest 12 pass/2 opt-in skip và AI–MySQL 2/2;
+    schema validator 7/7, Compose config và API image rebuild đạt. Review sửa deployment
+    runner/image/worker, exact AI ID/money contract, canonicalize output LLM theo tập RAG, validate
+    strict API-to-AI response và loại browser-supplied user ID khỏi personalized recommendation.
+    Production dependency audit còn 0 critical/high. Xem `docs/database-v2/final-validation.md`.
   - Verify: `npm run typecheck`, `npm test`, `npm run build`, Python `ruff/mypy/pytest`, Compose config và `git diff --check`.
 - [ ] Checkpoint cuối — Chỉ commit/push khi người dùng yêu cầu riêng.
