@@ -26,3 +26,15 @@ export const ownCustomerPatchV2 = z.object({
     fullname: z.string().trim().min(1).max(255).optional(),
     phone: z.string().trim().min(8).max(30).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0);
+export const ownPasswordChangeV2 = z.object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: password,
+    confirmPassword: z.string().min(8).max(128).optional(),
+}).strict().superRefine((value, context) => {
+    if (value.confirmPassword !== undefined && value.confirmPassword !== value.newPassword) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["confirmPassword"], message: "Passwords do not match." });
+    }
+    if (value.currentPassword === value.newPassword) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ["newPassword"], message: "New password must be different." });
+    }
+});

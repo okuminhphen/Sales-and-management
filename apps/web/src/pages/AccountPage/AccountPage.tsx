@@ -63,11 +63,10 @@ const AccountPage = () => {
     // TODO: Implement API call to update profile
     const updatedData = {
       fullname: userInfo.fullname,
-      email: userInfo.email,
       phone: userInfo.phone,
-      address: userInfo.address,
     };
-    dispatch(updateUserThunk({ userId: Number(userId), updatedData }));
+    if (!userId) return;
+    dispatch(updateUserThunk({ userId, updatedData }));
     toast.success("Thông tin cá nhân đã được cập nhật thành công!");
   };
 
@@ -113,7 +112,8 @@ const AccountPage = () => {
       toast.error("Mật khẩu mới và xác nhận mật khẩu không khớp!");
       return;
     }
-    dispatch(updatePasswordThunk({ userId: Number(userId), updatedPassword }));
+    if (!userId) return;
+    dispatch(updatePasswordThunk({ userId, updatedPassword }));
     setValidPassword(defaultValidPassword);
   };
 

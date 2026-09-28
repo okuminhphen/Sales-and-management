@@ -7,9 +7,10 @@ import type { V2AccessContext, V2AccessContextReader } from "../../application/a
 import type { CustomerAuthV2Service } from "../../application/customer-auth-v2.service.js";
 import type { BackofficeAuthV2Service } from "../../application/backoffice-auth-v2.service.js";
 import type { CustomerProfileV2Service } from "../../application/customer-profile-v2.service.js";
+import type { AccountPasswordV2Service } from "../../application/account-password-v2.service.js";
 import type { V2AuthenticatedRequest } from "./v2-auth.middleware.js";
 import { backofficeLoginV2Body, customerLoginV2Body, ownCustomerParamsV2,
-    ownCustomerPatchV2, ownCustomerUpdateParamsV2, registerV2Body } from "./identity-v2.dto.js";
+    ownCustomerPatchV2, ownCustomerUpdateParamsV2, ownPasswordChangeV2, registerV2Body } from "./identity-v2.dto.js";
 
 const envelope = (EM: string, EC: number, DT: unknown) => ({ EM, EC, DT });
 const tokenFor = (context: V2AccessContext): string => signV2AccessToken({
@@ -27,6 +28,7 @@ export const createIdentityV2Routes = (dependencies: {
     customerAuth: CustomerAuthV2Service;
     backofficeAuth: BackofficeAuthV2Service;
     profiles: CustomerProfileV2Service;
+    passwords: AccountPasswordV2Service;
     contexts: V2AccessContextReader;
     auth: RequestHandler;
     audit?: V2HttpAuditWriter;
@@ -169,6 +171,29 @@ export const createIdentityV2Routes = (dependencies: {
                     response.status(503).json(envelope("Profile unavailable", -1, null)); return;
                 case "found":
                     response.status(503).json(envelope("Profile unavailable", -1, null)); return;
+            }
+        });
+    router.put("/user/update-password/:userId", createV2HttpAudit("account.password.update", dependencies.audit),
+        dependencies.auth, validateRequest({ params: ownCustomerUpdateParamsV2, body: ownPasswordChangeV2 }),
+        async (request, response) => {
+            const context = profile(request);
+            if (!context) { response.status(401).json(envelope("Authentication required", 3, null)); return; }
+            if (context.customerId !== request.params.userId) {
+                response.status(403).json(envelope("User access denied", 3, null)); return;
+            }
+            const result = await dependencies.passwords.changeOwnPassword(
+                context, request.body.currentPassword, request.body.newPassword,
+            );
+            switch (result.kind) {
+                case "password_changed":
+                    response.locals.auditResourceId = context.accountId;
+                    response.status(200).json(envelope("Update password successfully", 0, null)); return;
+                case "invalid_current_password":
+                    response.status(400).json(envelope("Current password is incorrect", 1, null)); return;
+                case "password_change_conflict":
+                    response.status(409).json(envelope("Password changed concurrently or is unchanged", 1, null)); return;
+                case "password_change_unavailable":
+                    response.status(503).json(envelope("Password service unavailable", -1, null)); return;
             }
         });
     return router;

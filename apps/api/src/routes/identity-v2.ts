@@ -25,6 +25,8 @@ import { createEmployeeV2Router } from "../modules/identity-access/interfaces/ht
 import { EmployeeAssignmentV2Service } from "../modules/identity-access/application/employee-assignment-v2.service.js";
 import { SequelizeEmployeeAssignmentV2Repository } from "../modules/identity-access/persistence/employee-assignment-v2.repository.js";
 import { createRequireRecaptcha } from "../modules/auth/otp/recaptcha.guard.js";
+import { AccountPasswordV2Service } from "../modules/identity-access/application/account-password-v2.service.js";
+import { SequelizeAccountPasswordV2Repository } from "../modules/identity-access/persistence/account-password-v2.repository.js";
 
 export const createIdentityV2Router = (dependencies: {
     persistence: V2Persistence;
@@ -64,6 +66,10 @@ export const createIdentityV2Router = (dependencies: {
         }),
         profiles: new CustomerProfileV2Service({
             repository: new SequelizeCustomerProfileV2Repository(dependencies.persistence),
+        }),
+        passwords: new AccountPasswordV2Service({
+            repository: new SequelizeAccountPasswordV2Repository(dependencies.persistence),
+            passwordHasher: bcryptPasswordHasher,
         }),
         contexts,
         auth,
