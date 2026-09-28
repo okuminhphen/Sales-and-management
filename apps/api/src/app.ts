@@ -1,13 +1,17 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import cookieParser from "cookie-parser";
-import express, { type Express, type NextFunction, type Request, type Response } from "express";
+import express, { type Express, type NextFunction, type Request, type Response,
+    type Router } from "express";
 import configCors from "./config/cors.js";
 import { requestContext } from "./middlewares/requestContext.js";
 import { logger } from "./observability/logger.js";
-import initApiRouter from "./routes/api.js";
 
-export const createApp = (): Express => {
+export interface CreateAppOptions {
+    apiRouter?: Router;
+}
+
+export const createApp = (options: CreateAppOptions = {}): Express => {
     const app = express();
     const appDirectory = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,7 +33,9 @@ export const createApp = (): Express => {
         response.status(200).json({ status: "ok" });
     });
 
-    initApiRouter(app);
+    if (options.apiRouter) {
+        app.use("/api/v1", options.apiRouter);
+    }
 
     app.use((_request, response) => {
         response.status(404).json({

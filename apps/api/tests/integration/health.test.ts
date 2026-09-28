@@ -1,4 +1,5 @@
 import request from "supertest";
+import { Router } from "express";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.js";
 
@@ -16,5 +17,17 @@ describe("health endpoint", () => {
 
         expect(response.status).toBe(404);
         expect(response.body.error.code).toBe("NOT_FOUND");
+    });
+
+    it("mounts an injected API router without loading legacy routes", async () => {
+        const api = Router();
+        api.get("/runtime-probe", (_request, response) => {
+            response.status(200).json({ persistence: "v2" });
+        });
+
+        const response = await request(createApp({ apiRouter: api })).get("/api/v1/runtime-probe");
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ persistence: "v2" });
     });
 });

@@ -2,6 +2,9 @@ import axios from "axios";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.js";
+import { createChatbotRouter } from "../../src/modules/chatbot/chatbot.routes.js";
+
+const createChatbotApp = () => createApp({ apiRouter: createChatbotRouter() });
 
 describe("chatbot HTTP boundary", () => {
     afterEach(() => {
@@ -13,7 +16,7 @@ describe("chatbot HTTP boundary", () => {
             data: { reply: "Chào bạn", products: [] },
         });
 
-        const response = await request(createApp())
+        const response = await request(createChatbotApp())
             .post("/api/v1/bot/chat")
             .set("X-Request-ID", "chat-contract-123")
             .send({ message: "Tìm đồ ngủ" });
@@ -34,7 +37,7 @@ describe("chatbot HTTP boundary", () => {
     it("does not expose an upstream AI error", async () => {
         vi.spyOn(axios, "post").mockRejectedValue(new axios.AxiosError("AI unavailable"));
 
-        const response = await request(createApp())
+        const response = await request(createChatbotApp())
             .post("/api/v1/bot/chat")
             .send({ message: "Tìm đồ ngủ" });
 

@@ -8,6 +8,7 @@ import {
     setOtpStorage,
 } from "../../src/modules/auth/otp/otp.repository.js";
 import { setOtpRecaptchaEnabledOverride } from "../../src/modules/auth/otp/recaptcha.guard.js";
+import { createOtpRouter } from "../../src/modules/auth/otp/otp.routes.js";
 
 describe("OTP Email Verification API", () => {
     let app: ReturnType<typeof createApp>;
@@ -20,7 +21,7 @@ describe("OTP Email Verification API", () => {
         setOtpStorage(testStorage);
         setEmailSender(testSender);
         setOtpRecaptchaEnabledOverride(false);
-        app = createApp();
+        app = createApp({ apiRouter: createOtpRouter() });
     });
 
     afterEach(() => {

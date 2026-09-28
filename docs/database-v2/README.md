@@ -1044,3 +1044,31 @@ test V2 dùng chung một database `_test` đã được guard và test seed c�
 Migration catalog tạo `reviews.order_item_id` và index của nó ở T07. Foreign key
 `fk_reviews_order_item` được tạo ở T08, sau khi `order_items` tồn tại; đây là dependency có chủ
 đích, không phải bỏ sót constraint.
+
+## Runtime cutover và smoke database chính — T44
+
+Runtime API hiện tạo đúng một `V2Persistence` trong composition root và inject router V2 vào
+`createApp`. `app.ts`, `main.ts` và `socket-v2.ts` không import registry model hay router legacy.
+Các capability identity, catalog, banner, cart, review, order, inventory, stock request, transfer,
+payment method, VNPay, notification và conversation được mount atomically dưới `/api/v1`.
+VNPay fail-closed bằng cách không mount transport endpoint khi local chưa có credential; payment
+method vẫn hoạt động độc lập.
+
+Browser chỉ gọi API cho chat và recommendation. API mới proxy `/bot/chat`,
+`/product/recommend/:productId` và `/recommend-product` sang FastAPI với timeout; personalized
+recommendation lấy account từ V2 auth context thay vì tin `userId` do browser gửi. Socket customer
+rehydrate authorization từ database ở từng command, persist message V2 trước khi emit và không dùng
+room membership làm quyền. Staff claim/assign/routing tiếp tục fail-closed cho tới checkpoint T36.4b
+vì permission/resource policy chưa được phê duyệt.
+
+Evidence local ngày 2026-09-27:
+
+- Bốn container MySQL/Redis/Qdrant/RabbitMQ chạy; MySQL/Redis/RabbitMQ healthy.
+- Database chính có 50 bảng vật lý (49 bảng nghiệp vụ + `database_v2_migrations`), 104 FK và 6
+  migration đã ghi nhận; seed giữ 6 role, 37 permission và 3 payment method.
+- API build khởi động được: liveness 200, catalog primary 200, transfer anonymous 401, chatbot body
+  sai 400. Focused composition/OTP/chat/recommendation proxy có 19 test đạt; strict typecheck/build đạt.
+- FastAPI liveness 200, body chat sai 422; pytest 10 pass/2 skip và mypy strict đạt. Ruff bị Windows
+  từ chối đọc duy nhất file rỗng `app/scripts/__init__.py` trong OneDrive (ACL host), không phải lỗi
+  lint nội dung; cần khôi phục quyền file hoặc checkout sạch trước final T48.
+- Web có 16 file/63 test đạt, typecheck/build đạt; Vite chỉ cảnh báo chunk lớn, không lỗi build.

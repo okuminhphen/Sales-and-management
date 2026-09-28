@@ -13,6 +13,7 @@ export const createChatbotRouter = (): Router => {
             keyPrefix: "rate-limit:chat",
             maxRequests: env.CHAT_RATE_LIMIT_MAX,
             windowSeconds: env.CHAT_RATE_LIMIT_WINDOW_SECONDS,
+            failClosed: env.NODE_ENV === "production",
         }),
         validateRequest({ body: chatbotMessageBody }),
         botController.sendMessageFunc,
