@@ -9,7 +9,13 @@ export type ProductMetadataV2 = {
     status: "draft" | "active" | "inactive";
 };
 export type ProductMetadataPatchV2 = Partial<ProductMetadataV2>;
-export type ProductCreateInputV2 = { name: string; description?: string | null; price: string; categoryId: string };
+export type ProductCreateInputV2 = {
+    name: string;
+    description?: string | null;
+    price: string;
+    categoryId: string;
+    status?: "draft" | "active";
+};
 export type ProductUpdateInputV2 = {
     name?: string; description?: string | null; price?: string; categoryId?: string;
     status?: "draft" | "active" | "inactive";
@@ -51,7 +57,7 @@ export class CatalogProductCommandV2Service {
         try {
             return await this.dependencies.repository.create({
                 name: input.name.trim(), description: input.description ?? null,
-                basePrice, categoryId, status: "draft",
+                basePrice, categoryId, status: input.status ?? "draft",
             });
         } catch { return { kind: "catalog_unavailable" }; }
     }

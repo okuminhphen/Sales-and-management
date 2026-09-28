@@ -1,6 +1,6 @@
 import axios from "../middlewares/axiosConfig";
 import type { CreateSizeInput, SizeDto, UpdateSizeInput } from "../types/catalog";
-import type { ApiEnvelope } from "../types/http";
+import type { ApiEnvelope, EntityId } from "../types/http";
 const fetchSizes = () => {
   return axios.get<ApiEnvelope<SizeDto[]>>("/size/read");
 };
@@ -10,7 +10,7 @@ const createSize = (data: CreateSizeInput) => {
 const updateSize = (data: UpdateSizeInput) => {
   return axios.put<ApiEnvelope<SizeDto>>("/size/update", data);
 };
-const deleteSize = (id: number) => {
+const deleteSize = (id: EntityId) => {
   return axios.delete<ApiEnvelope<null>>(`/size/delete/${id}`);
 };
 export { fetchSizes, createSize, updateSize, deleteSize };

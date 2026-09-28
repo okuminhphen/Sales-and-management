@@ -33,6 +33,7 @@ export const productCreateBodyV2 = z.object({
     description: z.string().max(5000).nullable().optional(),
     price: money,
     categoryId: entityId,
+    status: z.enum(["draft", "active"]).optional(),
 }).strict();
 export const productUpdateBodyV2 = productCreateBodyV2.partial().extend({
     status: z.enum(["draft", "active", "inactive"]).optional(),

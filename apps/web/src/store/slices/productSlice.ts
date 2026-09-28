@@ -9,6 +9,7 @@ import {
 import { toast } from "react-toastify";
 import type { ProductDto } from "../../types/catalog";
 import type { ApiEnvelope } from "../../types/http";
+import type { EntityId } from "../../types/http";
 
 type RequestStatus = "idle" | "loading" | "succeeded" | "failed";
 
@@ -22,7 +23,7 @@ interface ProductState {
 }
 
 interface UpdateProductInput {
-  id: number;
+  id: EntityId;
   productData: FormData;
 }
 
@@ -42,7 +43,7 @@ export const fetchProducts = createAsyncThunk<ProductDto[], void, { rejectValue:
 
 // Create product
 export const createProduct = createAsyncThunk<
-  ProductDto,
+  EntityId,
   FormData,
   { rejectValue: string }
 >(
@@ -53,7 +54,7 @@ export const createProduct = createAsyncThunk<
 
       if (response.data.EC === 0) {
         toast.success(response.data.EM);
-        return response.data.DT;
+        return response.data.DT.id;
       } else {
         toast.error(response.data.EM);
         return rejectWithValue(response.data.EM);
@@ -69,7 +70,7 @@ export const createProduct = createAsyncThunk<
 
 // Update product
 export const updateProductAction = createAsyncThunk<
-  ProductDto,
+  EntityId,
   UpdateProductInput,
   { rejectValue: string }
 >(
@@ -80,7 +81,7 @@ export const updateProductAction = createAsyncThunk<
 
       if (response.data.EC === 0) {
         toast.success(response.data.EM);
-        return response.data.DT;
+        return response.data.DT.id;
       } else {
         toast.error(response.data.EM);
         return rejectWithValue(response.data.EM);
@@ -96,8 +97,8 @@ export const updateProductAction = createAsyncThunk<
 
 // Delete product
 export const deleteProductAction = createAsyncThunk<
-  number,
-  number,
+  EntityId,
+  EntityId,
   { rejectValue: string }
 >(
   "products/deleteProduct",

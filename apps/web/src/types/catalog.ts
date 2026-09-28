@@ -1,5 +1,5 @@
 export interface SizeDto {
-  id: number;
+  id: string;
   name: string;
 }
 
@@ -8,16 +8,16 @@ export interface CreateSizeInput {
 }
 
 export interface UpdateSizeInput extends CreateSizeInput {
-  id: number;
+  id: string;
 }
 
 export interface ProductDto {
-  id: number;
+  id: string;
   name: string;
   description?: string | null;
   price: number | string;
   images?: string[] | string | null;
-  categoryId?: number | null;
+  categoryId?: string | null;
   sizes?: SizeDto[];
 }
 

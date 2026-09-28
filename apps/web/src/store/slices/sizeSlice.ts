@@ -8,6 +8,7 @@ import {
 } from "../../services/sizeService";
 import type { CreateSizeInput, SizeDto, UpdateSizeInput } from "../../types/catalog";
 import type { ApiEnvelope } from "../../types/http";
+import type { EntityId } from "../../types/http";
 
 type RequestStatus = "idle" | "loading" | "succeeded" | "failed";
 
@@ -71,7 +72,7 @@ export const updateSizeThunk = createAsyncThunk<
   }
 );
 
-export const deleteSizeThunk = createAsyncThunk<number, number, { rejectValue: string }>(
+export const deleteSizeThunk = createAsyncThunk<EntityId, EntityId, { rejectValue: string }>(
   "sizes/delete",
   async (sizeId, { rejectWithValue }) => {
     try {
