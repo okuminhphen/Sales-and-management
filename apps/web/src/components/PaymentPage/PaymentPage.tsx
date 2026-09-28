@@ -122,7 +122,7 @@ const PaymentPage = () => {
 
   const fetchPaymentMethods = async () => {
     let response = await getPaymentMethods();
-    if (response.data.EC === "0") {
+    if (response.data.EC === 0) {
       setPaymentMethods(response.data.DT);
     }
   };

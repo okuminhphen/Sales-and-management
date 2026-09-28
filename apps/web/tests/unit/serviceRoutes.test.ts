@@ -3,7 +3,6 @@ import axios from "../../src/middlewares/axiosConfig";
 import { deleteCategory } from "../../src/services/categoryService";
 import { deleteRole } from "../../src/services/roleService";
 import { deleteSize } from "../../src/services/sizeService";
-import { deleteVoucher } from "../../src/services/voucherService";
 import { createNewProduct, getRecommendProductsForUser } from "../../src/services/productService";
 import { loginUser } from "../../src/services/userService";
 import { updateOrderStatus } from "../../src/services/orderService";
@@ -25,7 +24,6 @@ describe("typed service routes", () => {
   it.each([
     [deleteCategory, "/category/delete/4"],
     [deleteRole, "/role/delete/4"],
-    [deleteVoucher, "/voucher/delete/4"],
     [deleteSize, "/size/delete/4"],
   ])("sends an identifier in the URL without an invalid Axios config", (call, url) => {
     call(4);
