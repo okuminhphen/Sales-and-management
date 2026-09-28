@@ -11,6 +11,8 @@ import {
     type VerificationTokenGateway,
 } from "../../src/modules/identity-access/application/customer-auth-v2.service.js";
 import { CustomerProfileV2Service } from "../../src/modules/identity-access/application/customer-profile-v2.service.js";
+import { AccountPasswordV2Service } from "../../src/modules/identity-access/application/account-password-v2.service.js";
+import { SequelizeAccountPasswordV2Repository } from "../../src/modules/identity-access/persistence/account-password-v2.repository.js";
 import { SequelizeCustomerAuthV2Repository } from "../../src/modules/identity-access/persistence/customer-auth-v2.repository.js";
 import { SequelizeCustomerProfileV2Repository } from "../../src/modules/identity-access/persistence/customer-profile-v2.repository.js";
 import { SequelizeV2AccessContextRepository } from "../../src/modules/identity-access/persistence/v2-access-context.repository.js";
@@ -138,5 +140,42 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 customer profile on MySQL", ()
         });
         await expect(profiles.updateOwnProfile(context, { username: firstUsername }))
             .resolves.toEqual({ kind: "username_already_exists" });
+    });
+
+    it("changes an active customer's password atomically and rejects the old credential", async () => {
+        const persistence = createSalesV2Persistence(sequelize);
+        const customerAuth = new CustomerAuthV2Service({
+            repository: new SequelizeCustomerAuthV2Repository(persistence),
+            verificationGateway,
+            passwordHasher: bcryptPasswordHasher,
+        });
+        const unique = crypto.randomUUID();
+        const currentPassword = "customer-profile-password-123";
+        const newPassword = "customer-profile-password-456";
+        const registration = await customerAuth.register({
+            email: `customer-password-${unique}@example.test`,
+            phone: `05${unique.replace(/\D/g, "").slice(0, 8)}`,
+            username: `password-${unique.slice(0, 8)}`,
+            password: currentPassword,
+            emailVerificationToken: crypto.randomUUID(),
+        });
+        expect(registration.kind).toBe("registered");
+        if (registration.kind !== "registered") return;
+
+        const context = await new SequelizeV2AccessContextRepository(persistence)
+            .findActiveByAccountId(registration.accountId);
+        expect(context).not.toBeNull();
+        if (!context) return;
+
+        const repository = new SequelizeAccountPasswordV2Repository(persistence);
+        const service = new AccountPasswordV2Service({ repository, passwordHasher: bcryptPasswordHasher });
+        await expect(service.changeOwnPassword(context, currentPassword, newPassword))
+            .resolves.toEqual({ kind: "password_changed" });
+
+        const changedHash = await repository.getActivePasswordHash(registration.accountId);
+        expect(changedHash).not.toBeNull();
+        if (!changedHash) return;
+        await expect(bcryptPasswordHasher.compare(currentPassword, changedHash)).resolves.toBe(false);
+        await expect(bcryptPasswordHasher.compare(newPassword, changedHash)).resolves.toBe(true);
     });
 });
