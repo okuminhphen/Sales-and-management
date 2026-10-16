@@ -184,3 +184,49 @@ là roadmap sau, cần business policy/approval, không suy ra từ việc DB đ
 BR08 chỉ chuyển sang triển khai sau approval riêng. Rủi ro cao nhất là sửa paid
 hold bằng cách yếu hóa timeout/payment guards; không chấp nhận workaround SQL
 backfill, auto-failed pending payments hay nới production API validation.
+
+## Frontend API readiness — audit 2026-10-16, đề xuất chưa triển khai
+
+Evidence: `docs/ui/frontend-api-audit-2026-10-16.md`. Người dùng yêu cầu kiểm tra
+frontend sau khi commit/push backend. Audit không đồng nghĩa duyệt các API/policy
+nghiệp vụ mới. Giữ UI hiện tại và schema revision 4.
+
+1. **FR01 — P1: Auth boundary customer/admin.** Tách lựa chọn session đúng cho
+   từng API, gửi Bearer customer, xử lý expired/401, tránh adminToken ghi đè
+   customer. Test login → cart/profile/order/chat, hai session đồng thời,
+   logout/account switch. Không hạ guard backend hay thêm cookie fallback.
+2. **FR02 — P1: Employee partial edit.** Chỉ gửi trường thực sự chỉnh hoặc giữ
+   giá trị cũ; không ghi null salary/hiredAt từ form không có hai trường đó.
+   Regression với salary/hiredAt có giá trị, sửa tên xong dữ liệu vẫn nguyên.
+3. **FR03 — P1: Customer order permissions/actions.** Chốt minimum own-read grant
+   cho CUSTOMER và provisioning idempotent; test customer đăng ký mới, own/cross
+   customer và scoped staff. Ẩn own-cancel chưa hỗ trợ hoặc chốt policy command
+   owner/payment/hold riêng; không nới generic internal cancel.
+4. **FR04 — P1: Payment/order lifecycle.** Trang kết quả chỉ khẳng định trạng thái
+   dựa trên server facts; query giả không được báo đã thu tiền. Nối browser return,
+   verified status và pending UI. Tạm bỏ lựa chọn thu tiền tại quầy chưa hỗ trợ;
+   không phục hồi POS. Handover/completion + reconciliation theo BR08 cần spec
+   actor/state/payment/refund exception riêng trước khi thêm API.
+5. **FR05 — P2: Pagination/performance.** Giữ server pagination cho product/order/
+   branch/employee/stock/transfer, dùng totalItems cho KPI; không giới hạn âm thầm
+   100 bản ghi hoặc nạp variants cho mọi card. Test >100 items, last page/search,
+   partial network failure và request count; không suy từ local timing ra SLA.
+6. **FR06 — P2: Transfer UI lifecycle.** Nối API dispatch/complete/discrepancy theo
+   permissions và branch thực tế, thêm receiving flow. Test request → approve →
+   dispatch → receive → reconcile/complete, replay và insufficient stock.
+7. **FR07 — P2: Recovery/session/cart.** Persist/resume checkout/payment key và
+   order receipt, retry sau mất response/refresh, guest-cart merge, account switch,
+   reconcile cart sau thành công. Test slow/offline/double-click/stale response;
+   socket reconnect/ack không mất message draft.
+8. **FR08 — Capability coverage.** Chốt UI role/permission, employee link/transfer,
+   branch manager assignment và notifications đã có backend API. Delivery/refund/
+   address CRUD/newsletter là product scope riêng; không dựng nút giả thành công.
+9. **FR09 — Release gate.** Actual Web → API tests với fresh seeded customer/admin/
+   branch actors, provider sandbox khi có cấu hình, browser desktop/mobile,
+   keyboard/error/empty/loading matrix. Không dùng mock-only suite làm bằng chứng
+   duy nhất cho sales end-to-end readiness.
+
+Thứ tự: FR01/FR02 → FR03/FR04 → FR05/FR06/FR07 → capability scope → FR09.
+Không tự sửa dữ liệu chính, cấp role rộng, đổi schema hoặc gọi provider thật để
+đưa kiểm thử qua. Backend checkpoint đã push là `6645a1c`; source UI đang audit
+chưa được gộp vào checkpoint đó.

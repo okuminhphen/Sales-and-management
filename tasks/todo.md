@@ -237,3 +237,15 @@ files, verification và dependencies tại phần cùng tên trong `tasks/plan.m
   evidence: `docs/database-v2/backend-readiness-validation.md`.
 - [ ] BR08: chốt spec/approval riêng cho pickup handover và payment reconciliation;
   chưa triển khai delivery/returns/refunds chỉ từ plan sửa lỗi này.
+
+## Frontend API audit — 2026-10-16
+
+- [x] Push backend checkpoint `6645a1c` lên origin/develop, xác nhận SHA remote.
+- [x] Đối chiếu API/service/route customer và admin; browser login/product/admin/
+  payment-result và 12 scenario tích hợp thực với DB cách ly.
+- [x] Ghi findings, capability matrix, giới hạn và cleanup tại
+  `docs/ui/frontend-api-audit-2026-10-16.md`; DB chính không thay đổi.
+- [ ] FR01–FR04: auth session, employee partial edit, customer order policy,
+  payment facts/lifecycle — plan đề xuất tại `tasks/plan.md`, chưa triển khai.
+- [ ] FR05–FR09: pagination/N+1, transfer UI, recovery/cart, capability scope
+  và release gate — cần xử lý trước khi kết luận UI đầy đủ/vận hành mượt.
