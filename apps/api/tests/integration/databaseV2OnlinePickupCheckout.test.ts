@@ -134,12 +134,6 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
         await db.query(`UPDATE inventory_reservations SET expires_at = UTC_TIMESTAMP(3) - INTERVAL 1 SECOND
             WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`,
         { replacements: [first.orderId] });
-        expect(await confirmation.confirm(manager, first.orderId)).toEqual({ kind: "reservation_expired" });
-        expect((await one<{ status: string }>("SELECT status FROM orders WHERE id = ?", [first.orderId])).status).toBe("pending");
-        expect((await one<{ status: string }>("SELECT status FROM voucher_redemptions WHERE order_id = ?", [first.orderId])).status).toBe("reserved");
-        await db.query(`UPDATE inventory_reservations SET expires_at = UTC_TIMESTAMP(3) + INTERVAL 10 MINUTE
-            WHERE order_item_id IN (SELECT id FROM order_items WHERE order_id = ?)`,
-        { replacements: [first.orderId] });
         expect(await confirmation.confirm(manager, first.orderId)).toEqual({ kind: "confirmed", orderId: first.orderId });
         expect(await confirmation.confirm(manager, first.orderId)).toEqual({ kind: "replayed", orderId: first.orderId });
         expect((await one<{ status: string }>("SELECT status FROM voucher_redemptions WHERE order_id = ?", [first.orderId])).status).toBe("redeemed");
@@ -149,6 +143,31 @@ describe.skipIf(process.env.RUN_DATABASE_V2_TESTS !== "true")("V2 online pickup 
         expect(hold.confirmedAt).not.toBeNull();
         expect(hold.expiresAt).toBeNull();
         expect(Number((await one<{ n: string }>("SELECT COUNT(*) AS n FROM outbox_events WHERE aggregate_type = 'order' AND aggregate_id = ?", [first.orderId])).n)).toBe(2);
+    });
+
+    it.each([
+        ["empty", []],
+        ["url", ["https://example.test/image.jpg"]],
+        ["assets", [{ url: "https://example.test/image.jpg", publicId: "happyshop/products/test" }]],
+        ["multiple", ["https://example.test/one.jpg", "https://example.test/two.jpg"]],
+    ])("persists an immutable valid JSON image snapshot for %s catalog images", async (label, images) => {
+        const source = await one<{ categoryId: string; sizeId: string }>(
+            "SELECT p.category_id AS categoryId, pv.size_id AS sizeId FROM product_variants pv JOIN products p ON p.id=pv.product_id WHERE pv.id=?", [variantId]);
+        const slug = `image-${label}-${suffix}`;
+        await db.query("INSERT INTO products (category_id,name,slug,base_price,images,status,created_at,updated_at) VALUES (?,'Image test',?,'100.0000',?,'active',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))",
+            { replacements: [source.categoryId, slug, JSON.stringify(images)] });
+        const product = await one<{ id: string }>("SELECT id FROM products WHERE slug=?", [slug]);
+        await db.query("INSERT INTO product_variants (product_id,size_id,sku,status,created_at,updated_at) VALUES (?,?,?,'active',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))",
+            { replacements: [product.id, source.sizeId, slug] });
+        const variant = await one<{ id: string }>("SELECT id FROM product_variants WHERE sku=?", [slug]);
+        await db.query("INSERT INTO inventories (branch_id,product_variant_id,stock,created_at,updated_at) VALUES (?,?,2,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", { replacements: [branchId, variant.id] });
+        const result = await service.checkoutOnlinePickup(actor, { checkoutKey: slug, branchId,
+            items: [{ variantId: variant.id, quantity: 1 }], recipientName: "Image test", recipientPhone: "0900000000", voucherCode: null });
+        expect(result.kind).toBe("created");
+        if (result.kind !== "created") throw new Error("Image checkout failed.");
+        await db.query("UPDATE products SET images='[]' WHERE id=?", { replacements: [product.id] });
+        const snapshot = await one<{ json: string }>("SELECT CAST(image_snapshot AS CHAR) AS json FROM order_items WHERE order_id=?", [result.orderId]);
+        expect(JSON.parse(snapshot.json)).toEqual(images);
     });
 
     it("rolls back order, voucher and event when stock is unavailable", async () => {

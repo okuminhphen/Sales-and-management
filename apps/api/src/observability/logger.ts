@@ -1,4 +1,4 @@
-import { env } from "../config/env.js";
+import { runtimeEnv } from "../config/runtime-env.js";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 type LogContext = Record<string, unknown>;
@@ -59,7 +59,7 @@ const sanitize = (value: unknown, key?: string): unknown => {
             name: value.name,
             message: scrubString(value.message),
             // Omit stack in production to avoid leaking PII from provider SDKs
-            ...(env.NODE_ENV !== "production" ? { stack: scrubString(value.stack ?? "") } : {}),
+            ...(runtimeEnv.NODE_ENV !== "production" ? { stack: scrubString(value.stack ?? "") } : {}),
         };
     }
     if (Array.isArray(value)) return value.map((item) => sanitize(item));
@@ -75,7 +75,7 @@ const sanitize = (value: unknown, key?: string): unknown => {
 };
 
 const write = (level: LogLevel, message: string, context: LogContext = {}): void => {
-    if (levelOrder[level] < levelOrder[env.LOG_LEVEL]) return;
+    if (levelOrder[level] < levelOrder[runtimeEnv.LOG_LEVEL]) return;
     const sanitizedContext = sanitize(context) as LogContext;
 
     const entry = JSON.stringify({

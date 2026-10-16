@@ -71,7 +71,10 @@ export class SequelizeOrderConfirmationV2Repository implements OrderConfirmation
         );
         const paid = payments.reduce((sum, payment) => sum + (payment.status === "completed"
             ? BigInt(serializeMoney(payment.amount).replace(".", "")) : 0n), 0n);
-        if (paid < BigInt(serializeMoney(order.totalAmount).replace(".", ""))) reject("payment_not_settled");
+        if (paid < BigInt(serializeMoney(order.totalAmount).replace(".", ""))
+            || payments.some((payment) => payment.status === "pending" || payment.status === "processing")) {
+            reject("payment_not_settled");
+        }
         const refunds = await sql.query<{ status: string }>(
             `SELECT r.status FROM refunds r JOIN payments p ON p.id = r.payment_id
              WHERE p.order_id = ? ORDER BY r.id ASC FOR UPDATE`,

@@ -45,6 +45,23 @@ export const createApp = (options: CreateAppOptions = {}): Express => {
 
     app.use(
         (error: Error, request: Request, response: Response, _next: NextFunction) => {
+            const parserError = error as Error & { type?: string; status?: number };
+            const clientError = parserError.type === "entity.parse.failed" && parserError.status === 400
+                ? { status: 400, code: "INVALID_JSON", message: "Invalid JSON request body" }
+                : parserError.type === "entity.too.large" && parserError.status === 413
+                    ? { status: 413, code: "PAYLOAD_TOO_LARGE", message: "Request body is too large" }
+                    : null;
+            if (clientError) {
+                // Parser messages can contain body fragments. Never log/return the raw error.
+                logger.warn("http.request.invalid_body", {
+                    requestId: request.requestId, method: request.method,
+                    path: request.path, code: clientError.code,
+                });
+                response.status(clientError.status).json({ error: {
+                    code: clientError.code, message: clientError.message, requestId: request.requestId,
+                } });
+                return;
+            }
             logger.error("http.request.failed", {
                 requestId: request.requestId,
                 method: request.method,

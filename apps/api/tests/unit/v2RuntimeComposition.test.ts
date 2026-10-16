@@ -13,6 +13,13 @@ const mediaProvider: CatalogMediaProvider = {
 };
 
 describe("V2 runtime composition", () => {
+    it("does not expose the retired POS checkout route", async () => {
+        const persistence = createV2RuntimePersistence();
+        try {
+            const app = createApp({ apiRouter: createApiV2Router({ persistence, mediaProvider }) });
+            await request(app).post("/api/v1/order/in-store").send({}).expect(404);
+        } finally { await persistence.sequelize.close(); }
+    });
     it("does not import the legacy model registry or API router from runtime entrypoints", () => {
         for (const relativePath of ["../../src/app.ts", "../../src/main.ts", "../../src/socket-v2.ts"]) {
             const source = readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");

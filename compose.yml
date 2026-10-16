@@ -53,14 +53,30 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
-    command: ["npm", "run", "outbox:publish"]
+    command: ["node", "dist/workers/run-outbox-publisher-v2.js"]
     env_file:
       - path: .env
         required: false
     environment:
+      V2_OUTBOX_PUBLISHER_ENABLED: "true"
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-sales_app}:${RABBITMQ_DEFAULT_PASS:-local-rabbitmq-password-change-me}@rabbitmq:5672/${RABBITMQ_DEFAULT_VHOST:-sales_dev}
+    networks: [infrastructure]
+
+  inventory-reservation-expiry:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/workers/run-inventory-reservation-expiry.js"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      V2_INVENTORY_RESERVATION_EXPIRY_ENABLED: "true"
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
     networks: [infrastructure]
 
   ai-catalog-indexer:
@@ -88,6 +104,7 @@ services:
         VITE_SOCKET_URL: ""
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
         VITE_RECAPTCHA_SITE_KEY: ${VITE_RECAPTCHA_SITE_KEY:-}
+        VITE_EMAIL_VERIFICATION_ENABLED: ${VITE_EMAIL_VERIFICATION_ENABLED:-true}
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-3000}:80"

@@ -1,9 +1,32 @@
 import request from "supertest";
 import { Router } from "express";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../../src/app.js";
 
 describe("health endpoint", () => {
+    it.each([
+        ["malformed JSON", "{", 400, "INVALID_JSON"],
+        ["oversized JSON", JSON.stringify({ value: "x".repeat(1_048_600) }), 413, "PAYLOAD_TOO_LARGE"],
+    ])("returns a safe client error for %s", async (_label, body, status, code) => {
+        const response = await request(createApp()).post("/unknown")
+            .set("Content-Type", "application/json").send(body);
+        expect(response.status).toBe(status);
+        expect(response.body.error).toMatchObject({ code, requestId: response.headers["x-request-id"] });
+        expect(response.body.error).not.toHaveProperty("stack");
+        expect(response.body).not.toHaveProperty("body");
+    });
+
+    it("does not trust an arbitrary status on an internal exception", async () => {
+        const api = Router();
+        api.get("/fail", (_req, _res, next) => next(Object.assign(new Error("private details"), { status: 400 })));
+        const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+        try {
+            const response = await request(createApp({ apiRouter: api })).get("/api/v1/fail");
+            expect(response.status).toBe(500);
+            expect(response.body.error.code).toBe("INTERNAL_ERROR");
+            expect(JSON.stringify(response.body)).not.toContain("private details");
+        } finally { spy.mockRestore(); }
+    });
     it("returns liveness without external dependencies", async () => {
         const response = await request(createApp()).get("/health/live");
 

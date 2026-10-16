@@ -1,5 +1,4 @@
-import { Sequelize } from "sequelize";
-import { env } from "../config/env.js";
+import { createV2Sequelize } from "../database/v2/connection.js";
 import { createSalesV2Persistence } from "../database/v2/models.js";
 import { createCatalogBannerMediaV2 } from "../modules/catalog/infrastructure/catalog-banner-v2.composition.js";
 import { logger } from "../observability/logger.js";
@@ -8,10 +7,7 @@ if (process.env.BANNER_MEDIA_CLEANUP_ENABLED !== "true") {
     throw new Error("Set BANNER_MEDIA_CLEANUP_ENABLED=true only after Database V2 cutover.");
 }
 
-const sequelize = new Sequelize(env.MYSQL_DATABASE, env.MYSQL_USER, env.MYSQL_PASSWORD, {
-    host: env.MYSQL_HOST, port: env.MYSQL_PORT, dialect: "mysql",
-    dialectOptions: { supportBigNumbers: true, bigNumberStrings: true }, logging: false,
-});
+const sequelize = createV2Sequelize();
 const wait = (milliseconds: number): Promise<void> =>
     new Promise((resolve) => setTimeout(resolve, milliseconds));
 let stopping = false;

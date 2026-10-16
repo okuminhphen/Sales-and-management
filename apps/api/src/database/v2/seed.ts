@@ -1,8 +1,9 @@
 import bcrypt from "bcryptjs";
 import { resolve } from "node:path";
-import { Sequelize, type Transaction } from "sequelize";
+import type { Sequelize, Transaction } from "sequelize";
 import { fileURLToPath } from "node:url";
 import { env } from "../../config/env.js";
+import { createV2Sequelize } from "./connection.js";
 import { runConfiguredV2Migrations } from "./migrate.js";
 import { retryV2Transaction } from "./transaction-retry.js";
 
@@ -67,7 +68,7 @@ export const PERMISSION_SEEDS: readonly Omit<SeedRecord, "name">[] = [
 ];
 
 export const PAYMENT_METHOD_SEEDS: readonly SeedRecord[] = [
-    { code: "CASH", name: "Tiền mặt tại quầy", description: "Thanh toán tiền mặt đã thu tại quầy POS." },
+    { code: "CASH", name: "Tiền mặt", description: "Phương thức tham chiếu cho dữ liệu thanh toán tiền mặt." },
     { code: "COD", name: "COD", description: "Thanh toán tiền mặt khi nhận hàng." },
     { code: "VNPAY", name: "VNPAY", description: "Thanh toán trực tuyến qua VNPay." },
 ];
@@ -157,12 +158,7 @@ export const runV2Seed = async (): Promise<void> => {
     if (!targetDatabase) {
         throw new Error("Database V2 seed requires V2_MIGRATIONS_TARGET_DATABASE.");
     }
-    const sequelize = new Sequelize(targetDatabase, env.MYSQL_USER, env.MYSQL_PASSWORD, {
-        host: env.MYSQL_HOST,
-        port: env.MYSQL_PORT,
-        dialect: "mysql",
-        logging: false,
-    });
+    const sequelize = createV2Sequelize(targetDatabase);
     try {
         await sequelize.authenticate();
         await seedV2Database(sequelize, credentials);

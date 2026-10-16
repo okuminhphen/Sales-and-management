@@ -9,9 +9,8 @@ type MigrationManifest = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
     value !== null && typeof value === "object" && !Array.isArray(value);
 
-export const assertMigrationSources = (
+export const parseApprovedMigrationChecksums = (
     manifest: unknown,
-    sources: ReadonlyMap<string, string>,
     schemaRevision: number,
 ): ReadonlyMap<string, string> => {
     if (!isRecord(manifest) || manifest.schemaRevision !== schemaRevision) {
@@ -23,9 +22,27 @@ export const assertMigrationSources = (
 
     const approved = manifest.migrations as MigrationManifest["migrations"];
     const approvedNames = Object.keys(approved).sort();
+    if (approvedNames.length === 0) throw new Error("Database V2 migration inventory is empty.");
+    const checksums = new Map<string, string>();
+    for (const name of approvedNames) {
+        const checksum = approved[name];
+        if (!/^[0-9]{4}-[a-z0-9-]+$/.test(name) || !checksum || !/^[a-f0-9]{64}$/.test(checksum)) {
+            throw new Error("Database V2 migration manifest contains an invalid entry.");
+        }
+        checksums.set(name, checksum);
+    }
+    return checksums;
+};
+
+export const assertMigrationSources = (
+    manifest: unknown,
+    sources: ReadonlyMap<string, string>,
+    schemaRevision: number,
+): ReadonlyMap<string, string> => {
+    const approved = parseApprovedMigrationChecksums(manifest, schemaRevision);
+    const approvedNames = [...approved.keys()];
     const sourceNames = [...sources.keys()].sort();
     if (
-        approvedNames.length === 0 ||
         approvedNames.length !== sourceNames.length ||
         approvedNames.some((name, index) => name !== sourceNames[index])
     ) {
@@ -34,16 +51,9 @@ export const assertMigrationSources = (
 
     const checksums = new Map<string, string>();
     for (const name of approvedNames) {
-        const expected = approved[name];
+        const expected = approved.get(name);
         const source = sources.get(name);
-        if (
-            !/^[0-9]{4}-[a-z0-9-]+$/.test(name) ||
-            !expected ||
-            !/^[a-f0-9]{64}$/.test(expected) ||
-            source === undefined
-        ) {
-            throw new Error("Database V2 migration manifest contains an invalid entry.");
-        }
+        if (!expected || source === undefined) throw new Error("Database V2 migration inventory mismatch.");
         const actual = createHash("sha256")
             .update(source.replace(/\r\n/g, "\n"))
             .digest("hex");

@@ -47,7 +47,8 @@ describe.skipIf(!run)("Identity V2 HTTP on MySQL", () => {
         app = express();
         app.use(express.json());
         app.use("/api/v1", createIdentityV2Router({ persistence: createSalesV2Persistence(sequelize),
-            verificationGateway: gateway, loginRateLimit: (_req, _res, next) => next() }));
+            verificationGateway: gateway, loginRateLimit: (_req, _res, next) => next(),
+            emailVerificationRequired: true }));
     });
     afterAll(async () => {
         setOtpStorage(undefined);
@@ -65,7 +66,7 @@ describe.skipIf(!run)("Identity V2 HTTP on MySQL", () => {
         const otpApp = express();
         otpApp.use(express.json());
         otpApp.use("/api/v1", createIdentityV2Router({ persistence: createSalesV2Persistence(sequelize),
-            loginRateLimit: (_req, _res, next) => next() }));
+            loginRateLimit: (_req, _res, next) => next(), emailVerificationRequired: true }));
         const address = `otp-http-${suffix}@example.test`;
         const challenge = await request(otpApp).post("/api/v1/auth/email-verification/challenges")
             .send({ email: address }).expect(202);

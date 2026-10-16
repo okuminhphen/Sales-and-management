@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Sequelize } from "sequelize";
 import { env } from "../../config/env.js";
+import { createV2Sequelize } from "./connection.js";
 import {
     LOCAL_V2_CUTOVER_DATABASE,
     assertApprovedLocalV2CutoverTarget,
@@ -30,15 +31,11 @@ const createServerConnection = (): Sequelize => new Sequelize({
     port: env.MYSQL_PORT,
     username: env.MYSQL_USER,
     password: env.MYSQL_PASSWORD,
+    timezone: "+00:00",
     logging: false,
 });
 
-const createTargetConnection = (): Sequelize => new Sequelize(
-    LOCAL_V2_CUTOVER_DATABASE,
-    env.MYSQL_USER,
-    env.MYSQL_PASSWORD,
-    { host: env.MYSQL_HOST, port: env.MYSQL_PORT, dialect: "mysql", logging: false },
-);
+const createTargetConnection = (): Sequelize => createV2Sequelize(LOCAL_V2_CUTOVER_DATABASE);
 
 export const runApprovedLocalV2Cutover = async (): Promise<void> => {
     const schema = loadApprovedSchema();

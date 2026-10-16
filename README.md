@@ -75,11 +75,27 @@ npm run db:seed --workspace @sales/api
 
 Chạy từng ứng dụng ở ba terminal:
 
+Trước khi chạy API/AI trực tiếp trên máy, dùng `npm run db:check` để kiểm tra
+MySQL theo `.env`. `MYSQL_PORT` phải là cổng Docker publish ra host; cấu hình local
+hiện dùng `4306`. Các service trong Docker network vẫn dùng `mysql:3306`.
+Launcher cũng kiểm tra kết nối này trước khi mở ứng dụng.
+
 ```powershell
 npm run dev:web
 npm run dev:api
 cd apps/ai-service; .venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
+
+Trên Windows có thể double-click `start-local.cmd` ở root để launcher tự kiểm tra môi
+trường, gọi `infra:up` rồi chạy Web/API/AI, outbox và inventory expiry trong năm process
+nền. Log riêng của từng service nằm tại `.local-runtime/<Service>.stdout.log` và
+`.stderr.log`. Launcher kiểm tra HTTP của ba app và startup marker của hai worker;
+hai worker do launcher quản lý dùng `LOG_LEVEL=info` để marker luôn quan sát được.
+Dùng `stop-local.cmd` để dừng đúng các process do launcher tạo, có guard PID/start-time;
+Docker và dữ liệu trong named volume vẫn được giữ.
+Khi muốn dừng cả MySQL, Redis, Qdrant và RabbitMQ, chạy `stop-infrastructure.cmd`;
+script này cũng không xóa volume. Launcher không tự migrate, reset, seed database hoặc
+cài dependency. Đây chỉ là tiện ích local, không thay đổi topology deploy độc lập.
 
 - Web: `http://localhost:3000`
 - API health: `http://localhost:8080/health/live`
@@ -110,6 +126,28 @@ Worker API `outbox:publish:v2` phát event MySQL đã commit sang RabbitMQ; `ai-
 nhận event và upsert/delete vector Qdrant. Hai worker là process deploy độc lập, không chạy
 trong request HTTP. Qdrant chỉ là read-model: MySQL vẫn là nguồn dữ liệu chuẩn.
 
+Khi không dùng launcher/Compose, chạy thêm hai terminal worker dưới đây. Cần cả outbox
+publisher và expiry worker để event được phát và reservation chưa thanh toán quá hạn
+được nhả an toàn. Không chạy thêm host worker khi Compose đã quản lý cùng worker.
+
+```powershell
+# Terminal outbox
+$env:V2_OUTBOX_PUBLISHER_ENABLED='true'
+npm run outbox:publish:v2 --workspace @sales/api
+
+# Terminal expiry riêng
+$env:V2_INVENTORY_RESERVATION_EXPIRY_ENABLED='true'
+npm run inventory-reservation:expire --workspace @sales/api
+```
+
+Local/production Compose đều chạy hai worker bằng compiled JS của image API, với flag
+enable tường minh. Production worker chỉ cần cấu hình MySQL, `NODE_ENV`/`LOG_LEVEL` và
+RabbitMQ đối với outbox; không cần JWT, email, reCAPTCHA hay VNPay secrets. API HTTP vẫn
+giữ các guard production riêng. `outbox.v2.broker_ready` và
+`inventory_reservation.expiry_worker_started` cho biết startup; theo dõi thêm
+`outbox.v2.event_published`, `inventory_reservation.hold_expired` và log retry/error
+để biết tiến độ. Broker readiness không tự chứng minh mọi event đã có consumer binding.
+
 ### Luồng RAG catalog
 
 Mỗi sản phẩm ngắn được index thành một vector với `name + category + description`; không
@@ -129,6 +167,12 @@ worker legacy đã bị xóa; không còn dual-write hoặc schema compatibility
 Integration test dùng database riêng có hậu tố `_test`. Xem
 [Database V2](docs/database-v2/README.md), [quy ước database](docs/database.md) và
 [checklist](tasks/todo.md).
+
+Tính năng POS đã được gỡ khỏi API và client Web; `POST /api/v1/order/in-store` trả
+404. Không có command tạo đơn tại quầy thay thế. Các enum/constraint và read contract
+của đơn lịch sử vẫn giữ nguyên trong revision 4 để bảo toàn migration/checksum và dữ liệu.
+Kết quả sửa năm lỗi backend và giới hạn nghiệp vụ còn lại được ghi tại
+[backend readiness validation](docs/database-v2/backend-readiness-validation.md).
 
 Tên database mặc định cho môi trường mới là `sale_and_managements_db` (cấu hình qua
 `MYSQL_DATABASE`). MySQL chỉ khởi tạo database này tự động khi data volume được tạo lần đầu;
@@ -202,6 +246,8 @@ Qdrant và RabbitMQ chỉ bind vào `127.0.0.1`, yêu cầu credential từ `.en
   - `EMAIL_FROM`: Địa chỉ người gửi (mặc định `HappyShop <onboarding@resend.dev>`).
   - `OTP_HMAC_SECRET`: Khóa bí mật dùng để tạo HMAC-SHA256 digest của mã OTP (tối thiểu 16 ký tự; bắt buộc thiết lập chuỗi mạnh trong production).
   - `EMAIL_TIMEOUT_MS`: Thời gian chờ tối đa khi gửi email (mặc định `5000ms`).
+  - `EMAIL_VERIFICATION_ENABLED`: Bật bắt buộc OTP email ở API; mặc định `true` và không thể tắt trong production.
+  - `VITE_EMAIL_VERIFICATION_ENABLED`: Điều khiển bước OTP trên web; phải đồng bộ với API.
   - `RECAPTCHA_ENABLED`: Bật kiểm tra reCAPTCHA tại API; local mặc định `false`, production bắt buộc là `true`.
   - `RECAPTCHA_SECRET_KEY`: Secret key chỉ đặt ở API; không đưa vào frontend hoặc Git.
   - `RECAPTCHA_MIN_SCORE`: Ngưỡng điểm v3 tối thiểu, mặc định `0.5`.
@@ -217,7 +263,11 @@ Qdrant và RabbitMQ chỉ bind vào `127.0.0.1`, yêu cầu credential từ `.en
   6. Frontend gọi `POST /api/v1/register` kèm `emailVerificationToken`. Backend claim token, tạo tài khoản và role trong transaction, sau commit mới finalize token.
   7. Email chào mừng được gửi mà không kèm mật khẩu thô của người dùng.
 
-Local có thể để cả `RECAPTCHA_ENABLED=false` và `VITE_RECAPTCHA_SITE_KEY=`. Production phải cấu hình đồng thời site key lúc build web và secret key/hostname ở runtime API; không bật một phía riêng lẻ.
+Để tập trung phát triển local mà không gọi dịch vụ ngoài, đặt `EMAIL_PROVIDER=test`,
+`EMAIL_VERIFICATION_ENABLED=false`, `VITE_EMAIL_VERIFICATION_ENABLED=false`,
+`RECAPTCHA_ENABLED=false` và `VITE_RECAPTCHA_SITE_KEY=`. Khi đó đăng ký tạo tài khoản trực tiếp,
+không gửi email và không tạo OTP. Chế độ này chỉ hợp lệ ngoài production; production buộc bật lại
+xác minh email và reCAPTCHA ở API, đồng thời cấu hình các biến frontend tương ứng.
 
 ## Docker và triển khai
 

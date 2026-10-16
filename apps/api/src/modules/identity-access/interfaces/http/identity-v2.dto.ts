@@ -2,13 +2,16 @@ import { z } from "zod";
 import { v2EntityId as entityId } from "../../../../shared/contracts/v2-entity-id.dto.js";
 
 const password = z.string().min(8).max(128);
-export const registerV2Body = z.object({
+export const createRegisterV2Body = (emailVerificationRequired = true) => z.object({
     email: z.string().trim().email().max(255),
     phone: z.string().trim().min(8).max(30),
     username: z.string().trim().min(3).max(100),
     password,
-    emailVerificationToken: z.string().uuid(),
+    emailVerificationToken: emailVerificationRequired
+        ? z.string().uuid()
+        : z.string().uuid().optional(),
 }).strict();
+export const registerV2Body = createRegisterV2Body();
 export const customerLoginV2Body = z.object({
     emailOrPhone: z.string().trim().min(3).max(255),
     password: z.string().min(1).max(128),

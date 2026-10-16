@@ -1,7 +1,7 @@
 import { Router, type RequestHandler, type Response } from "express";
 import { validateRequest } from "../../../../middlewares/validateRequest.js";
 import { createV2HttpAudit, type V2HttpAuditWriter } from "../../../../observability/v2-http-audit.js";
-import type { BranchResult, BranchV2Service } from "../../application/branch-v2.service.js";
+import type { BranchResult, PickupBranchResult, BranchV2Service } from "../../application/branch-v2.service.js";
 import type { V2AuthenticatedRequest } from "./v2-auth.middleware.js";
 import { assignBranchManagerV2Body, branchV2Params, branchV2Query,
     createBranchV2Body, updateBranchV2Body } from "./branch-v2.dto.js";
@@ -29,12 +29,28 @@ const send = (response: Response, result: BranchResult): void => {
     }
 };
 
+const sendPickupDirectory = (response: Response, result: PickupBranchResult): void => {
+    switch (result.kind) {
+        case "pickup_branches": response.status(200).json({ EM: "Get pickup branches successfully", EC: 0,
+            DT: result.page.branches, pagination: {
+                page: result.page.page, limit: result.page.limit,
+                totalItems: result.page.totalItems, totalPages: result.page.totalPages,
+            } }); return;
+        case "invalid_branch_input": response.status(400).json({ EM: "Invalid branch input", EC: 1, DT: null }); return;
+        case "branch_unavailable": response.status(503).json({ EM: "Branch service unavailable", EC: -1, DT: null }); return;
+    }
+};
+
 export const createBranchV2Router = (dependencies: {
     auth: RequestHandler;
     service: BranchV2Service;
     audit?: V2HttpAuditWriter;
 }): Router => {
     const router = Router();
+    router.get("/branch/pickup/read", validateRequest({ query: branchV2Query }),
+        async (request, response) => {
+            sendPickupDirectory(response, await dependencies.service.listPickup(request.query));
+        });
     router.get("/branch/read", dependencies.auth, validateRequest({ query: branchV2Query }),
         async (request, response) => {
             const context = (request as V2AuthenticatedRequest).v2AccessContext!;

@@ -1,7 +1,7 @@
 import { QueryTypes, type Transaction } from "sequelize";
 import { retryV2Transaction } from "../../../database/v2/transaction-retry.js";
 import type { V2Persistence } from "../../../database/v2/persistence.js";
-import { serializeDatabaseEntityId, type EntityId } from "../../../shared/contracts/database-scalars.js";
+import { serializeDatabaseEntityId, serializeMoney, type EntityId } from "../../../shared/contracts/database-scalars.js";
 import type {
     InventoryReservationV2Repository, ReserveOrderItemInput, ReserveOrderItemResult,
 } from "../application/inventory-reservation-v2.service.js";
@@ -81,8 +81,13 @@ export class SequelizeInventoryReservationV2Repository implements InventoryReser
         const identity = await this.findOrderReservationIdentity(reservationId, transaction);
         if (!identity) return { kind: "reservation_not_found" };
         const { orderId, inventoryId, orderItemId } = identity;
-        const orders = await this.persistence.sequelize.query<{ branchId: unknown; status: string }>(
-            "SELECT fulfillment_branch_id AS branchId, status FROM orders WHERE id = ? FOR UPDATE",
+        const orders = await this.persistence.sequelize.query<{ branchId: unknown; status: string; totalAmount: string }>(
+            "SELECT fulfillment_branch_id AS branchId, status, total_amount AS totalAmount FROM orders WHERE id = ? FOR UPDATE",
+            { replacements: [orderId], transaction, type: QueryTypes.SELECT },
+        );
+        // Match callback/expiry order -> payment -> item -> inventory -> hold locks.
+        const payments = await this.persistence.sequelize.query<{ amount: string; status: string }>(
+            "SELECT amount, status FROM payments WHERE order_id = ? ORDER BY id ASC FOR UPDATE",
             { replacements: [orderId], transaction, type: QueryTypes.SELECT },
         );
         const items = await this.persistence.sequelize.query<{ variantId: unknown; quantity: unknown }>(
@@ -106,7 +111,18 @@ export class SequelizeInventoryReservationV2Repository implements InventoryReser
         if (order.status !== "confirmed") return { kind: "order_not_confirmed" };
         if (hold.status !== "active") return { kind: "reservation_finalized" };
         if (hold.confirmedAt !== null && hold.expiresAt === null) return { kind: "replayed" };
-        if (hold.expiresAt === null || Number(hold.expired) === 1) return { kind: "reservation_expired" };
+        if (hold.expiresAt === null) return { kind: "reservation_expired" };
+        if (Number(hold.expired) === 1) {
+            // An active paid hold still counts against stock. The payment deadline
+            // must not become a deadline for staff processing; never resurrect a
+            // released/expired hold or accept an unresolved/partial collection.
+            const paid = payments.reduce((sum, payment) => sum + (payment.status === "completed"
+                ? BigInt(serializeMoney(payment.amount).replace(".", "")) : 0n), 0n);
+            if (paid < BigInt(serializeMoney(order.totalAmount).replace(".", ""))
+                || payments.some((payment) => payment.status === "pending" || payment.status === "processing")) {
+                return { kind: "reservation_expired" };
+            }
+        }
         await this.persistence.sequelize.query(
             "UPDATE inventory_reservations SET confirmed_at = CURRENT_TIMESTAMP(3), expires_at = NULL, updated_at = CURRENT_TIMESTAMP(3) WHERE id = ?",
             { replacements: [reservationId], transaction },

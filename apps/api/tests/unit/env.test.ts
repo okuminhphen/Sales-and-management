@@ -10,6 +10,7 @@ describe("parseEnv", () => {
         expect(result.AI_SERVICE_URL).toBe("http://localhost:8000");
         expect(result.VNP_URL).toContain("sandbox.vnpayment.vn");
         expect(result.RECAPTCHA_ENABLED).toBe(false);
+        expect(result.EMAIL_VERIFICATION_ENABLED).toBe(true);
     });
 
     it("requires a reCAPTCHA secret when server-side enforcement is enabled", () => {
@@ -33,6 +34,26 @@ describe("parseEnv", () => {
                 RECAPTCHA_ENABLED: "false",
             })
         ).toThrow(/RECAPTCHA_ENABLED must be true in production/);
+    });
+
+    it("rejects production configuration that disables email verification", () => {
+        expect(() =>
+            parseEnv({
+                NODE_ENV: "production",
+                JWT_SECRET: "a-secure-production-secret",
+                VNP_TMN_CODE: "merchant",
+                VNP_HASH_SECRET: "payment-secret",
+                PAYMENT_WEBHOOK_SECRET: "webhook-secret",
+                RESEND_API_KEY: "re_test_key_123",
+                OTP_HMAC_SECRET: "strong-production-secret-min-16-bytes",
+                EMAIL_PROVIDER: "resend",
+                EMAIL_FROM: "HappyShop <no-reply@happyshop.vn>",
+                RECAPTCHA_ENABLED: "true",
+                RECAPTCHA_SECRET_KEY: "production-recaptcha-secret",
+                RECAPTCHA_ALLOWED_HOSTNAMES: "shop.example.com",
+                EMAIL_VERIFICATION_ENABLED: "false",
+            })
+        ).toThrow(/EMAIL_VERIFICATION_ENABLED must be true in production/);
     });
 
     it("requires an explicit reCAPTCHA hostname allowlist in production", () => {

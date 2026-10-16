@@ -32,7 +32,6 @@ class RejectedCheckout extends Error {
 const reject = (kind: CheckoutFailure["kind"]): never => { throw new RejectedCheckout({ kind }); };
 const sameId = (actual: unknown, expected: EntityId): boolean =>
     actual !== null && serializeDatabaseEntityId(actual) === expected;
-const parseImageSnapshot = (value: string | null): unknown => value === null ? null : JSON.parse(value);
 
 /** Owns the outer transaction; no provider calls or HTTP side effects occur under row locks. */
 export class SequelizeOrderCheckoutV2Repository implements OrderCheckoutV2Repository {
@@ -147,7 +146,8 @@ export class SequelizeOrderCheckoutV2Repository implements OrderCheckoutV2Reposi
                     discount_amount, quantity, line_total, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3))`,
                 { replacements: [orderId, product.productId, item.variantId, product.sku,
-                    product.productName, product.sizeName, parseImageSnapshot(product.imagesText),
+                    // A JSON document is one SQL scalar, not an expanded array replacement.
+                    product.productName, product.sizeName, product.imagesText,
                     roundCatalogUnitPriceV2(product.basePrice), amounts.lines[index]!.discountAmount,
                     item.quantity, amounts.lines[index]!.lineTotal], transaction, type: QueryTypes.INSERT },
             );

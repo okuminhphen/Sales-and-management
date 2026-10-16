@@ -6,7 +6,7 @@ import { QueryTypes } from "sequelize";
 import { Server } from "socket.io";
 import { env } from "./config/env.js";
 import type { V2Persistence } from "./database/v2/persistence.js";
-import { ConversationMessageV2Service } from "./modules/communication-ai/application/conversation-message-v2.service.js";
+import { ConversationMessageV2Service, type MessageViewV2 } from "./modules/communication-ai/application/conversation-message-v2.service.js";
 import { SequelizeConversationMessageV2Repository } from "./modules/communication-ai/persistence/conversation-message-v2.repository.js";
 import type { V2AccessContext } from "./modules/identity-access/application/access-context.js";
 import { SequelizeV2AccessContextRepository } from "./modules/identity-access/persistence/v2-access-context.repository.js";
@@ -31,6 +31,16 @@ type SocketServer = Server<ClientEvents, ServerEvents, Record<string, never>, So
 
 let io: SocketServer | undefined;
 let subscriber: RedisClientType | undefined;
+
+/** Socket subscribers receive the exact public chat-message view returned by REST. */
+export const displaySocketMessage = (message: MessageViewV2) => ({
+    id: message.id,
+    conversationId: message.conversationId,
+    seq: message.seq,
+    senderType: message.senderType,
+    message: message.content,
+    createdAt: message.createdAt,
+});
 
 const tokenFromCookie = (cookieHeader: string | undefined): string | undefined => {
     if (!cookieHeader) return undefined;
@@ -142,7 +152,7 @@ export const initV2Socket = async (
                     content: payload.message,
                 });
                 if (result.kind === "message") {
-                    io?.to(result.message.conversationId).emit("newMessage", result.message);
+                    io?.to(result.message.conversationId).emit("newMessage", displaySocketMessage(result.message));
                     return;
                 }
             } catch { /* fail closed without exposing database details */ }

@@ -24,7 +24,7 @@ export type OnlinePickupCommandResult = OnlinePickupCheckoutResult | { kind: "fo
 const pickupContact = (value: unknown, max: number): value is string =>
     typeof value === "string" && value === value.trim() && value.length > 0 && value.length <= max;
 
-/** Online buyer only; POS and delivery have separate transaction requirements. */
+/** Online buyer only; delivery has separate transaction requirements. */
 export class OrderCheckoutV2Service {
     constructor(private readonly dependencies: { repository: OrderCheckoutV2Repository; now?: () => Date }) {}
 

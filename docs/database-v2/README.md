@@ -4,6 +4,10 @@ Thư mục này là **nguồn sự thật được Git quản lý** cho hợp đ
 HappyShop. Artifact hiện tại là revision 4, gồm đúng **49 bảng nghiệp vụ** và **104 quan hệ**.
 Bảng metadata do migration runner tạo ra không thuộc 49 bảng nghiệp vụ này.
 
+Trạng thái backend sau gỡ POS và sửa năm finding (2026-10-16): xem
+[backend readiness validation](backend-readiness-validation.md) để biết kết quả
+test, kiểm chứng worker, DB chính và các capability còn thiếu.
+
 ## Phạm vi và trạng thái
 
 - [`target-schema.dbml`](./target-schema.dbml) mô tả schema đích đã được duyệt.
@@ -37,6 +41,9 @@ Kế hoạch triển khai chi tiết được theo dõi tại [`tasks/plan.md`](
 ## Quy ước cốt lõi
 
 - MySQL 8.4, InnoDB, `utf8mb4`, thời gian lưu theo UTC.
+- API, worker, migration và seed dùng chung connection factory với session
+  timezone `+00:00`; Web chuyển thời gian sang múi giờ hiển thị. Không dùng
+  session `+07:00` cùng câu ghi `UTC_TIMESTAMP()` vào cột `TIMESTAMP`.
 - Tên bảng/cột dùng `snake_case`.
 - ID entity dùng `BIGINT`; role/permission ID dùng `INTEGER`.
 - Tiền dùng `DECIMAL(19,4)` và không đi qua JavaScript `Number`.
@@ -46,6 +53,33 @@ Kế hoạch triển khai chi tiết được theo dõi tại [`tasks/plan.md`](
 
 Không chỉnh trực tiếp schema đích mà không cập nhật revision, checksum/manifest, ADR liên quan và
 các test bảo vệ schema.
+
+## Kiểm tra trước khi chạy backend / triển khai
+
+`npm run db:check` xác thực kết nối local bằng cấu hình môi trường và không ghi
+dữ liệu. API startup kiểm tra đúng tên và checksum của toàn bộ migration, từ chối
+migration thiếu/thừa/lạ/sai checksum, rồi kiểm tra đủ tập bảng V2. Startup không
+tự chạy migration hay sửa schema.
+
+Trước deployment, chạy validator artifact và các schema/persistence integration
+tests trên database `_test` đã chuẩn bị (không dùng database ứng dụng):
+
+```powershell
+npm run db:v2:validate
+npm run test:db:v2
+$env:RUN_DATABASE_V2_TESTS='true'
+$env:V2_MIGRATIONS_ENABLED='true'
+$env:V2_MIGRATIONS_TARGET_DATABASE='sale_and_managements_db_test'
+$env:MYSQL_DATABASE='sale_and_managements_db_test'
+npm run test --workspace @sales/api -- tests/integration/databaseV2FullSchema.test.ts tests/integration/databaseV2FullPersistence.test.ts tests/integration/databaseV2RuntimeUtc.test.ts
+```
+
+Các override trên chỉ dùng trong terminal test; đóng terminal đó trước khi chạy
+app chính. Full schema/persistence kiểm tra baseline migration, bảng/cột, bảng/cột
+đích và delete/update policy của 104 FK, 65 CHECK được bật và quan hệ ORM tương ứng.
+Kiểm tra metadata không thay thế rehearsal trên môi trường có dữ liệu.
+Audit schema thật và lịch sử phát hiện lỗi: [audit-2026-10-15.md](audit-2026-10-15.md).
+Các bản sửa sau audit và kết quả kiểm chứng: [runtime-hardening-validation.md](runtime-hardening-validation.md).
 
 ## Chạy migration V2 an toàn
 

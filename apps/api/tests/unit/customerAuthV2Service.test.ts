@@ -28,6 +28,29 @@ const createRepository = (): CustomerAuthV2Repository => ({
 });
 
 describe("CustomerAuthV2Service", () => {
+    it("allows an explicitly configured local registration without an email verification token", async () => {
+        const verificationGateway = createVerificationGateway();
+        const repository = createRepository();
+        const service = new CustomerAuthV2Service({
+            repository,
+            verificationGateway,
+            passwordHasher,
+            emailVerificationRequired: false,
+        });
+
+        const result = await service.register({
+            email: "local@example.test",
+            phone: "0901234567",
+            username: "local-user",
+            password: "password123",
+        });
+
+        expect(result.kind).toBe("registered");
+        expect(verificationGateway.claim).not.toHaveBeenCalled();
+        expect(verificationGateway.finalize).not.toHaveBeenCalled();
+        expect(verificationGateway.release).not.toHaveBeenCalled();
+    });
+
     it("claims the normalized-email OTP before creating an Account/Customer and finalizes it only after commit", async () => {
         const verificationGateway = createVerificationGateway();
         const repository = createRepository();

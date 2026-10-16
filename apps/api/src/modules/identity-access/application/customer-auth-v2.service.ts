@@ -56,7 +56,7 @@ export type CustomerRegistrationInput = {
     phone: string;
     username: string;
     password: string;
-    emailVerificationToken: string;
+    emailVerificationToken?: string;
 };
 
 export type CustomerRegistrationResult =
@@ -97,27 +97,34 @@ export class CustomerAuthV2Service {
             repository: CustomerAuthV2Repository;
             verificationGateway: VerificationTokenGateway;
             passwordHasher: PasswordHasher;
+            emailVerificationRequired?: boolean;
         },
     ) {}
 
     async register(input: CustomerRegistrationInput): Promise<CustomerRegistrationResult> {
         const email = normalizeEmail(input.email);
-        let claim: VerificationTokenClaim;
+        const verificationToken = input.emailVerificationToken;
+        const verificationRequired = this.dependencies.emailVerificationRequired !== false;
 
-        try {
-            claim = await this.dependencies.verificationGateway.claim(input.emailVerificationToken, email);
-        } catch {
-            return { kind: "registration_unavailable" };
-        }
+        if (verificationRequired) {
+            if (!verificationToken) return { kind: "verification_invalid" };
 
-        if (claim.success === false) {
-            switch (claim.error) {
-                case "EMAIL_MISMATCH":
-                    return { kind: "verification_email_mismatch" };
-                case "ALREADY_CLAIMED":
-                    return { kind: "verification_already_claimed" };
-                default:
-                    return { kind: "verification_invalid" };
+            let claim: VerificationTokenClaim;
+            try {
+                claim = await this.dependencies.verificationGateway.claim(verificationToken, email);
+            } catch {
+                return { kind: "registration_unavailable" };
+            }
+
+            if (claim.success === false) {
+                switch (claim.error) {
+                    case "EMAIL_MISMATCH":
+                        return { kind: "verification_email_mismatch" };
+                    case "ALREADY_CLAIMED":
+                        return { kind: "verification_already_claimed" };
+                    default:
+                        return { kind: "verification_invalid" };
+                }
             }
         }
 
@@ -131,17 +138,17 @@ export class CustomerAuthV2Service {
             });
 
             if (created.kind === "email_already_exists" || created.kind === "username_already_exists") {
-                await this.releaseVerificationToken(input.emailVerificationToken);
+                if (verificationToken) await this.releaseVerificationToken(verificationToken);
                 return created;
             }
 
             // Account/Customer/role assignment is committed before the one-time OTP is consumed.
             // A finalize failure is safe to tolerate: the unique account constraint prevents replay,
             // and the short-lived token remains protected by its own TTL.
-            await this.finalizeVerificationToken(input.emailVerificationToken);
+            if (verificationToken) await this.finalizeVerificationToken(verificationToken);
             return { kind: "registered", accountId: created.accountId, customerId: created.customerId };
         } catch (error) {
-            await this.releaseVerificationToken(input.emailVerificationToken);
+            if (verificationToken) await this.releaseVerificationToken(verificationToken);
             logger.error("customer_auth_v2.registration_failed", {
                 errorName: error instanceof Error ? error.name : "UnknownError",
             });

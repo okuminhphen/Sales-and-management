@@ -13,6 +13,7 @@ import {
     type UmzugStorage,
 } from "umzug";
 import { env } from "../../config/env.js";
+import { createV2Sequelize } from "./connection.js";
 import {
     assertExecutedMigrationChecksums,
     assertMigrationSources,
@@ -244,14 +245,6 @@ const loadMigrations = (checksums: ReadonlyMap<string, string>) => {
         };
     });
 };
-
-const createV2Sequelize = (targetDatabase: string): Sequelize =>
-    new Sequelize(targetDatabase, env.MYSQL_USER, env.MYSQL_PASSWORD, {
-        host: env.MYSQL_HOST,
-        port: env.MYSQL_PORT,
-        dialect: "mysql",
-        logging: false,
-    });
 
 export const runV2Migrations = async (
     command: "status" | "up",

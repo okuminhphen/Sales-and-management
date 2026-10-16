@@ -27,13 +27,17 @@ import { SequelizeEmployeeAssignmentV2Repository } from "../modules/identity-acc
 import { createRequireRecaptcha } from "../modules/auth/otp/recaptcha.guard.js";
 import { AccountPasswordV2Service } from "../modules/identity-access/application/account-password-v2.service.js";
 import { SequelizeAccountPasswordV2Repository } from "../modules/identity-access/persistence/account-password-v2.repository.js";
+import { env } from "../config/env.js";
 
 export const createIdentityV2Router = (dependencies: {
     persistence: V2Persistence;
     verificationGateway?: VerificationTokenGateway;
     audit?: V2HttpAuditWriter;
     loginRateLimit?: RequestHandler;
+    emailVerificationRequired?: boolean;
 }): Router => {
+    const emailVerificationRequired =
+        dependencies.emailVerificationRequired ?? env.EMAIL_VERIFICATION_ENABLED;
     const contexts = new SequelizeV2AccessContextRepository(dependencies.persistence);
     const auth = createV2AuthMiddleware({ accessContexts: contexts });
     const router = Router();
@@ -58,6 +62,7 @@ export const createIdentityV2Router = (dependencies: {
                 finalize: (token) => otpService.finalizeVerificationToken(token),
             },
             passwordHasher: bcryptPasswordHasher,
+            emailVerificationRequired,
         }),
         backofficeAuth: new BackofficeAuthV2Service({
             repository: new SequelizeBackofficeAuthV2Repository(dependencies.persistence),
@@ -76,6 +81,7 @@ export const createIdentityV2Router = (dependencies: {
         audit: dependencies.audit,
         loginRateLimit: dependencies.loginRateLimit,
         loginRecaptcha: createRequireRecaptcha("login"),
+        emailVerificationRequired,
     }));
     return router;
 };

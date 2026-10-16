@@ -61,6 +61,17 @@ export type BranchPage = {
     totalPages: number;
 };
 
+/** Public data strictly needed for a customer to choose a pickup location. */
+export type PickupBranchProfile = Pick<BranchProfile, "id" | "name" | "address" | "type">;
+
+export type PickupBranchPage = {
+    branches: readonly PickupBranchProfile[];
+    page: number;
+    limit: number;
+    totalItems: number;
+    totalPages: number;
+};
+
 export type BranchMutationResult =
     | BranchProfile
     | { kind: "branch_not_found" }
@@ -86,6 +97,11 @@ export type BranchResult =
     | { kind: "branch_not_found" }
     | { kind: "manager_not_eligible" }
     | { kind: "branch_code_conflict" }
+    | { kind: "branch_unavailable" };
+
+export type PickupBranchResult =
+    | { kind: "pickup_branches"; page: PickupBranchPage }
+    | { kind: "invalid_branch_input" }
     | { kind: "branch_unavailable" };
 
 const branchCodePattern = /^[A-Z][A-Z0-9_-]{2,49}$/;
@@ -158,6 +174,31 @@ export class BranchV2Service {
         if (!query) return { kind: "invalid_branch_input" };
         try {
             return { kind: "branches", page: await this.dependencies.repository.listBranches(query) };
+        } catch {
+            return { kind: "branch_unavailable" };
+        }
+    }
+
+    /**
+     * Customer checkout must select a fulfillment branch, but it must not
+     * receive employee, contact or branch-management metadata. This endpoint
+     * intentionally has no session requirement and returns an allowlisted view.
+     */
+    async listPickup(input?: BranchListInput): Promise<PickupBranchResult> {
+        const query = normalizeListQuery(input);
+        if (!query) return { kind: "invalid_branch_input" };
+        try {
+            const page = await this.dependencies.repository.listBranches(query);
+            return {
+                kind: "pickup_branches",
+                page: {
+                    branches: page.branches.map(({ id, name, address, type }) => ({ id, name, address, type })),
+                    page: page.page,
+                    limit: page.limit,
+                    totalItems: page.totalItems,
+                    totalPages: page.totalPages,
+                },
+            };
         } catch {
             return { kind: "branch_unavailable" };
         }

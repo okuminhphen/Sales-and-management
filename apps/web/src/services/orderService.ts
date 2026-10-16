@@ -47,9 +47,6 @@ const fetchAllOrders = () => {
 const fetchOrdersByBranch = (branchId: EntityId) => {
   return axios.get<ApiEnvelope<OrderDto[]>>(`/order/branch/${branchId}`);
 };
-const createOrderAtBranch = (orderData: CreateOrderInput) => {
-  return axios.post<ApiEnvelope<OrderDto>>("/order/in-store", orderData);
-};
 export {
   createOrder,
   getOrder,
@@ -58,5 +55,4 @@ export {
   deleteOrder,
   fetchAllOrders,
   fetchOrdersByBranch,
-  createOrderAtBranch,
 };

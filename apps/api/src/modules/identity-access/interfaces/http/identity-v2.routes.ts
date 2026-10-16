@@ -10,7 +10,8 @@ import type { CustomerProfileV2Service } from "../../application/customer-profil
 import type { AccountPasswordV2Service } from "../../application/account-password-v2.service.js";
 import type { V2AuthenticatedRequest } from "./v2-auth.middleware.js";
 import { backofficeLoginV2Body, customerLoginV2Body, ownCustomerParamsV2,
-    ownCustomerPatchV2, ownCustomerUpdateParamsV2, ownPasswordChangeV2, registerV2Body } from "./identity-v2.dto.js";
+    ownCustomerPatchV2, ownCustomerUpdateParamsV2, ownPasswordChangeV2,
+    createRegisterV2Body } from "./identity-v2.dto.js";
 
 const envelope = (EM: string, EC: number, DT: unknown) => ({ EM, EC, DT });
 const tokenFor = (context: V2AccessContext): string => signV2AccessToken({
@@ -34,13 +35,15 @@ export const createIdentityV2Routes = (dependencies: {
     audit?: V2HttpAuditWriter;
     loginRateLimit?: RequestHandler;
     loginRecaptcha?: RequestHandler;
+    emailVerificationRequired?: boolean;
 }): Router => {
     const router = Router();
     const loginLimit = dependencies.loginRateLimit ?? rateLimit({ keyPrefix: "rate-limit:v2-auth:ip",
         maxRequests: 10, windowSeconds: 60, failClosed: true });
 
     router.post("/register", createV2HttpAudit("auth.register", dependencies.audit), loginLimit,
-        validateRequest({ body: registerV2Body }), async (request, response) => {
+        validateRequest({ body: createRegisterV2Body(dependencies.emailVerificationRequired !== false) }),
+        async (request, response) => {
             const result = await dependencies.customerAuth.register(request.body);
             switch (result.kind) {
                 case "registered":

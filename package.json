@@ -16,6 +16,8 @@
     "test": "npm run test --workspaces --if-present",
     "db:v2:validate": "node scripts/database-v2/validate-schema.cjs",
     "test:db:v2": "node --test scripts/database-v2/schema-validator.test.cjs",
+    "test:local:launcher": "node --test scripts/local-dev/local-dev-launcher.test.cjs scripts/local-dev/check-database.test.cjs scripts/local-dev/worker-wiring.test.cjs",
+    "db:check": "node scripts/local-dev/check-database.cjs",
     "infra:up": "docker compose --env-file .env -f infra/compose.infrastructure.yml up -d",
     "infra:down": "docker compose --env-file .env -f infra/compose.infrastructure.yml down",
     "rehearsal:up": "docker compose -f compose.yml up --build",

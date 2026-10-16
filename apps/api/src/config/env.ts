@@ -1,23 +1,14 @@
-import { config as loadDotEnv } from "dotenv";
-import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { databaseEnvSchema } from "./database-env.js";
 
-loadDotEnv({ path: fileURLToPath(new URL("../../../../.env", import.meta.url)) });
-
-const envSchema = z
-  .object({
-    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+const envSchema = databaseEnvSchema
+  .extend({
     API_HOST: z.string().default("0.0.0.0"),
     API_PORT: z.coerce.number().int().positive().default(8080),
     FRONTEND_URL: z.string().default("http://localhost:3000"),
     JWT_SECRET: z.string().min(3).default("development-only-secret"),
     SUPER_ADMIN_EMAIL: z.string().trim().optional().transform((value) => value || undefined),
     SUPER_ADMIN_PASSWORD: z.string().optional().transform((value) => value || undefined),
-    MYSQL_HOST: z.string().default("localhost"),
-    MYSQL_PORT: z.coerce.number().int().positive().default(3306),
-    MYSQL_DATABASE: z.string().default("sale_and_managements_db"),
-    MYSQL_USER: z.string().default("root"),
-    MYSQL_PASSWORD: z.string().default(""),
     V2_MIGRATIONS_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
     V2_MIGRATIONS_TARGET_DATABASE: z.string().trim().optional().transform((value) => value || undefined),
     V2_LOCAL_CUTOVER_CONFIRM: z.string().trim().optional().transform((value) => value || undefined),
@@ -29,12 +20,12 @@ const envSchema = z
     AI_SERVICE_TIMEOUT_MS: z.coerce.number().int().positive().max(60_000).default(10_000),
     CHAT_RATE_LIMIT_MAX: z.coerce.number().int().positive().max(1_000).default(30),
     CHAT_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().max(3_600).default(60),
-    LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
     RECAPTCHA_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
     RECAPTCHA_SECRET_KEY: z.string().default(""),
     RECAPTCHA_MIN_SCORE: z.coerce.number().min(0).max(1).default(0.5),
     RECAPTCHA_ALLOWED_HOSTNAMES: z.string().default(""),
     RECAPTCHA_TIMEOUT_MS: z.coerce.number().int().positive().max(30_000).default(5_000),
+    EMAIL_VERIFICATION_ENABLED: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
     EMAIL_PROVIDER: z.enum(["resend", "test"]).default("resend"),
     RESEND_API_KEY: z.string().default(""),
     EMAIL_FROM: z.string().default("HappyShop <onboarding@resend.dev>"),
@@ -58,6 +49,13 @@ const envSchema = z
         code: "custom",
         path: ["RECAPTCHA_ENABLED"],
         message: "RECAPTCHA_ENABLED must be true in production"
+      });
+    }
+    if (value.NODE_ENV === "production" && !value.EMAIL_VERIFICATION_ENABLED) {
+      context.addIssue({
+        code: "custom",
+        path: ["EMAIL_VERIFICATION_ENABLED"],
+        message: "EMAIL_VERIFICATION_ENABLED must be true in production"
       });
     }
     if (value.RECAPTCHA_ENABLED && !value.RECAPTCHA_SECRET_KEY) {

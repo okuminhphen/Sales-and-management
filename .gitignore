@@ -28,6 +28,7 @@ Thumbs.db
 # Runtime files
 uploads/
 *.log
+.local-runtime/
 
 # Credential and signing material
 *.pem

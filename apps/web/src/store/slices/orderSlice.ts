@@ -2,7 +2,6 @@ import { createAsyncThunk, createSlice, type PayloadAction } from "@reduxjs/tool
 import { isAxiosError } from "axios";
 import {
   createOrder,
-  createOrderAtBranch,
   deleteOrder,
   fetchAllOrders,
   fetchOrdersByBranch,
@@ -163,22 +162,6 @@ export const updateOrderStatusThunk = createAsyncThunk<
   },
 );
 
-export const createOrderAtBranchThunk = createAsyncThunk<
-  OrderDto,
-  CreateOrderInput,
-  OrderThunkConfig
->("order/createOrderAtBranch", async (orderData, { rejectWithValue }) => {
-  try {
-    const response = await createOrderAtBranch(orderData);
-    if (Number(response.data.EC) !== 0) {
-      return rejectWithValue(response.data.EM);
-    }
-    return response.data.DT;
-  } catch (error) {
-    return rejectWithValue(apiErrorMessage(error, "Lỗi khi tạo đơn hàng!"));
-  }
-});
-
 const initialState: OrderState = {
   orders: [],
   tempOrder: null,
@@ -231,10 +214,6 @@ const orderSlice = createSlice({
       })
       .addCase(createOrderThunk.fulfilled, (state, action) => {
         state.tempOrder = action.payload;
-        state.error = null;
-      })
-      .addCase(createOrderAtBranchThunk.fulfilled, (state, action) => {
-        upsertOrder(state, action.payload);
         state.error = null;
       })
       .addCase(updateOrderStatusThunk.fulfilled, (state, action) => {

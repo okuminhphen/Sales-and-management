@@ -47,6 +47,23 @@ const createRepository = (): BranchV2Repository => ({
 });
 
 describe("BranchV2Service", () => {
+    it("provides an unauthenticated pickup directory with no internal contacts or manager data", async () => {
+        const repository = createRepository();
+        const service = new BranchV2Service({ repository });
+
+        await expect((service as any).listPickup({ page: 1, limit: 20 })).resolves.toEqual({
+            kind: "pickup_branches",
+            page: {
+                branches: [{ id: branch.id, name: branch.name, address: branch.address, type: branch.type }],
+                page: 1,
+                limit: 20,
+                totalItems: 1,
+                totalPages: 1,
+            },
+        });
+        expect(repository.listBranches).toHaveBeenCalledWith({ page: 1, limit: 20 });
+    });
+
     it("normalizes a new branch and keeps its manager pointer outside the generic create path", async () => {
         const repository = createRepository();
         const service = new BranchV2Service({ repository });

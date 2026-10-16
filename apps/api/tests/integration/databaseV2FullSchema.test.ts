@@ -18,6 +18,15 @@ const manifestFile = fileURLToPath(
     new URL("../../../../docs/database-v2/schema-manifest.json", import.meta.url),
 );
 const manifest = JSON.parse(readFileSync(manifestFile, "utf8")) as SchemaManifest;
+const designSource = readFileSync(new URL("../../../../docs/database-v2/target-schema.dbml", import.meta.url), "utf8");
+const expectedRelations = [...designSource.matchAll(/^Ref: (\w+)\.(\w+) ([>-]) (\w+)\.(\w+) \[delete: (\w+), update: (\w+)\]/gm)]
+    .map(([, leftTable, leftColumn, relation, rightTable, rightColumn, onDelete, onUpdate]) => ({
+        tableName: relation === "-" ? rightTable : leftTable,
+        columnName: relation === "-" ? rightColumn : leftColumn,
+        targetTable: relation === "-" ? leftTable : rightTable,
+        targetColumn: relation === "-" ? leftColumn : rightColumn,
+        onDelete: onDelete.toUpperCase(), onUpdate: onUpdate.toUpperCase(),
+    }));
 const migrationManifestFile = fileURLToPath(
     new URL("../../../../docs/database-v2/migration-manifest.json", import.meta.url),
 );
@@ -69,6 +78,36 @@ describe.skipIf(!runDatabaseV2Tests)("Database V2 full schema on MySQL", () => {
             { type: QueryTypes.SELECT },
         );
         expect(foreignKeys).toHaveLength(manifest.referenceCount);
+    });
+
+    it("matches every designed FK source, target and referential action, including one-to-one direction", async () => {
+        expect(expectedRelations).toHaveLength(manifest.referenceCount);
+        const actual = await sequelize.query<(typeof expectedRelations)[number]>(
+            `SELECT k.TABLE_NAME AS tableName, k.COLUMN_NAME AS columnName,
+                    k.REFERENCED_TABLE_NAME AS targetTable, k.REFERENCED_COLUMN_NAME AS targetColumn,
+                    r.DELETE_RULE AS onDelete, r.UPDATE_RULE AS onUpdate
+             FROM information_schema.KEY_COLUMN_USAGE k
+             JOIN information_schema.REFERENTIAL_CONSTRAINTS r
+               ON r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA AND r.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+             WHERE k.CONSTRAINT_SCHEMA = DATABASE() AND k.REFERENCED_TABLE_NAME IS NOT NULL`,
+            { type: QueryTypes.SELECT },
+        );
+        expect(actual).toHaveLength(expectedRelations.length);
+        for (const expected of expectedRelations) expect(actual).toContainEqual(expected);
+    });
+
+    it("keeps all baseline CHECK constraints enforced, including every named design rule", async () => {
+        const checks = await sequelize.query<{ name: string; enforced: string }>(
+            `SELECT CONSTRAINT_NAME AS name, ENFORCED AS enforced
+             FROM information_schema.TABLE_CONSTRAINTS
+             WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_TYPE = 'CHECK'`,
+            { type: QueryTypes.SELECT },
+        );
+        const namedRules = [...designSource.matchAll(/\[name: '(chk_[a-z0-9_]+)'\]/g)].map((match) => match[1]);
+        expect(namedRules).toHaveLength(42);
+        expect(checks).toHaveLength(65);
+        expect(checks.every((check) => check.enforced === "YES")).toBe(true);
+        for (const name of namedRules) expect(checks).toContainEqual({ name, enforced: "YES" });
     });
 
     it("records all six migrations once and has zero pending on rerun", async () => {

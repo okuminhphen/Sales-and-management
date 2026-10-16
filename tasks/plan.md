@@ -1,277 +1,186 @@
-# Implementation Plan: Database V2 compatibility-first cutover
+# Implementation Plan: HappyShop UI/UX Refresh
 
-## Tổng quan
+Capability map: `.phunglm/specs/ui-ux-refresh-capability-map.md`.
 
-Thay schema legacy bằng Database V2 gồm 49 bảng và refactor backend theo module để mọi persistence
-contract khớp V2. Xây/test V2 trên database `_test` trước, sau đó reset database local mới và xóa
-toàn bộ migration/model legacy. Giữ tối đa REST/Socket contract hiện hữu; Web và AI chỉ đổi phần
-bắt buộc để tiếp tục chạy.
+Toàn bộ sáu module đã hoàn thành; downstream được người dùng phê duyệt ngày
+2026-09-30 và final quality gate hoàn tất ngày 2026-10-01.
 
-## Quyết định kiến trúc
-
-- Một schema/write path cuối cùng; không dual-write sau cutover.
-- Baseline versioned + checksum/drift guard; future changes dùng forward migration mới.
-- Model thuộc feature module; composition root chỉ đăng ký model/association.
-- BIGINT ID qua API là string; DECIMAL không tính bằng JS Number.
-- Integration/concurrency dùng MySQL `_test` thật; skipped không tính là đạt checkpoint.
-- Reset chỉ áp dụng database local chính xác `sale_and_managements_db` sau full rehearsal.
-
-## Dependency graph
+## Dependency order
 
 ```text
-schema -> typed persistence -> identity/catalog -> inventory -> commerce/payment
-       -> communication/personalization -> web/AI consumers -> cutover/cleanup
+UF01 tokens/styles ─┬─ UF03 Button ─ UF04 IconButton
+UF02 Radix package ─┴─ UF08 Tooltip
+UF01 ─ UF05 Surface ─ UF06 StatusBadge ─ UF07 FeedbackState
+UF03..UF08 ─ UF09 docs/compatibility ─ UF10 final validation
+     │
+     ├─ customer-landing ─> customer-commerce ─┐
+     └─ admin-shell-dashboard ─> admin-operations ─> ui-quality-gate
 ```
 
-## T36 — lát cắt triển khai hội thoại/message V2
+## Checkpoints
 
-T36 giữ hoàn toàn độc lập với REST và Socket legacy cho đến T40 cutover. Mục tiêu
-là tạo một write-path V2 duy nhất; Socket chỉ là adapter gọi cùng use case, không
-được tự ghi `messages` hoặc dùng membership của Socket room làm quyền truy cập.
+- Checkpoint A: sau UF01–UF02.
+- Checkpoint B: sau UF03–UF07.
+- Checkpoint C: sau UF08.
+- Final quality gate: UF09–UF10.
 
-1. **T36.1 — nền conversation customer**: repository/application V2 cho customer
-   đã xác thực mở hoặc đọc conversation đang hoạt động của chính mình. Khóa theo
-   customer trong transaction để chỉ có một active conversation; trạng thái khởi
-   tạo `open/bot` chỉ là persistence baseline, không gọi AI hoặc tạo assistant run.
-2. **T36.2 — message/history chung**: customer ownership, transaction khóa
-   conversation, sequence tăng đơn điệu, `dedup_key` + SHA-256 request hash,
-   cursor phân trang có giới hạn. Một payload đổi nội dung nhưng dùng lại key phải
-   fail-closed. Ghi message xong mới trả event nội bộ; chưa publish Socket/AI.
-3. **T36.3 — HTTP V2 không mount**: DTO Zod strict, V2 JWT + DB access context,
-   legacy envelope tương thích và audit không chứa body/PII. Factory V2 giữ ba
-   path compatibility `POST /conversation/create`, `POST /message/send/:conversationId`
-   và `GET /message/get/:conversationId`; không dùng `GET` để tạo state, không
-   nhận userId/sender/role từ browser. Chỉ compose router riêng cho test; runtime
-   legacy chưa import/mount nó.
-4. **T36.4a — customer yêu cầu nhân viên (persistence control)**: customer đã
-   được xác thực chỉ chuyển conversation của chính mình từ `open/bot|paused`
-   sang `waiting_staff/paused`; command key + request hash và `expectedVersion`
-   được kiểm tra dưới row lock. Cùng command/payload replay; command đổi payload
-   conflict; command stale conflict. Event phải giữ đủ assignee/branch nguồn trước
-   khi release. Lát này không chọn staff, không notify, không tạo AI run và không
-   emit Socket; factory runtime tiếp tục unmounted.
-5. **T36.4b — staff handoff và Socket bridge**: chỉ thực hiện khi permission
-   matrix `read/reply/claim/assign/change_mode/close`, scope central/branch và
-   routing được duyệt/test. Socket phải re-authorize mỗi command, persist trước
-   emit, không tin room membership. Không sửa Socket legacy như hotfix; AI
-   worker/assistant run thuộc T37.
+## Module plans
 
-Mỗi lát theo RED → GREEN → refactor, có unit và MySQL `_test` thật. Nếu một policy
-vận hành (handoff, retention, AI availability) chưa được phê duyệt, V2 giữ factory
-unmounted/fail-closed thay vì tự suy đoán hành vi runtime.
+- `.phunglm/plans/customer-landing.md`: CL01–CL07.
+- `.phunglm/plans/customer-commerce.md`: CC01–CC08.
+- `.phunglm/plans/admin-shell-dashboard.md`: AS01–AS07.
+- `.phunglm/plans/admin-operations.md`: AO01–AO08.
+- `.phunglm/plans/ui-quality-gate.md`: QG01–QG05.
 
-## T37.1 — notification recipient primitives V2
+## Architecture decisions
 
-Lát đầu T37 chỉ thay ranh giới dữ liệu cho notification sẵn có: account active đọc
-phân trang notification mà `recipient_account_id` đúng account đó, đếm unread và
-đánh dấu đã đọc idempotent. `userId`/role/recipient từ client không được nhận hoặc
-tin cậy; cả query lẫn mutation đều recheck account active trong MySQL. Cursor dùng
-`createdAt` + BIGINT `id` để thứ tự newest-first ổn định và response chỉ trả
-allowlist display (`id`, type, title, content, readAt, createdAt), không trả raw
-`data` JSON khi schema payload chưa được định nghĩa.
+- Giữ React/TypeScript/SCSS/React Bootstrap/React Icons và API/Redux contracts.
+- Customer dùng editorial luxury, warm ivory/ink/bronze; admin dùng cùng nhận
+  diện với mật độ cao hơn và không dùng blur/glass trên vùng dữ liệu.
+- Không thêm dependency, font CDN hay asset từ repo tham chiếu.
+- Migrate theo vertical slice, loại `@ts-nocheck` ở screen đã migrate và lazy-load
+  route/tab để tách customer khỏi admin bundle.
 
-Lát này không tạo notification, không phát Socket/email/push, không sửa behavior,
-không thay route legacy và không mount runtime. Trigger từ handoff/order/inventory,
-retention, payload typed, dispatch/outbox và realtime thuộc lát riêng sau khi policy
-được chốt. Kiểm thử cần gồm ownership A/B, cursor bounded, unread/read idempotency
-và account bị inactive fail-closed.
+## Approval checkpoint
 
-## T37.2 — notification HTTP factory V2 không mount
+Người dùng duyệt toàn bộ năm spec/plan downstream trước CL01/AS01. Sau khi duyệt,
+hai nhánh customer và admin có thể triển khai độc lập theo dependency order; final
+gate QG01–QG05 chỉ chạy khi cả hai nhánh hoàn tất.
 
-Nối riêng ba compatibility path đã tồn tại (`GET /notifications/my`, `GET
-/notifications/count`, `PATCH /notifications/:notificationId/read`) vào T37.1 mà
-không import vào `routes/api.ts`. Mỗi request lấy account active từ V2 JWT/context;
-không nhận `userId`, recipient, role hay payload notification từ browser. DTO Zod
-strict kiểm tra cursor keyset, limit, BIGINT path ID và body rỗng; response giữ envelope
-`EM/EC/DT` nhưng chỉ serialize allowlist notification. Chỉ mutation audit action, không
-log content/body/PII. Test HTTP phải chạy với persistence MySQL `_test`, chứng minh
-route chưa mount legacy, strict input, allowlist và ownership/read-state thật.
+Chi tiết task và trạng thái được theo dõi trong `tasks/todo.md`.
 
-## T38.1 — web identity contract boundary
+## Backend DB readiness — 2026-10-15
 
-Lát đầu T38 chỉ bổ sung type và parser thuần cho response identity V2 ở Web. Mọi BIGINT
-`accountId`/`customerId`/`employeeId`/`branchId` phải là decimal string hợp lệ trong
-signed MySQL `BIGINT`; không nhận JavaScript `number` để tránh mất chính xác. Parser kiểm tra alias
-compatibility (`userId = customerId`, `adminId = accountId`), nullable profile link và role grant
-scope; customer chỉ nhận role `CUSTOMER`, backoffice reject role đó. Đây là boundary cho dữ liệu API không tin cậy, không
-phải type-cast trực tiếp từ Axios.
+**Trạng thái: Đã duyệt 2026-10-15. Người dùng yêu cầu gỡ POS và sửa 5 finding.**
+BR00–BR07 hoàn tất, kiểm chứng tiếp ngày 2026-10-16; kết quả và giới hạn tại
+`docs/database-v2/backend-readiness-validation.md`. BR08 còn chờ spec riêng.
+Evidence: `docs/database-v2/backend-audit-2026-10-15.md`.
+Spec/review agent: `.phunglm/specs/backend-db-readiness.md` và review cùng tên.
+Các kế hoạch UI/hardening đã hoàn tất ở trên được giữ nguyên.
 
-Lát này không thay `EntityId` legacy, không ghi session, không đổi Redux/UI, không gọi hoặc mount
-router V2. Việc nối login/profile sau cutover chỉ được làm khi response service, session storage và
-route V2 có contract integration tương ứng; do đó runtime hiện tại không thay đổi.
+### Phạm vi và quyết định
 
-## T38.2 — web own-customer profile response boundary
+- Giữ schema revision 4; chưa có lý do sửa bảng/FK để xử lý các lỗi đã xác nhận.
+- Sửa lỗi writer và lifecycle tại backend; giữ API/permissions và transaction
+  boundaries. Không sửa trực tiếp dữ liệu cũ hay reset DB.
+- Giữ payment provider facts riêng với quyết định hoàn tất đơn; không tự coi
+  pending/unknown là failed khi timeout. Không gọi provider thật trong test.
+- Worker phải có cấu hình tối thiểu phù hợp, không làm yếu production HTTP
+  validation và không cấp thêm JWT/email/payment secrets chỉ để worker khởi động.
+- RED trước GREEN; test thật trên `_test`, main DB chỉ đọc. Không thêm dependency.
 
-Route compatibility V2 `GET /user/:id`/`PUT /user/update/:userId` trả `userId` (customer ID)
-và field transport `fullname`. Web map response này thành aggregate `V2CustomerProfile` dùng
-`customerId` và `fullName`, chỉ sau khi kiểm tra account/customer ID string, email và từng field
-nullable (`username`, `fullname`, `phone`). Đây chỉ là response mapper; ownership vẫn do access
-context MySQL ở API thực thi. Không nhận patch từ UI, không nối Axios/Redux và không mount runtime.
+### BR00 — Gỡ hoàn toàn tính năng POS
 
-## T38.3 — thống nhất signed BIGINT ở identity-access HTTP boundary
+Gỡ service/repository/controller/DTO/route POS và client/thunk/types Web; endpoint
+`POST /order/in-store` không còn tồn tại. Xóa test feature POS cũ, thay bằng test
+route/client không tồn tại. Không sửa schema/migration/historical read model,
+không xóa dữ liệu lịch sử. Không thay POS bằng một write path in-store khác.
 
-DDL baseline V2 khai báo tất cả entity ID là MySQL `BIGINT` có dấu, do đó giá trị public hợp lệ là
-`1..9223372036854775807`, không phải range `UNSIGNED`. DTO identity, branch và employee dùng chung
-`v2EntityId` để không còn copy regex/range khác nhau; Web parser dùng cùng policy. Regression test
-kiểm tra cả cực đại hợp lệ và giá trị overflow. Không thay migration/schema hay API path, chỉ chặn
-input vốn không thể lưu trong cột thật.
+### BR01 — P1: JSON snapshot ở checkout online
 
-## T39.1 — web scalar và public catalog response boundary
+- Acceptance: NULL, [], URL array và media asset array đều checkout online được;
+  snapshot là JSON hợp lệ, không đổi khi sửa ảnh catalog; lỗi khác rollback.
+- Files: online checkout repository; integration suite; helper snapshot nếu
+  thực sự cần (tối đa khoảng 5 file).
+- Verify: focused `databaseV2OnlinePickupCheckout`
+  bằng `npm run test --workspace @sales/api -- --run ...`, MySQL `_test` bật.
+- Dependencies: không. Scope: M.
 
-Web có scalar V2 dùng chung cho signed BIGINT ID và canonical `DECIMAL(19,4)` money, tách khỏi
-identity để catalog/cart/order/admin không phụ thuộc chéo module. Public product parser allowlist
-đúng output catalog V2: `id`, `categoryId`, `name`, `slug`, `description`, `basePrice` và image
-HTTP(S). Nó fail-closed với JSON number, money không canonical, ID ngoài range và media unsafe.
-Lát này chưa đổi `ProductDto` legacy, Axios service hoặc UI; catalog V2 cũng chưa mount runtime.
+### BR02 — P1: Paid pickup không bị deadline xử lý của nhân viên chặn
 
-## T39.2 — web own-cart read response boundary
+- Acceptance: thanh toán đủ tiền đã verified + active hold đúng nguồn cho phép
+  xác nhận sau deadline; unpaid/partial/unknown hoặc hold thực sự finalized
+  không được lọt qua; callback/expiry/confirm race không tạo oversell/double effect.
+- Giải pháp ưu tiên: bảo vệ active hold đã đủ tiền và tách deadline thanh toán
+  khỏi thời gian staff xử lý, kiểm tra dưới order/payment/inventory locks. Không
+  cần tự động confirm toàn bộ order ngay khi có callback. Callback tới sau khi
+  hold đã thực sự expired/released cần policy exception riêng, không giả thành công.
+- Files: confirmation và reservation repository, hai focused integration suites
+  lifecycle/payment (khoảng 4 file). Không sửa test bằng SQL để giả recovery.
+- Verify: paid-before-deadline/confirm-after-deadline, unpaid expiry,
+  partial/pending guard, duplicate/retry/race với real MySQL.
+- Dependencies: BR01; duyệt policy paid active hold. Scope: M.
 
-Web bổ sung contract thuần cho toàn bộ response thành công `GET /cart/read/:userId` V2. Contract
-allowlist từng item (`id`, `productId`, `productVariantId`, `name`, `price`, `images`, `size`,
-`quantity`, `catalogActive`) và metadata phân trang. ID phải là signed BIGINT string, `price` là
-`DECIMAL(19,4)` canonical, ảnh chỉ HTTP(S), quantity là integer dương trong giới hạn MySQL và
-`totalPages` phải nhất quán với `totalItems`/`limit`. Payload sai trả `null` trước khi có thể vào
-state/render.
+### BR03 — P2: Parser errors có HTTP contract đúng
 
-T39.2 chỉ tái sử dụng validator ảnh public của catalog và thêm type/parser/test Web; không thay
-`CartItem`/localStorage legacy, không gửi request bằng Axios, không ghi Redux và không mount router
-V2. Các route V2 hiện có URL compatibility trùng legacy, nên wiring runtime chỉ được làm ở lát
-cutover có integration contract rõ ràng.
+- Acceptance: malformed JSON → 400, quá limit → 413, lỗi nội bộ thật → 500;
+  response an toàn + request ID, không raw body/stack hoặc arbitrary error.status.
+- Files: `apps/api/src/app.ts`, test app boundary (2 file).
+- Verify: focused app tests qua Supertest, sau đó API suite.
+- Dependencies: không. Scope: S.
 
-## T39.3 — web order read response boundary
+### Checkpoint A
 
-Web bổ sung model/parser thuần cho cả list và detail order V2. Contract allowlist order, immutable
-item snapshot và shipment tracking; ID dùng signed BIGINT string, mọi amount dùng `DECIMAL(19,4)`
-canonical, enum channel/fulfillment/status bị giới hạn đúng schema và timestamp phải là ISO-UTC
-canonical. Snapshot ảnh chỉ nhận HTTP(S) hoặc path nội bộ tuyệt đối an toàn và chuẩn hóa về `{ url }`;
-raw JSON/PII không được đi qua type kết quả.
+BR01–BR03 có regression RED → GREEN; API typecheck/build và suite đạt.
+Không đổi schema, không nhả payment unresolved, không mất stock/payment ledger.
 
-Parser xác minh item có `orderId` đúng aggregate, công thức từng line và tổng order, COD không vượt
-total, ràng buộc channel/fulfillment/shipping/shipment theo schema và pagination chung bounded.
-Payload sai fail-closed. T39.3 chưa thay `OrderDto`/Axios/Redux/UI legacy, không tạo checkout/payment
-request và không mount router order V2; chỉ nối runtime sau cutover integration contract.
+### BR04 — P1: Cấu hình worker tách khỏi HTTP-only requirements
 
-## T39.4 — web branch directory response boundary
+- Acceptance: outbox/expiry worker parse production env tối thiểu cần thiết;
+  thiếu DB/broker config cần thiết phải fail closed; API production vẫn yêu cầu
+  JWT/reCAPTCHA/email/payment guards hiện có; logger/connection không kéo lại
+  HTTP env parser qua import gián tiếp.
+- Files dự kiến: config module(s), connection/logger boundary, unit config tests.
+  Chốt dependency graph trước khi code; nếu vượt 5 file, tách config và consumers
+  thành hai slice có test độc lập, không refactor toàn bộ env module tùy tiện.
+- Verify: parse declared production worker env với giá trị giả; negative tests
+  thiếu config; existing API env tests giữ xanh. Không cấp secrets thừa cho worker.
+- Dependencies: duyệt phương án config boundary. Scope: M, checkpoint design.
 
-Web bổ sung type/parser read-only cho Branch V2 list/detail, tách `BranchDto` legacy. Contract giữ
-ID signed BIGINT string, code branch, contact nullable, type `central|branch`, manager nullable và
-pagination bounded; email/field length/code đều được kiểm tra trước state/render. Lát này chưa gửi
-mutation branch, gọi Axios/Redux/UI hay mount V2 router. Employee write/link/transfer là boundary
-nhạy cảm tách riêng sau directory branch.
+### BR05 — P1: Outbox command/flag local và production
 
-## T39.5 — web employee directory response boundary
+- Acceptance: Compose gọi compiled worker command có thật; enable flag rõ ràng;
+  production image không phụ thuộc tsx/devDependencies; fake/isolated event đi
+  từ outbox tới broker một lần về business effect dù có retry.
+- Files: local/production Compose, worker entrypoint nếu cần, wiring test,
+  README (tối đa khoảng 5 file).
+- Verify: manifest-to-package/image command contract test; config validate không
+  in secrets; isolated `_test`/test-routing broker smoke được duyệt. Không consume
+  hay publish outbox chính trong validation.
+- Dependencies: BR04. Scope: M.
 
-Web bổ sung type/parser read-only cho Employee V2 directory theo branch. Contract allowlist employee
-profile, giữ account/employee/branch ID signed BIGINT và salary `DECIMAL(19,4)` canonical, kiểm tra
-code, contact nullable, active/inactive, timestamp UTC và pagination. Đây chỉ là dữ liệu response;
-không suy diễn quyền từ employee record. Create/update/deactivate, link account và transfer có audit/
-authorization riêng nên không được gọi hay wire UI trong lát này.
+### BR06a — P1 operational: Expiry worker trong Compose
 
-## Hoàn tất T39 — Web V2 consumer contracts
+- Acceptance: local/production có service + flag, config đúng runtime và shutdown;
+  unpaid hold quá hạn được nhả; pending/processing/completed giữ guard.
+- Files: hai Compose manifests, wiring test, README (khoảng 4 file).
+- Verify: service/command/env checks; isolated `_test` worker runOnce workflow.
+- Dependencies: BR04. Scope: M.
 
-T39.1–T39.5 đã phủ các response read-only đã được duyệt: public catalog, own-cart, order,
-branch directory và employee directory. Mỗi boundary allowlist dữ liệu, giữ signed BIGINT và
-`DECIMAL(19,4)` dưới dạng string, đồng thời fail-closed trước envelope hoặc payload không hợp lệ.
-Chúng là parser/type thuần, không có Axios, Redux, localStorage, UI hay runtime router dependency.
+### BR06b — P1 operational: Expiry worker cho local host launcher
 
-T39 không phải cutover. Mutation, payment/checkout, branch/employee administration và mọi runtime
-wiring tiếp tục thuộc lát có authorization/integration contract tương ứng. Việc mount hoặc thay thế
-legacy chỉ được xét trong rehearsal/cutover T42–T44 sau khi API, Web và AI cùng xác minh trên DB V2.
+- Acceptance: launcher quản lý đúng PID/start-time và start/stop worker theo scope
+  workspace; helper chạy ẩn; không dừng app khác, không xóa Docker volume; không
+  chạy chồng host worker và Compose worker ngoài ý muốn.
+- Files: start/run-service/stop launcher và launcher test (khoảng 4 file).
+- Verify: parse + launcher tests; isolated start/stop smoke nếu được duyệt;
+  documentation giải thích host/Compose topology.
+- Dependencies: BR06a, duyệt topology local. Scope: M.
 
-## T40.1 — AI catalog repository V2
+### BR07 — Final backend gate và cập nhật evidence
 
-Adapter MySQL của AI đọc `products`, `categories` và `product_variants` V2 thay vì bảng PascalCase
-legacy. Một product chỉ đi vào RAG/Qdrant khi product `active` và tồn tại ít nhất một variant `active`;
-truy vấn dùng `EXISTS` để không nhân bản product theo variant và giữ thứ tự ID xác định. JSON images
-được allowlist thành URL HTTP(S), bỏ `publicId`, URL nội bộ hoặc dữ liệu không đúng shape trước khi vào
-prompt/API response.
+- Acceptance: full API MySQL/Redis suite + các regression mới đạt, API/Web
+  typecheck/build đạt; main schema/rows không đổi; mọi worker cần thiết có cách
+  kiểm tra readiness/progress, không chỉ API health/live.
+- Verify: commands trong audit, `_test` guard, diff check, review nguồn thay đổi.
+- Files: validation/report/checklist; không mở thêm source scope. Scope: S.
+- Dependencies: BR01–BR06.
 
-Thêm `find_product_by_id` vào catalog port để catalog-event consumer rehydrate đúng một aggregate thay
-vì tải toàn bộ catalog rồi lọc trong bộ nhớ. T40 chưa chuyển `get_user_signals`: `UserBehavior`, cart
-và order legacy thuộc T41 personalization; không thay RAG, embeddings, TF-IDF hay model trong lát này.
-Unit test kiểm tra query/mapping và integration test opt-in chỉ ghi vào database `_test`, rồi cleanup
-toàn bộ fixture theo token.
+### BR08 — Capability checkpoint riêng, không tự triển khai
 
-## T41.1 — AI personalization query V2
+Sau khi sửa lỗi, ưu tiên đặc tả **pickup handover/completion API**: staff đúng
+branch, đã thu đủ tiền, idempotency, consume hold/stock ledger/status history/outbox
+trong một transaction. Hiện primitive tồn tại nhưng online HTTP flow chưa nối.
+Chốt actor, điều kiện thu tiền, trạng thái đầu/cuối và refund exception trước khi
+lập các slice implementation; không mở generic status setter.
 
-Personalization giữ input account ID hiện có, nhưng query V2 map `accounts.id` sang customer `active`
-qua `customers.account_id`. Tín hiệu đọc từ `customer_product_stats` (view + like), cart hiện tại
-(`carts`/`cart_items`/`product_variants`) và order `confirmed|completed` (`orders`/`order_items`).
-Tất cả query parameterized; account/customer inactive không lộ tín hiệu và dẫn tới fallback catalog
-generic vốn có của ranker.
+Payment reconciliation pending/unknown là spec riêng với provider facts/retry và
+exception queue. Delivery/COD, returns/refunds đầy đủ và customer-address CRUD
+là roadmap sau, cần business policy/approval, không suy ra từ việc DB đã có bảng.
 
-`behavior_events` là immutable event log, còn `customer_product_stats` là projection read model; không
-cộng cả hai trong một query vì sẽ double-count cùng hành vi. Lát này chỉ thay read adapter, không tạo
-writer/mount HTTP behavior V2, không đổi trọng số, RAG, embeddings, TF-IDF hoặc model. Integration test
-chỉ dùng `_test` và cleanup account/customer/catalog/stat fixture theo token.
+### Thứ tự và rủi ro
 
-## T42 — Full rehearsal trên database V2 test
-
-Rehearsal trước cutover chỉ dùng `sale_and_managements_db_test`. Schema revision 4 đã parse/export
-PASS (49 bảng, 104 quan hệ); runner V2 xác nhận sáu migration đã thực thi và không còn pending. API
-strict typecheck/build, Web typecheck/build và 16 file/63 Web contract tests đều PASS. API full suite
-chạy tuần tự với database test thật và tự teardown, tránh ghi chồng fixture. AI chạy 12 test, bao gồm
-integration MySQL V2 opt-in, rồi cleanup fixture; `ruff` và `mypy --strict` PASS. Compose infrastructure
-config và `git diff --check` đều PASS.
-
-Trên Windows/Node cục bộ này, entry `tsx` cho V2 migration runner gặp lỗi môi trường `os.userInfo()`
-`ENOMEM`; status rehearsal dùng artifact đã build `node dist/database/v2/migrate.js status`. Đây không
-phải lỗi schema và không được dùng để nới target guard. Qdrant local dùng API key trên HTTP loopback
-có warning từ client; production bắt buộc endpoint `https://` theo `.env.production.example`.
-
-## T43 — Guarded local cutover
-
-Cutover local đã dùng entrypoint tách biệt `db:v2:cutover:local`, không hạ guard của runner thường.
-Nó yêu cầu đồng thời development, `MYSQL_DATABASE` và V2 target đúng literal
-`sale_and_managements_db`, V2 enabled, schema manifest/checksum hợp lệ và xác nhận one-shot
-`RESET sale_and_managements_db`; credential super-admin được validate trước thao tác drop. Database
-local đã được reset, tạo lại, chạy sáu migration và seed. Xác minh chỉ-đọc cho thấy 50 bảng vật lý
-(49 nghiệp vụ cộng metadata), 104 FK, zero pending; seed gồm 6 role, 37 permission, 3 payment method
-và một SUPER_ADMIN grant. Seed lần hai không thay đổi các count.
-
-## T44 — Runtime V2 cutover và smoke primary
-
-T44 không được coi là một health check đơn lẻ: primary database đã chỉ có V2, còn runtime cũ đang
-mount 27 router legacy. Cutover được chia thành năm lát có thể kiểm chứng. T44.1 thay composition root
-để app/main chỉ tạo `V2Persistence`, không import model/router legacy và có gate fail-closed. T44.2
-mount atomically các compatibility route V2 đã hoàn thiện (identity, catalog, cart/review/banner, order,
-inventory, notification, conversation), không duy trì dual-route cùng path. T44.3 bổ sung composition
-root còn thiếu cho stock request, transfer, payment method và VNPay trước khi mount. T44.4 chuyển
-worker/realtime/API-to-AI boundary để browser vẫn chỉ gọi API và không còn persistence legacy. T44.5
-chạy smoke primary gồm API/Web/AI, V2 status/seed idempotency và contract error path.
-
-Mỗi lát cần focused HTTP/integration test trước mount. Endpoint V2 chưa có behavior tương đương không
-được thay bằng legacy router (vì database cũ đã mất) hoặc endpoint mới tự suy đoán; giữ disabled/fail-
-closed và ghi rõ khoảng trống. Chỉ sau T44.5 mới được bắt đầu xóa source legacy ở T45–T46.
-
-## Task list
-
-Task chi tiết và trạng thái nằm trong `tasks/todo.md`. Thứ tự task là dependency order; mỗi task
-có acceptance/verify và không được bắt đầu khi checkpoint trước chưa đạt.
-
-Điều chỉnh được duyệt ngày 2026-09-25: T33 được tạm mở sau khi kiểm chứng các
-error path độc lập. Làm payment foundation T34 và shipment foundation T35 trước
-những phần T33 cần chúng (delivery/POS, handover, HTTP write), sau đó quay lại
-hoàn tất T33. Không đổi phạm vi cutover hay bật runtime V2 sớm.
-
-## Rủi ro và biện pháp
-
-| Rủi ro | Mức | Biện pháp |
-| --- | --- | --- |
-| Schema lớn tạo dở | Cao | Rehearsal DB riêng, checksum, fail closed, không auto reset |
-| Identity cutover sai quyền | Cao | Ownership/scoped-role integration tests |
-| Sai tiền hoặc âm tồn kho | Cao | DECIMAL helper, locks, idempotency, concurrency tests |
-| Web/AI vỡ contract | Cao | Contract-first types và consumer tests trước cutover |
-| Xóa legacy quá sớm | Cao | Chỉ xóa sau smoke gate trên V2 |
-
-## Ngoài phạm vi
-
-- Backfill hoặc reset production/staging.
-- Endpoint/UI mới cho return/refund/chat operations chưa có spec riêng.
-- Redesign UI hoặc thay thuật toán RAG/model AI.
-- MongoDB, split order/shipment, voucher stacking, VAT/e-invoice.
-
-## Open questions không chặn compatibility-first
-
-Retention chat/behavior/PII, thời hạn return/refund và hold/no-show cần spec riêng trước khi mở
-feature mới. Baseline giữ cấu trúc V2 đã duyệt nhưng existing API không tự bật nghiệp vụ chưa có.
+Ưu tiên BR01 → BR02 → Checkpoint A; BR03 độc lập. Sau đó BR04 → BR05/BR06 → BR07.
+BR08 chỉ chuyển sang triển khai sau approval riêng. Rủi ro cao nhất là sửa paid
+hold bằng cách yếu hóa timeout/payment guards; không chấp nhận workaround SQL
+backfill, auto-failed pending payments hay nới production API validation.
